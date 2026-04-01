@@ -45,6 +45,7 @@ struct _KgxSettingsPage {
   GtkWidget            *transparency_level;
   GtkWidget            *chrome_color;
   GtkWidget            *chrome_opacity;
+  GtkWidget            *use_chrome_bg;
   GtkWidget            *accent_color;
   GtkWidget            *unlimited_scrollback;
   GtkWidget            *scrollback;
@@ -307,6 +308,7 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, transparency_level);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, chrome_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, chrome_opacity);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, use_chrome_bg);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
@@ -424,6 +426,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              value_to_percent,
                              percent_to_value,
                              NULL, NULL);
+
+  g_binding_group_bind (self->settings_binds, "use-chrome-bg",
+                        self->use_chrome_bg, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 
   g_binding_group_bind_full (self->settings_binds, "accent-color",
                              self->accent_color, "rgba",

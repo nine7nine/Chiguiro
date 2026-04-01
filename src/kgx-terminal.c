@@ -151,6 +151,23 @@ kgx_terminal_apply_palette (KgxTerminal *self)
                            &n_colours,
                            &colours);
 
+  /* Override terminal background with chrome color if enabled */
+  if (self->settings) {
+    gboolean use_chrome_bg = FALSE;
+    g_object_get (self->settings, "use-chrome-bg", &use_chrome_bg, NULL);
+    if (use_chrome_bg) {
+      g_autofree char *chrome_color = NULL;
+      double chrome_opacity = 1.0;
+      g_object_get (self->settings,
+                    "chrome-color", &chrome_color,
+                    "chrome-opacity", &chrome_opacity,
+                    NULL);
+      if (chrome_color) {
+        gdk_rgba_parse (&background, chrome_color);
+        background.alpha = (float) chrome_opacity;
+      }
+    }
+  }
 
   vte_terminal_set_colors (VTE_TERMINAL (self),
                            &foreground,

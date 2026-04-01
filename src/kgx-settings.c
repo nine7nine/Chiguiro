@@ -55,6 +55,7 @@ struct _KgxSettings {
   gboolean              transparency;
   double                transparency_level;
   double                chrome_opacity;
+  gboolean              use_chrome_bg;
   char                 *chrome_color;
   char                 *accent_color;
 
@@ -88,6 +89,7 @@ enum {
   PROP_TRANSPARENCY_LEVEL,
   PROP_CHROME_OPACITY,
   PROP_CHROME_COLOR,
+  PROP_USE_CHROME_BG,
   PROP_ACCENT_COLOR,
   LAST_PROP
 };
@@ -217,6 +219,9 @@ kgx_settings_set_property (GObject      *object,
         }
       }
       break;
+    case PROP_USE_CHROME_BG:
+      kgx_set_boolean_prop (object, pspec, &self->use_chrome_bg, value);
+      break;
     case PROP_CHROME_COLOR:
       g_free (self->chrome_color);
       self->chrome_color = g_value_dup_string (value);
@@ -291,6 +296,9 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_CHROME_OPACITY:
       g_value_set_double (value, self->chrome_opacity);
+      break;
+    case PROP_USE_CHROME_BG:
+      g_value_set_boolean (value, self->use_chrome_bg);
       break;
     case PROP_CHROME_COLOR:
       g_value_set_string (value, self->chrome_color ? self->chrome_color : "#000000");
@@ -430,6 +438,11 @@ kgx_settings_class_init (KgxSettingsClass *klass)
     g_param_spec_double ("chrome-opacity", NULL, NULL,
                          0.0, 1.0, 0.8,
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_USE_CHROME_BG] =
+    g_param_spec_boolean ("use-chrome-bg", NULL, NULL,
+                          FALSE,
+                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   pspecs[PROP_CHROME_COLOR] =
     g_param_spec_string ("chrome-color", NULL, NULL,
@@ -619,6 +632,9 @@ kgx_settings_init (KgxSettings *self)
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "chrome-opacity",
                    self, "chrome-opacity",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "use-chrome-bg",
+                   self, "use-chrome-bg",
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "chrome-color",
                    self, "chrome-color",

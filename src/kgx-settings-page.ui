@@ -183,6 +183,12 @@
                                   </object>
                                 </child>
                                 <child>
+                                  <object class="AdwSwitchRow" id="use_chrome_bg">
+                                    <property name="title" translatable="yes">Use Chrome Color for Terminal</property>
+                                    <property name="use-underline">True</property>
+                                  </object>
+                                </child>
+                                <child>
                                   <object class="AdwActionRow">
                                     <property name="title" translatable="yes">Chrome _Color</property>
                                     <property name="use-underline">True</property>

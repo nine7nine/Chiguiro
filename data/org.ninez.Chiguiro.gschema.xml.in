@@ -52,6 +52,9 @@
     <key name="chrome-color" type="s">
       <default>'#000000'</default>
     </key>
+    <key name="use-chrome-bg" type="b">
+      <default>false</default>
+    </key>
     <key name="accent-color" type="s">
       <default>'#3584e4'</default>
     </key>
