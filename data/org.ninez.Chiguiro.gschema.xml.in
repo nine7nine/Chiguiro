@@ -1,17 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="@BIN_NAME@">
-  <enum id="@KGX_APPLICATION_ID_RAW@.Theme">
-    <value nick="auto" value="0"/>
-    <value nick="night" value="1"/>
-    <value nick="day" value="2"/>
-    <!-- Deprecated: Interpreted as ‘night’ -->
-    <value nick="hacker" value="3"/>
-  </enum>
-
   <schema id="@KGX_APPLICATION_ID_RAW@" path="@KGX_APPLICATION_PATH_RAW@">
-    <key name="theme" enum="@KGX_APPLICATION_ID_RAW@.Theme">
-      <default>'night'</default>
-    </key>
     <key name="font-scale" type="d">
       <range min="0.5" max="4.0"/>
       <default>1.0</default>
@@ -51,6 +40,20 @@
     </key>
     <key name="transparency" type="b">
       <default>false</default>
+    </key>
+    <key name="transparency-level" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.2</default>
+    </key>
+    <key name="chrome-opacity" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.8</default>
+    </key>
+    <key name="chrome-color" type="s">
+      <default>'#000000'</default>
+    </key>
+    <key name="accent-color" type="s">
+      <default>'#3584e4'</default>
     </key>
     <key name="livery" type="s">
       <default>@KGX_LIVERY_UUID_KGX@</default>
