@@ -5,11 +5,11 @@ desktop_utils = find_program(
 appstreamcli = find_program('appstreamcli', required: get_option('tests'))
 compile_schemas = find_program('glib-compile-schemas')
 
-desktop_filename = 'org.gnome.Console.desktop.in.in'
+desktop_filename = 'org.ninez.Chiguiro.desktop.in.in'
 if get_option('devel')
-  icon_filename = 'org.gnome.Console.Devel.svg'
+  icon_filename = 'org.ninez.Chiguiro.Devel.svg'
 else
-  icon_filename = 'org.gnome.Console.svg'
+  icon_filename = 'org.ninez.Chiguiro.svg'
 endif
 
 desktop_file = i18n.merge_file(
@@ -31,7 +31,7 @@ endif
 
 appstream_file = i18n.merge_file(
             input: configure_file(
-                           input: 'org.gnome.Console.metainfo.xml.in.in',
+                           input: 'org.ninez.Chiguiro.metainfo.xml.in.in',
                            output: '@BASENAME@',
                            configuration: conf
                    ),
@@ -50,7 +50,7 @@ if get_option('tests')
 endif
 
 schema_file = configure_file(
-           input: 'org.gnome.Console.gschema.xml.in',
+           input: 'org.ninez.Chiguiro.gschema.xml.in',
           output: app_id + '.gschema.xml',
    configuration: conf,
      install_dir: datadir / 'glib-2.0/schemas'
@@ -73,7 +73,7 @@ if get_option('tests')
 endif
 
 configure_file(
-           input: 'org.gnome.Console.service.in',
+           input: 'org.ninez.Chiguiro.service.in',
           output: app_id + '.service',
    configuration: conf,
      install_dir: datadir / 'dbus-1/services'
@@ -84,7 +84,7 @@ install_data(icon_filename,
           rename: app_id + '.svg',
 )
 
-install_data('org.gnome.Console-symbolic.svg',
+install_data('org.ninez.Chiguiro-symbolic.svg',
      install_dir: datadir / 'icons/hicolor/symbolic/apps',
           rename: app_id + '-symbolic.svg',
 )

@@ -33,15 +33,15 @@ gnome = import('gnome')
 
 
 if get_option('devel')
-  app_id = 'org.gnome.Console.Devel'
-  app_path = '/org/gnome/Console/Devel/'
-  bin_name = 'kgx-devel'
-  log_domain = 'KgxDevel'
+  app_id = 'org.ninez.Chiguiro.Devel'
+  app_path = '/org/ninez/Chiguiro/Devel/'
+  bin_name = 'chiguiro-devel'
+  log_domain = 'ChiguiroDevel'
 else
-  app_id = 'org.gnome.Console'
-  app_path = '/org/gnome/Console/'
-  bin_name = 'kgx'
-  log_domain = 'Kgx'
+  app_id = 'org.ninez.Chiguiro'
+  app_path = '/org/ninez/Chiguiro/'
+  bin_name = 'chiguiro'
+  log_domain = 'Chiguiro'
 endif
 
 kgx_homepage_url = 'https://apps.gnome.org/Console/'

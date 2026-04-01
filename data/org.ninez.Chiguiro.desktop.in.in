@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=Console
+Name=Chigüiro
 Exec=@BIN_NAME@
 # Translators: Do NOT translate or transliterate this text (this is an icon file name)!
 Icon=@KGX_APPLICATION_ID_RAW@
 # Translators: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-Keywords=command;prompt;cmd;commandline;run;shell;terminal;kgx;kings cross;
+Keywords=command;prompt;cmd;commandline;run;shell;terminal;chiguiro;capybara;
 Terminal=false
 Type=Application
 Categories=System;TerminalEmulator;Utility;GTK;GNOME;
