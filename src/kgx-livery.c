@@ -413,13 +413,24 @@ maybe_as_opaque (KgxPalette  *base,
 KgxPalette *
 kgx_livery_resolve (KgxLivery     *self,
                     gboolean       is_day,
-                    gboolean       translucency)
+                    gboolean       translucency,
+                    double         transparency)
 {
+  KgxPalette *base;
+
   g_return_val_if_fail (self != NULL, NULL);
 
   if (is_day && self->day) {
-    return maybe_as_opaque (self->day, &self->day_opaque, translucency);
+    base = self->day;
   } else {
-    return maybe_as_opaque (self->night, &self->night_opaque, translucency);
+    base = self->night;
   }
+
+  if (!translucency) {
+    return maybe_as_opaque (base,
+                            is_day && self->day ? &self->day_opaque : &self->night_opaque,
+                            FALSE);
+  }
+
+  return kgx_palette_with_transparency (base, transparency);
 }

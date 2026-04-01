@@ -82,6 +82,28 @@ test_palette_opaque (void)
 
 
 static void
+test_palette_with_transparency (void)
+{
+  g_autoptr (KgxPalette) palette = kgx_palette_new (&((GdkRGBA) { 0, }),
+                                                    &((GdkRGBA) { 0, }),
+                                                    0.5,
+                                                    0,
+                                                    ((GdkRGBA []) { 0, }));
+  g_autoptr (KgxPalette) changed_palette = NULL;
+  g_autoptr (KgxPalette) same_palette = NULL;
+
+  changed_palette = kgx_palette_with_transparency (palette, 0.2);
+  g_assert_true (changed_palette != palette);
+  g_assert_cmpfloat_with_epsilon (kgx_palette_get_transparency (changed_palette),
+                                  0.2,
+                                  FLT_EPSILON);
+
+  same_palette = kgx_palette_with_transparency (palette, 0.5);
+  g_assert_true (same_palette == palette);
+}
+
+
+static void
 assert_colour (const GdkRGBA *a, const GdkRGBA *b)
 {
   g_assert_cmpfloat_with_epsilon (a->red, b->red, 0.0095);
@@ -226,6 +248,7 @@ main (int argc, char *argv[])
   g_test_add_func ("/kgx/palette/new", test_palette_new);
   g_test_add_func ("/kgx/palette/transparency", test_palette_transparency);
   g_test_add_func ("/kgx/palette/opaque", test_palette_opaque);
+  g_test_add_func ("/kgx/palette/with-transparency", test_palette_with_transparency);
   g_test_add_func ("/kgx/palette/colours", test_palette_colours);
   g_test_add_func ("/kgx/palette/serialise", test_palette_serialise);
   g_test_add_func ("/kgx/palette/deserialise", test_palette_deserialise);

@@ -379,6 +379,37 @@ kgx_palette_export_to_group (KgxPalette       *self,
 
 
 /**
+ * kgx_palette_with_transparency:
+ * @self: a #KgxPalette
+ * @transparency: the desired transparency amount
+ *
+ * Returns: (transfer full): a new #KgxPalette with @transparency, or @self
+ * if it already matches
+ */
+KgxPalette *
+kgx_palette_with_transparency (KgxPalette *self,
+                               double      transparency)
+{
+  KgxPalette *modified;
+  size_t colours_size;
+  double clamped = PERCENT (transparency);
+  double alpha = TRANS_AS_ALPHA (clamped);
+
+  g_return_val_if_fail (self != NULL, NULL);
+
+  if (G_APPROX_VALUE (self->background.alpha, alpha, FLT_EPSILON)) {
+    return kgx_palette_ref (self);
+  }
+
+  colours_size = sizeof (GdkRGBA) * self->n_colours;
+  modified = g_rc_box_dup (sizeof (KgxPalette) + colours_size, self);
+  modified->background.alpha = alpha;
+
+  return modified;
+}
+
+
+/**
  * kgx_palette_as_opaque:
  * @self: a #KgxPalette
  *
@@ -388,20 +419,7 @@ kgx_palette_export_to_group (KgxPalette       *self,
 KgxPalette *
 kgx_palette_as_opaque (KgxPalette *self)
 {
-  KgxPalette *modified;
-  size_t colours_size;
-
-  g_return_val_if_fail (self != NULL, NULL);
-
-  if (G_APPROX_VALUE (self->background.alpha, 1.0, FLT_EPSILON)) {
-    return kgx_palette_ref (self);
-  }
-
-  colours_size = sizeof (GdkRGBA) * self->n_colours;
-  modified = g_rc_box_dup (sizeof (KgxPalette) + colours_size, self);
-  modified->background.alpha = 1.0;
-
-  return modified;
+  return kgx_palette_with_transparency (self, 0.0);
 }
 
 

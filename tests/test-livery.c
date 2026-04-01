@@ -86,7 +86,7 @@ test_livery_roundtrip (void)
                    ==,
                    kgx_livery_get_name (livery_after));
 
-  palette_after = kgx_livery_resolve (livery_after, FALSE, TRUE);
+  palette_after = kgx_livery_resolve (livery_after, FALSE, TRUE, 0.0);
   kgx_palette_get_colours (palette_after, &fg_out, &bg_out, &n_colours_out, &colours_out);
 
   g_assert_cmpint (n_colours_in, ==, n_colours_out);
@@ -97,6 +97,22 @@ test_livery_roundtrip (void)
   for (size_t i = 0; i < n_colours_out; i++) {
     assert_colour (&colours_in[i], &colours_out[i]);
   }
+}
+
+
+static void
+test_livery_transparency_override (void)
+{
+  GdkRGBA fg = {.alpha = 1.0}, bg = {.alpha = 1.0};
+  g_autoptr (KgxPalette) palette = kgx_palette_new (&fg,
+                                                    &bg,
+                                                    0.5,
+                                                    0,
+                                                    ((GdkRGBA []) { 0, }));
+  g_autoptr (KgxLivery) livery = kgx_livery_new (KGX_LIVERY_UUID_KGX, "Test", palette, NULL);
+  g_autoptr (KgxPalette) resolved = kgx_livery_resolve (livery, FALSE, TRUE, 0.25);
+
+  g_assert_cmpfloat (kgx_palette_get_transparency (resolved), ==, 0.25);
 }
 
 
@@ -147,6 +163,7 @@ main (int argc, char *argv[])
   g_test_add_func ("/kgx/livery/type", test_livery_type);
   g_test_add_func ("/kgx/livery/new", test_livery_new);
   g_test_add_func ("/kgx/livery/roundtrip", test_livery_roundtrip);
+  g_test_add_func ("/kgx/livery/transparency-override", test_livery_transparency_override);
   g_test_add_func ("/kgx/livery/set_palette", test_livery_set_livery);
   g_test_add_func ("/kgx/livery/set_palette_same", test_livery_set_livery_same);
 

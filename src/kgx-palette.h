@@ -45,6 +45,8 @@ void           kgx_palette_export_to_group   (KgxPalette            *self,
                                               GKeyFile              *key_file,
                                               const char      *const group);
 KgxPalette    *kgx_palette_as_opaque         (KgxPalette            *self);
+KgxPalette    *kgx_palette_with_transparency (KgxPalette            *self,
+                                              double                 transparency);
 double         kgx_palette_get_transparency  (KgxPalette            *self);
 void           kgx_palette_get_colours       (KgxPalette            *self,
                                               GdkRGBA         *const foreground,

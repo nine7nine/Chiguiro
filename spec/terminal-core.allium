@@ -1,0 +1,611 @@
+-- allium: 3
+-- terminal-core.allium
+
+-- Scope: Core terminal emulator behavior
+-- Includes: Session lifecycle, process tracking, terminal interaction,
+--           color scheme resolution, transparency, settings, paste safety
+-- Excludes:
+--   - Window/tab chrome (see window-chrome.allium)
+--   - Preferences UI (implementation detail)
+--   - Keyboard shortcuts (implementation detail, keybindings vary per fork)
+--   - D-Bus activation, CLI argument parsing (infrastructure)
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity Compositor {
+    supports_transparency: Boolean
+}
+
+external entity FileManager {}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value Colour {
+    red: Decimal
+    green: Decimal
+    blue: Decimal
+    alpha: Decimal
+}
+
+value ProcessTitle {
+    title: String
+    subtitle: String?
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum Theme { auto | night | day | hacker }
+
+enum ResolvedTheme { night | day }
+
+enum SessionFlag { remote | privileged | playbox }
+
+enum ZoomDirection { zoom_in | zoom_out }
+
+enum PasteDecision { paste | cancel }
+
+enum CloseDecision { close | cancel }
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity Settings {
+    -- Font
+    use_system_font: Boolean
+    custom_font: String?
+    font_scale: Decimal
+
+    -- Scrollback
+    scrollback_lines: Integer
+    ignore_scrollback_limit: Boolean
+
+    -- Bell
+    audible_bell: Boolean
+    visual_bell: Boolean
+
+    -- Flow control
+    software_flow_control: Boolean
+
+    -- Transparency
+    transparency: Boolean
+    transparency_level: Decimal
+    content_opacity: Decimal
+
+    -- Shell
+    shell: List<String>
+
+    -- Theme
+    theme: Theme
+
+    -- Color scheme
+    livery: Livery
+
+    -- Window persistence
+    restore_window_size: Boolean
+
+    -- Window size (persisted)
+    last_window_size_width: Integer
+    last_window_size_height: Integer
+    last_window_size_maximised: Boolean
+
+    -- Derived
+    scale_can_increase: font_scale < 4.0
+    scale_can_decrease: font_scale > 0.5
+    resolved_scrollback: if ignore_scrollback_limit then -1 else scrollback_lines
+    resolved_theme(is_dark_environment: Boolean): ResolvedTheme
+}
+
+value Palette {
+    foreground: Colour
+    background: Colour
+    transparency: Decimal
+    colours: List<Colour>
+}
+
+value Livery {
+    uuid: String
+    name: String
+    night: Palette
+    day: Palette?
+
+    -- Derived
+    has_day_palette: day != null
+}
+
+entity LiveryManager {
+    builtin_liveries: Set<Livery>
+    custom_liveries: Set<Livery>
+
+    -- Derived
+    all_liveries: builtin_liveries + custom_liveries
+}
+
+entity Process {
+    pid: Integer
+    parent_pid: Integer
+    effective_uid: Integer
+    argv: List<String>
+
+    -- Derived
+    is_root: effective_uid != parent_uid
+    -- is_remote: true when argv[0] basename matches ssh, telnet, mosh-client,
+    -- mosh, et, or is waypipe wrapping one of these
+    is_remote: Boolean
+    -- is_playbox: true when argv matches "toolbox enter" or "distrobox ... enter"
+    is_playbox: Boolean
+    title: ProcessTitle
+}
+
+entity Session {
+    uuid: String
+    tag: String
+    root_pid: Integer
+    children: Set<Process>
+    status: Set<SessionFlag>
+
+    -- Derived
+    has_remote: children.any(c => c.is_remote)
+    has_privileged: children.any(c => c.is_root)
+    has_playbox: children.any(c => c.is_playbox)
+    is_alive: Boolean
+}
+
+entity Terminal {
+    session: Session?
+    settings: Settings
+    palette: Palette
+    translucent: Boolean
+    preview_mode: Boolean
+
+    -- Link detection
+    current_url: String?
+    has_url: current_url != null
+
+    -- Derived
+    effective_translucent: translucent and not preview_mode
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    font_scale_min: Decimal = 0.5
+    font_scale_max: Decimal = 4.0
+    font_scale_step: Decimal = 0.1
+    font_scale_default: Decimal = 1.0
+    default_scrollback: Integer = 10000
+    process_title_max_length: Integer = 100
+    paste_danger_pattern: String = "sudo"
+    watcher_foreground_interval: Duration = 0.5.seconds
+    watcher_background_interval: Duration = 2.seconds
+}
+
+------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------
+
+default Livery standard = {
+    uuid: "kgx",
+    name: "Standard",
+    night: Palette,
+    day: null
+}
+
+default Livery linux = {
+    uuid: "linux",
+    name: "Linux",
+    night: Palette,
+    day: null
+}
+
+default Livery xterm = {
+    uuid: "xterm",
+    name: "XTerm",
+    night: Palette,
+    day: null
+}
+
+------------------------------------------------------------
+-- Rules — Theme Resolution
+------------------------------------------------------------
+
+rule ResolveThemeAuto {
+    when: ResolveTheme(settings, is_dark_environment)
+    requires: settings.theme = auto
+
+    ensures:
+        if is_dark_environment:
+            ResolvedAs(night)
+        else:
+            ResolvedAs(day)
+}
+
+rule ResolveThemeNight {
+    when: ResolveTheme(settings, _)
+    requires: settings.theme = night or settings.theme = hacker
+
+    ensures: ResolvedAs(night)
+}
+
+rule ResolveThemeDay {
+    when: ResolveTheme(settings, _)
+    requires: settings.theme = day
+
+    ensures: ResolvedAs(day)
+}
+
+------------------------------------------------------------
+-- Rules — Livery Resolution
+------------------------------------------------------------
+
+rule ResolveLivery {
+    when: ResolveLivery(livery, resolved_theme, translucent, transparency_level)
+    let base_palette = if resolved_theme = day and livery.has_day_palette then livery.day else livery.night
+
+    ensures:
+        if translucent:
+            PaletteResolved(base_palette, transparency_level)
+        else:
+            PaletteResolved(base_palette, 0.0)
+
+    @guidance
+        -- When not translucent, resolve with transparency=0.0 (fully opaque).
+        -- Cache opaque palettes to avoid reallocation.
+}
+
+rule ResolveLiveryFallback {
+    when: ResolveLiveryByUuid(manager, uuid)
+    requires: not manager.all_liveries.any(l => l.uuid = uuid)
+
+    ensures: LiveryFallback(standard)
+
+    @guidance
+        -- Log a warning when UUID not found. Return standard livery.
+}
+
+------------------------------------------------------------
+-- Rules — Font Scale
+------------------------------------------------------------
+
+rule ZoomIn {
+    when: Zoom(settings, zoom_in)
+    requires: settings.scale_can_increase
+    let new_scale = settings.font_scale + config.font_scale_step
+
+    ensures: settings.font_scale = new_scale
+}
+
+rule ZoomOut {
+    when: Zoom(settings, zoom_out)
+    requires: settings.scale_can_decrease
+    let new_scale = settings.font_scale - config.font_scale_step
+
+    ensures: settings.font_scale = new_scale
+}
+
+rule ZoomReset {
+    when: ZoomReset(settings)
+
+    ensures: settings.font_scale = config.font_scale_default
+}
+
+------------------------------------------------------------
+-- Rules — Process Lifecycle
+------------------------------------------------------------
+
+rule SpawnSession {
+    when: SpawnSession(working_dir, command, environ)
+
+    ensures: Session.created(
+        tag: command.first,
+        root_pid: spawned_pid,
+        children: {},
+        status: {}
+    )
+
+    @guidance
+        -- Create VTE PTY, set TERM=xterm-256color, TERM_PROGRAM=kgx.
+        -- If software_flow_control disabled, clear IXON|IXOFF on termios.
+        -- Apply proxy environment variables.
+}
+
+rule RootProcessDied {
+    when: session: Session.is_alive becomes false
+
+    ensures: SessionDied(session)
+}
+
+rule ChildDetected {
+    when: ChildDetected(session, process)
+    requires: not process in session.children
+
+    ensures: session.children = session.children + { process }
+    ensures: session.status = ComputeStatus(session)
+    ensures: ChildAdded(session, process)
+}
+
+rule ChildExited {
+    when: ChildExited(session, process)
+    requires: process in session.children
+
+    ensures: session.children = session.children - { process }
+    ensures: session.status = ComputeStatus(session)
+    ensures: ChildRemoved(session, process)
+}
+
+------------------------------------------------------------
+-- Rules — Session Status Computation
+------------------------------------------------------------
+
+rule ComputeSessionStatus {
+    when: ComputeStatus(session)
+
+    ensures:
+        if session.has_remote:
+            session.status = session.status + { remote }
+        if session.has_privileged:
+            session.status = session.status + { privileged }
+        if session.has_playbox:
+            session.status = session.status + { playbox }
+        if not session.has_remote:
+            session.status = session.status - { remote }
+        if not session.has_privileged:
+            session.status = session.status - { privileged }
+        if not session.has_playbox:
+            session.status = session.status - { playbox }
+}
+
+------------------------------------------------------------
+-- Rules — Paste Safety
+------------------------------------------------------------
+
+rule PasteSafe {
+    when: PasteRequested(terminal, text)
+    requires: not (text.contains(config.paste_danger_pattern) and text.contains("\n"))
+
+    ensures: PasteAccepted(terminal, text)
+}
+
+rule PasteDangerous {
+    when: PasteRequested(terminal, text)
+    requires: text.contains(config.paste_danger_pattern) and text.contains("\n")
+
+    ensures: PasteConfirmationRequired(terminal, text)
+
+    @guidance
+        -- Show dialog: "You are pasting a command that runs as an administrator"
+        -- User may confirm or cancel.
+}
+
+rule PasteConfirmed {
+    when: PasteConfirmed(terminal, text)
+
+    ensures: PasteAccepted(terminal, text)
+}
+
+------------------------------------------------------------
+-- Rules — Link Detection
+------------------------------------------------------------
+
+rule LinkDetected {
+    when: LinkDetected(terminal, url)
+
+    ensures: terminal.current_url = url
+
+    @guidance
+        -- Priority: VTE hyperlinks first, then regex patterns.
+        -- Regex patterns: standard URLs, www. prefixes, callto/sip,
+        -- mailto, news/man/info schemes.
+        -- Show tooltip: "Ctrl-click to open: [url]"
+}
+
+rule LinkCleared {
+    when: LinkCleared(terminal)
+    requires: terminal.has_url
+
+    ensures: terminal.current_url = null
+}
+
+rule OpenLink {
+    when: OpenLink(terminal)
+    requires: terminal.has_url
+
+    ensures: LinkOpened(terminal.current_url)
+
+    @guidance
+        -- Resolve relative URLs against terminal's current directory.
+        -- Validate URI format. Reject non-local file URIs.
+        -- Dispatch to system handler.
+}
+
+------------------------------------------------------------
+-- Rules — Transparency
+------------------------------------------------------------
+
+rule TransparencySync {
+    when: TransparencyChanged(terminal, window_translucent)
+
+    ensures:
+        if window_translucent and not terminal.preview_mode:
+            terminal.translucent = true
+        else:
+            terminal.translucent = false
+
+    @guidance
+        -- When translucent: set VTE clear_background, background alpha = 0.0.
+        -- Paint semi-transparent floor under content.
+        -- Floor alpha = 1.0 - transparency_level.
+}
+
+rule ContentOpacityApplied {
+    when: ContentOpacityChanged(terminal, opacity)
+    requires: terminal.translucent
+
+    ensures: ContentOpacitySet(terminal, opacity)
+
+    @guidance
+        -- Set widget opacity on terminal content stack.
+        -- Only applies when transparency is active.
+}
+
+------------------------------------------------------------
+-- Rules — Terminal Bell
+------------------------------------------------------------
+
+rule AudibleBell {
+    when: BellRang(terminal)
+    requires: terminal.settings.audible_bell
+
+    ensures: AudibleBellFired(terminal)
+}
+
+rule VisualBell {
+    when: BellRang(terminal)
+    requires: terminal.settings.visual_bell
+
+    ensures: VisualBellStarted(terminal)
+
+    @guidance
+        -- Apply CSS animation on header bar (0.5s ease-out).
+        -- Clear after timeout.
+}
+
+------------------------------------------------------------
+-- Rules — Process Detection
+------------------------------------------------------------
+
+rule DetectRemoteProcess {
+    when: ClassifyProcess(process)
+    requires: process.is_remote
+
+    ensures: ProcessClassified(process, remote)
+
+    @guidance
+        -- Remote commands: ssh, telnet, mosh-client, mosh, et.
+        -- Also detect waypipe wrapping these commands.
+}
+
+rule DetectPrivilegedProcess {
+    when: ClassifyProcess(process)
+    requires: process.is_root
+
+    ensures: ProcessClassified(process, privileged)
+}
+
+rule DetectPlayboxProcess {
+    when: ClassifyProcess(process)
+    requires: process.is_playbox
+
+    ensures: ProcessClassified(process, playbox)
+
+    @guidance
+        -- Playbox commands: "toolbox enter", "distrobox ... enter".
+}
+
+------------------------------------------------------------
+-- Rules — Process Title
+------------------------------------------------------------
+
+rule ProcessTitleNormal {
+    when: ComputeTitle(process)
+    let full_command = process.argv.join(" ")
+    requires: full_command.length <= config.process_title_max_length
+
+    ensures: TitleComputed(full_command, null)
+}
+
+rule ProcessTitleTruncated {
+    when: ComputeTitle(process)
+    let full_command = process.argv.join(" ")
+    requires: full_command.length > config.process_title_max_length
+
+    ensures: TitleComputed("Process " + process.pid, full_command)
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant FontScaleBounded {
+    for s in Settings:
+        s.font_scale >= config.font_scale_min and s.font_scale <= config.font_scale_max
+}
+
+invariant TransparencyLevelBounded {
+    for s in Settings:
+        s.transparency_level >= 0.05 and s.transparency_level <= 0.95
+}
+
+invariant ContentOpacityBounded {
+    for s in Settings:
+        s.content_opacity >= 0.05 and s.content_opacity <= 1.0
+}
+
+invariant SessionStatusReflectsChildren {
+    for s in Sessions:
+        (remote in s.status) implies s.has_remote
+        and (privileged in s.status) implies s.has_privileged
+        and (playbox in s.status) implies s.has_playbox
+}
+
+invariant ThemeHackerIsNight {
+    -- hacker is a legacy alias; always resolves to night
+    for s in Settings:
+        s.theme = hacker implies s.resolved_theme(true) = night
+            and s.resolved_theme(false) = night
+}
+
+invariant LiveryAlwaysResolves {
+    -- Unknown UUIDs fall back to standard livery; never null
+    for t in Terminals:
+        t.palette != null
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface TerminalView {
+    facing user: User
+
+    context terminal: Terminal
+
+    exposes:
+        terminal.palette
+        terminal.effective_translucent
+        terminal.current_url
+        terminal.session.tag
+        terminal.session.status
+        terminal.settings.font_scale
+        terminal.settings.resolved_scrollback
+
+    provides:
+        PasteRequested(terminal, text)
+        OpenLink(terminal)
+            when terminal.has_url
+        Zoom(terminal.settings, zoom_in)
+            when terminal.settings.scale_can_increase
+        Zoom(terminal.settings, zoom_out)
+            when terminal.settings.scale_can_decrease
+        ZoomReset(terminal.settings)
+
+    @guarantee PasteSafetyEnforced
+        -- Paste operations containing sudo with newlines always
+        -- require explicit user confirmation before execution.
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should the watcher polling interval be configurable, or are 500ms/2s fixed?"
+
+open question "Should livery import/export (INI file format) be part of the core spec or a separate integration spec?"
