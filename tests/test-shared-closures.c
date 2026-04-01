@@ -94,11 +94,11 @@ test_object_or_fallback (void)
 static void
 test_enum_is (void)
 {
-  g_assert_true (kgx_enum_is (NULL, KGX_THEME_DAY, KGX_THEME_DAY));
-  g_assert_true (kgx_enum_is (NULL, KGX_THEME_NIGHT, KGX_THEME_NIGHT));
+  g_assert_true (kgx_enum_is (NULL, 1, 1));
+  g_assert_true (kgx_enum_is (NULL, 2, 2));
 
-  g_assert_false (kgx_enum_is (NULL, KGX_THEME_NIGHT, KGX_THEME_DAY));
-  g_assert_false (kgx_enum_is (NULL, KGX_THEME_DAY, KGX_THEME_NIGHT));
+  g_assert_false (kgx_enum_is (NULL, 1, 2));
+  g_assert_false (kgx_enum_is (NULL, 2, 1));
 }
 
 

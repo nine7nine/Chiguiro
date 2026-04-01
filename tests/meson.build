@@ -19,7 +19,6 @@ tests = [
   'system-info',
   'tab',
   'templated',
-  'theme-switcher',
   'train',
   'utils',
 ]

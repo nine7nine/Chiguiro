@@ -432,35 +432,6 @@ test_settings_custom_shell (Fixture *fixture, gconstpointer unused)
 }
 
 
-static struct resolve_test {
-  KgxTheme setting;
-  gboolean dark;
-  KgxTheme result;
-} resolve_cases[] = {
-  { KGX_THEME_AUTO, FALSE, KGX_THEME_DAY },
-  { KGX_THEME_AUTO, TRUE, KGX_THEME_NIGHT },
-  { KGX_THEME_DAY, FALSE, KGX_THEME_DAY },
-  { KGX_THEME_DAY, TRUE, KGX_THEME_DAY },
-  { KGX_THEME_NIGHT, FALSE, KGX_THEME_NIGHT },
-  { KGX_THEME_NIGHT, TRUE, KGX_THEME_NIGHT },
-  { KGX_THEME_HACKER, FALSE, KGX_THEME_NIGHT },
-  { KGX_THEME_HACKER, TRUE, KGX_THEME_NIGHT },
-};
-
-
-static void
-test_settings_resolve_theme (Fixture *fixture, gconstpointer user_data)
-{
-  g_autoptr (KgxSettings) settings = g_object_new (KGX_TYPE_SETTINGS, NULL);
-  const struct resolve_test *test = user_data;
-
-  g_settings_set_enum (fixture->settings, "theme", test->setting);
-
-  g_assert_cmpint (kgx_settings_resolve_theme (settings, test->dark),
-                   ==,
-                   test->result);
-}
-
 
 static void
 test_settings_audible_bell (Fixture *fixture, gconstpointer unused)
@@ -674,6 +645,42 @@ test_settings_transparency (Fixture *fixture, gconstpointer unused)
 }
 
 
+static void
+test_settings_transparency_level (Fixture *fixture, gconstpointer unused)
+{
+  g_autoptr (KgxSettings) settings = g_object_new (KGX_TYPE_SETTINGS, NULL);
+  double result = 0.0;
+
+  g_settings_set_double (fixture->settings, "transparency-level", 0.6);
+
+  g_object_get (settings, "transparency-level", &result, NULL);
+  g_assert_cmpfloat (result, ==, 0.6);
+
+  kgx_test_property_notify (settings, "transparency-level", 0.2, 0.35);
+
+  g_object_get (settings, "transparency-level", &result, NULL);
+  g_assert_cmpfloat (result, ==, 0.35);
+}
+
+
+static void
+test_settings_content_opacity (Fixture *fixture, gconstpointer unused)
+{
+  g_autoptr (KgxSettings) settings = g_object_new (KGX_TYPE_SETTINGS, NULL);
+  double result = 0.0;
+
+  g_settings_set_double (fixture->settings, "content-opacity", 0.85);
+
+  g_object_get (settings, "content-opacity", &result, NULL);
+  g_assert_cmpfloat (result, ==, 0.85);
+
+  kgx_test_property_notify (settings, "content-opacity", 0.7, 0.9);
+
+  g_object_get (settings, "content-opacity", &result, NULL);
+  g_assert_cmpfloat (result, ==, 0.9);
+}
+
+
 #define fixtured_test(path, data, func) \
   g_test_add ((path), Fixture, (data), fixture_setup, (func), fixture_tear);
 
@@ -697,17 +704,6 @@ main (int argc, char *argv[])
   fixtured_test ("/kgx/settings/custom-size", NULL, test_settings_custom_size);
   fixtured_test ("/kgx/settings/custom-shell", NULL, test_settings_custom_shell);
 
-  for (size_t i = 0; i < G_N_ELEMENTS (resolve_cases); i++) {
-    g_autofree char *name =
-      g_enum_to_string (KGX_TYPE_THEME, resolve_cases[i].setting);
-    g_autofree char *path =
-      g_strdup_printf ("/kgx/settings/resolve-theme/%s/%s",
-                       name,
-                       resolve_cases[i].dark ? "dark" : "not-dark");
-
-    fixtured_test (path, &resolve_cases[i], test_settings_resolve_theme);
-  }
-
   fixtured_test ("/kgx/settings/audible-bell", NULL, test_settings_audible_bell);
   fixtured_test ("/kgx/settings/visual-bell", NULL, test_settings_visual_bell);
   fixtured_test ("/kgx/settings/livery", NULL, test_settings_livery);
@@ -724,6 +720,8 @@ main (int argc, char *argv[])
 
   fixtured_test ("/kgx/settings/software-flow-control", NULL, test_settings_software_flow_control);
   fixtured_test ("/kgx/settings/transparency", NULL, test_settings_transparency);
+  fixtured_test ("/kgx/settings/transparency-level", NULL, test_settings_transparency_level);
+  fixtured_test ("/kgx/settings/content-opacity", NULL, test_settings_content_opacity);
 
   return g_test_run ();
 }

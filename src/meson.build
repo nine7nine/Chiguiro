@@ -49,6 +49,8 @@ kgx_sources = files(
   'kgx-simple-tab.c',
   'kgx-simple-tab.h',
   'kgx-spad-source.c',
+  'kgx-sprite.c',
+  'kgx-sprite.h',
   'kgx-spad-source.h',
   'kgx-spad.c',
   'kgx-spad.h',
@@ -60,8 +62,6 @@ kgx_sources = files(
   'kgx-templated.h',
   'kgx-terminal.c',
   'kgx-terminal.h',
-  'kgx-theme-switcher.c',
-  'kgx-theme-switcher.h',
   'kgx-train.c',
   'kgx-train.h',
   'kgx-utils.c',
@@ -70,10 +70,10 @@ kgx_sources = files(
   'kgx-watcher.h',
   'kgx-window.c',
   'kgx-window.h',
+  'kgx-settings-page.c',
+  'kgx-settings-page.h',
   'preferences/kgx-font-picker.c',
   'preferences/kgx-font-picker.h',
-  'preferences/kgx-preferences-window.c',
-  'preferences/kgx-preferences-window.h',
 )
 
 kgx_deps = [

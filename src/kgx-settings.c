@@ -41,7 +41,6 @@
 struct _KgxSettings {
   GObject               parent_instance;
 
-  KgxTheme              theme;
   PangoFontDescription *font;
   double                scale;
   int                   scrollback_lines;
@@ -54,6 +53,10 @@ struct _KgxSettings {
   gboolean              software_flow_control;
   KgxLivery            *livery;
   gboolean              transparency;
+  double                transparency_level;
+  double                chrome_opacity;
+  char                 *chrome_color;
+  char                 *accent_color;
 
   KgxLiveryManager     *livery_manager;
 
@@ -68,7 +71,6 @@ G_DEFINE_FINAL_TYPE_WITH_CODE (KgxSettings, kgx_settings, G_TYPE_OBJECT,
 
 enum {
   PROP_0,
-  PROP_THEME,
   PROP_FONT,
   PROP_FONT_SCALE,
   PROP_SCALE_CAN_INCREASE,
@@ -83,6 +85,10 @@ enum {
   PROP_SOFTWARE_FLOW_CONTROL,
   PROP_LIVERY,
   PROP_TRANSPARENCY,
+  PROP_TRANSPARENCY_LEVEL,
+  PROP_CHROME_OPACITY,
+  PROP_CHROME_COLOR,
+  PROP_ACCENT_COLOR,
   LAST_PROP
 };
 static GParamSpec *pspecs[LAST_PROP] = { NULL, };
@@ -131,10 +137,6 @@ kgx_settings_set_property (GObject      *object,
   KgxSettings *self = KGX_SETTINGS (object);
 
   switch (property_id) {
-    case PROP_THEME:
-      self->theme = g_value_get_enum (value);
-      g_object_notify_by_pspec (object, pspec);
-      break;
     case PROP_FONT:
       g_clear_pointer (&self->font, pango_font_description_free);
       self->font = g_value_dup_boxed (value);
@@ -195,6 +197,36 @@ kgx_settings_set_property (GObject      *object,
                             &self->transparency,
                             value);
       break;
+    case PROP_TRANSPARENCY_LEVEL:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.0, 1.0);
+
+        if (!G_APPROX_VALUE (self->transparency_level, new_value, DBL_EPSILON)) {
+          self->transparency_level = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_CHROME_OPACITY:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.0, 1.0);
+
+        if (!G_APPROX_VALUE (self->chrome_opacity, new_value, DBL_EPSILON)) {
+          self->chrome_opacity = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_CHROME_COLOR:
+      g_free (self->chrome_color);
+      self->chrome_color = g_value_dup_string (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_ACCENT_COLOR:
+      g_free (self->accent_color);
+      self->accent_color = g_value_dup_string (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
     case PROP_LIVERY:
       kgx_settings_set_livery (self, g_value_get_boxed (value));
       break;
@@ -212,9 +244,6 @@ kgx_settings_get_property (GObject    *object,
   KgxSettings *self = KGX_SETTINGS (object);
 
   switch (property_id) {
-    case PROP_THEME:
-      g_value_set_enum (value, self->theme);
-      break;
     case PROP_FONT:
       g_value_set_boxed (value, self->font);
       break;
@@ -256,6 +285,18 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_TRANSPARENCY:
       g_value_set_boolean (value, self->transparency);
+      break;
+    case PROP_TRANSPARENCY_LEVEL:
+      g_value_set_double (value, self->transparency_level);
+      break;
+    case PROP_CHROME_OPACITY:
+      g_value_set_double (value, self->chrome_opacity);
+      break;
+    case PROP_CHROME_COLOR:
+      g_value_set_string (value, self->chrome_color ? self->chrome_color : "#000000");
+      break;
+    case PROP_ACCENT_COLOR:
+      g_value_set_string (value, self->accent_color ? self->accent_color : "");
       break;
     KGX_INVALID_PROP (object, property_id, pspec);
   }
@@ -301,11 +342,6 @@ kgx_settings_class_init (KgxSettingsClass *klass)
    *
    * Bound to ‘theme’ GSetting so changes persist
    */
-  pspecs[PROP_THEME] =
-    g_param_spec_enum ("theme", NULL, NULL,
-                       KGX_TYPE_THEME, KGX_THEME_NIGHT,
-                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-
   pspecs[PROP_FONT] =
     g_param_spec_boxed ("font", NULL, NULL,
                         PANGO_TYPE_FONT_DESCRIPTION,
@@ -384,6 +420,26 @@ kgx_settings_class_init (KgxSettingsClass *klass)
     g_param_spec_boolean ("transparency", NULL, NULL,
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_TRANSPARENCY_LEVEL] =
+    g_param_spec_double ("transparency-level", NULL, NULL,
+                         0.0, 1.0, 0.2,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_CHROME_OPACITY] =
+    g_param_spec_double ("chrome-opacity", NULL, NULL,
+                         0.0, 1.0, 0.8,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_CHROME_COLOR] =
+    g_param_spec_string ("chrome-color", NULL, NULL,
+                         "#000000",
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_ACCENT_COLOR] =
+    g_param_spec_string ("accent-color", NULL, NULL,
+                         "",
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
 
@@ -527,9 +583,6 @@ kgx_settings_init (KgxSettings *self)
 {
   kgx_templated_init_template (KGX_TEMPLATED (self));
 
-  g_settings_bind (self->settings, "theme",
-                   self, "theme",
-                   G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "font-scale",
                    self, "font-scale",
                    G_SETTINGS_BIND_DEFAULT);
@@ -560,6 +613,18 @@ kgx_settings_init (KgxSettings *self)
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "transparency",
                    self, "transparency",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "transparency-level",
+                   self, "transparency-level",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "chrome-opacity",
+                   self, "chrome-opacity",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "chrome-color",
+                   self, "chrome-color",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "accent-color",
+                   self, "accent-color",
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind_with_mapping (self->settings, "custom-liveries",
                                 self->livery_manager, "custom-liveries",
@@ -801,30 +866,3 @@ kgx_settings_set_livery (KgxSettings *restrict self,
 }
 
 
-/**
- * kgx_settings_get_resolved_theme:
- * @self: the #KgxSettings
- * @dark_environment: if the environment is dark
- *
- * Unlike #KgxSettings:theme this is never %KGX_THEME_AUTO, instead providing
- * the value %KGX_THEME_AUTO should be treated as
- */
-KgxTheme
-kgx_settings_resolve_theme (KgxSettings *self, gboolean dark_environment)
-{
-  g_return_val_if_fail (KGX_IS_SETTINGS (self), KGX_THEME_HACKER);
-
-  if (G_LIKELY (self->theme != KGX_THEME_AUTO)) {
-    if (G_UNLIKELY (self->theme == KGX_THEME_HACKER)) {
-      return KGX_THEME_NIGHT;
-    }
-
-    return self->theme;
-  }
-
-  if (dark_environment) {
-    return KGX_THEME_NIGHT;
-  }
-
-  return KGX_THEME_DAY;
-}

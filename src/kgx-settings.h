@@ -27,25 +27,6 @@
 G_BEGIN_DECLS
 
 
-/**
- * KgxTheme:
- * @KGX_THEME_AUTO: Matches %KGX_THEME_DAY or %KGX_THEME_NIGHT depending on
- *                  the user's global setting
- * @KGX_THEME_NIGHT: The default, dark, theme
- * @KGX_THEME_DAY: Alternate, light, theme
- * @KGX_THEME_HACKER: Legacy alias for night
- *
- * Until [meson#1687](https://github.com/mesonbuild/meson/issues/1687) is
- * resolved this enum must be manually kept in sync with
- * the ‘Theme’ enum in our gschema
- */
-typedef enum /*< enum,prefix=KGX >*/ {
-  KGX_THEME_AUTO = 0,   /*< nick=auto >*/
-  KGX_THEME_NIGHT = 1,  /*< nick=night >*/
-  KGX_THEME_DAY = 2,    /*< nick=day >*/
-  KGX_THEME_HACKER = 3, /*< nick=hacker >*/
-} KgxTheme;
-
 
 /**
  * KGX_FONT_SCALE_MIN:
@@ -98,7 +79,4 @@ gboolean              kgx_settings_get_software_flow_control (KgxSettings      *
 KgxLivery            *kgx_settings_get_livery                (KgxSettings           *self);
 void                  kgx_settings_set_livery                (KgxSettings           *self,
                                                               KgxLivery             *livery);
-KgxTheme              kgx_settings_resolve_theme             (KgxSettings           *self,
-                                                              gboolean               dark_environment);
-
 G_END_DECLS

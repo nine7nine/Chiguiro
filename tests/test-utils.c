@@ -156,8 +156,8 @@ kgx_test_object_class_init (KgxTestObjectClass *klass)
 
   pspecs[PROP_A_ENUM] =
     g_param_spec_enum ("a-enum", NULL, NULL,
-                       KGX_TYPE_THEME,
-                       KGX_THEME_AUTO,
+                       G_TYPE_SOCKET_TYPE,
+                       G_SOCKET_TYPE_STREAM,
                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
@@ -337,9 +337,9 @@ test_set_enum (void)
   int res;
 
   g_object_get (obj, "a-enum", &res, NULL);
-  g_assert_cmpint (res, ==, KGX_THEME_AUTO);
+  g_assert_cmpint (res, ==, G_SOCKET_TYPE_STREAM);
 
-  kgx_test_property_notify (obj, "a-enum", KGX_THEME_DAY, KGX_THEME_NIGHT);
+  kgx_test_property_notify (obj, "a-enum", G_SOCKET_TYPE_DATAGRAM, G_SOCKET_TYPE_STREAM);
 }
 
 
