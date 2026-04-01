@@ -31,6 +31,7 @@
 #include "kgx-shared-closures.h"
 #include "kgx-spad-source.h"
 #include "kgx-spad.h"
+#include "kgx-window.h"
 
 #include "kgx-terminal.h"
 
@@ -81,8 +82,8 @@ struct _KgxTerminal {
   KgxSettings   *settings;
   GCancellable  *cancellable;
   KgxPalette    *palette;
-
   KgxDespatcher *despatcher;
+  gboolean       translucent;
 
   /* Hyperlinks */
   char       *current_url;
@@ -124,6 +125,7 @@ kgx_terminal_dispose (GObject *object)
 
   g_clear_object (&self->settings);
 
+
   g_clear_object (&self->despatcher);
 
   g_clear_pointer (&self->palette, kgx_palette_unref);
@@ -133,28 +135,50 @@ kgx_terminal_dispose (GObject *object)
 
 
 static void
-kgx_terminal_set_palette (KgxTerminal *self, KgxPalette *palette)
+kgx_terminal_apply_palette (KgxTerminal *self)
 {
   GdkRGBA foreground, background;
   const GdkRGBA *colours;
   size_t n_colours;
 
-  if (!kgx_set_palette (&self->palette, palette)) {
+  if (!self->palette) {
     return;
   }
 
-  kgx_palette_get_colours (palette,
+  kgx_palette_get_colours (self->palette,
                            &foreground,
                            &background,
                            &n_colours,
                            &colours);
+
+
   vte_terminal_set_colors (VTE_TERMINAL (self),
                            &foreground,
                            &background,
                            colours,
                            n_colours);
+  gtk_widget_queue_draw (GTK_WIDGET (self));
+}
+
+
+static void
+kgx_terminal_set_palette (KgxTerminal *self, KgxPalette *palette)
+{
+  if (!kgx_set_palette (&self->palette, palette)) {
+    return;
+  }
+
+  kgx_terminal_apply_palette (self);
 
   g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_PALETTE]);
+}
+
+
+static void
+kgx_terminal_sync_transparency (KgxTerminal *self)
+{
+  self->translucent = TRUE;
+  kgx_terminal_apply_palette (self);
 }
 
 
@@ -675,6 +699,28 @@ kgx_terminal_size_allocate (GtkWidget *widget,
 }
 
 
+static void
+kgx_terminal_root (GtkWidget *widget)
+{
+  KgxTerminal *self = KGX_TERMINAL (widget);
+
+  GTK_WIDGET_CLASS (kgx_terminal_parent_class)->root (widget);
+
+  kgx_terminal_sync_transparency (self);
+}
+
+
+static void
+kgx_terminal_unroot (GtkWidget *widget)
+{
+  KgxTerminal *self = KGX_TERMINAL (widget);
+
+  /* Keep translucent=TRUE even when unrooted */
+
+  GTK_WIDGET_CLASS (kgx_terminal_parent_class)->unroot (widget);
+}
+
+
 static gboolean
 kgx_terminal_query_tooltip (GtkWidget  *widget,
                             int         x,
@@ -727,19 +773,12 @@ static KgxPalette *
 resolve_livery (KgxTerminal *self,
                 KgxLivery   *livery,
                 gboolean     is_day,
-                gboolean     translucency)
+                gboolean     translucency,
+                double       transparency)
 {
-  return kgx_livery_resolve (livery, is_day, translucency);
+  return kgx_livery_resolve (livery, is_day, translucency, transparency);
 }
 
-
-static KgxTheme
-resolve_theme (KgxTerminal *self,
-               KgxSettings *settings,
-               gboolean     dark_environment)
-{
-  return kgx_settings_resolve_theme (settings, dark_environment);
-}
 
 
 static void
@@ -836,6 +875,8 @@ kgx_terminal_class_init (KgxTerminalClass *klass)
   object_class->set_property = kgx_terminal_set_property;
   object_class->get_property = kgx_terminal_get_property;
 
+  widget_class->root = kgx_terminal_root;
+  widget_class->unroot = kgx_terminal_unroot;
   widget_class->size_allocate = kgx_terminal_size_allocate;
   widget_class->query_tooltip = kgx_terminal_query_tooltip;
 
@@ -894,13 +935,12 @@ kgx_terminal_class_init (KgxTerminalClass *klass)
                                                KGX_APPLICATION_PATH "kgx-terminal.ui");
 
   gtk_widget_class_bind_template_callback (widget_class, resolve_livery);
-  gtk_widget_class_bind_template_callback (widget_class, resolve_theme);
   gtk_widget_class_bind_template_callback (widget_class, location_changed);
   gtk_widget_class_bind_template_callback (widget_class, setup_context_menu);
   gtk_widget_class_bind_template_callback (widget_class, pressed);
   gtk_widget_class_bind_template_callback (widget_class, scroll);
   gtk_widget_class_bind_template_callback (widget_class, kgx_style_manager_for_display);
-  gtk_widget_class_bind_template_callback (widget_class, kgx_enum_is);
+  gtk_widget_class_bind_template_callback (widget_class, kgx_bool_not);
 
   gtk_widget_class_install_action (widget_class,
                                    "term.open-link",
@@ -932,6 +972,8 @@ kgx_terminal_class_init (KgxTerminalClass *klass)
 static void
 kgx_terminal_init (KgxTerminal *self)
 {
+  self->translucent = TRUE;
+
   gtk_widget_init_template (GTK_WIDGET (self));
 
   gtk_widget_action_set_enabled (GTK_WIDGET (self), "term.open-link", FALSE);
@@ -962,6 +1004,7 @@ kgx_terminal_init (KgxTerminal *self)
                                         "pointer");
   }
 }
+
 
 
 static void

@@ -19,8 +19,6 @@
 #include "kgx-config.h"
 
 #include <glib/gi18n.h>
-#define PCRE2_CODE_UNIT_WIDTH 0
-#include <pcre2.h>
 
 #include "kgx-application.h"
 #include "kgx-drop-target.h"
@@ -32,6 +30,7 @@
 #include "kgx-spad.h"
 #include "kgx-terminal.h"
 #include "kgx-utils.h"
+#include "kgx-window.h"
 
 #include "kgx-tab.h"
 
@@ -42,6 +41,7 @@ struct _KgxTabPrivate {
 
   KgxApplication       *application;
   KgxSettings          *settings;
+  GSignalGroup         *settings_signals;
 
   KgxTrain             *train;
   GSignalGroup         *train_signals;
@@ -54,7 +54,7 @@ struct _KgxTabPrivate {
   gboolean              is_active;
   gboolean              close_on_quit;
   gboolean              needs_attention;
-  gboolean              search_mode_enabled;
+  gboolean              started;
 
   gboolean              ringing;
   guint                 ringing_timeout;
@@ -78,12 +78,6 @@ struct _KgxTabPrivate {
 
   GtkWidget            *exit_revealer;
   GtkWidget            *exit_message;
-  GtkWidget            *search_entry;
-  GtkWidget            *search_bar;
-  char                 *last_search;
-
-  AdwToastOverlay      *toasts;
-
   char                 *notification_id;
 };
 
@@ -110,7 +104,6 @@ enum {
   PROP_IS_ACTIVE,
   PROP_CLOSE_ON_QUIT,
   PROP_NEEDS_ATTENTION,
-  PROP_SEARCH_MODE_ENABLED,
   PROP_RINGING,
   PROP_DROPPING,
   PROP_WORKING,
@@ -133,6 +126,51 @@ static guint signals[N_SIGNALS];
 
 
 static void
+kgx_tab_update_content_opacity (KgxTab *self)
+{
+  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
+  GtkWidget *scrolled;
+  double transparency_level = 0.0;
+
+  if (!priv->terminal || !priv->settings) {
+    return;
+  }
+
+  /* Set widget opacity on the GtkScrolledWindow wrapping the terminal.
+   * This is the proven approach for compositor transparency. */
+  scrolled = gtk_widget_get_parent (GTK_WIDGET (priv->terminal));
+  if (!scrolled) {
+    return;
+  }
+
+  g_object_get (priv->settings,
+                "transparency-level", &transparency_level,
+                NULL);
+
+  /* transparency_level: 0.0 = opaque, 1.0 = fully transparent */
+  gtk_widget_set_opacity (scrolled, 1.0 - transparency_level);
+}
+
+
+static void
+content_opacity_changed (G_GNUC_UNUSED GObject    *object,
+                         G_GNUC_UNUSED GParamSpec *pspec,
+                         KgxTab                   *self)
+{
+  kgx_tab_update_content_opacity (self);
+}
+
+
+static void
+translucent_changed (G_GNUC_UNUSED GObject    *object,
+                     G_GNUC_UNUSED GParamSpec *pspec,
+                     KgxTab                   *self)
+{
+  kgx_tab_update_content_opacity (self);
+}
+
+
+static void
 kgx_tab_dispose (GObject *object)
 {
   KgxTab *self = KGX_TAB (object);
@@ -152,6 +190,17 @@ kgx_tab_dispose (GObject *object)
     g_clear_pointer (&priv->notification_id, g_free);
   }
 
+  /* Disconnect all signal/binding groups before their targets are destroyed */
+  if (priv->settings_signals)
+    g_signal_group_set_target (priv->settings_signals, NULL);
+  if (priv->train_signals)
+    g_signal_group_set_target (priv->train_signals, NULL);
+  if (priv->terminal_signals)
+    g_signal_group_set_target (priv->terminal_signals, NULL);
+
+  /* Dispose template before parent class destroys widget tree */
+
+  g_clear_object (&priv->settings_signals);
   g_clear_object (&priv->application);
   g_clear_object (&priv->settings);
   g_clear_object (&priv->train);
@@ -168,105 +217,11 @@ kgx_tab_dispose (GObject *object)
   g_clear_object (&priv->initial_path);
   g_clear_handle_id (&priv->initial_timeout, g_source_remove);
 
-  g_clear_pointer (&priv->last_search, g_free);
-
   G_OBJECT_CLASS (kgx_tab_parent_class)->dispose (object);
 }
 
 
-static void
-search_enabled (GObject    *object,
-                GParamSpec *pspec,
-                KgxTab     *self)
-{
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
 
-  if (!gtk_search_bar_get_search_mode (GTK_SEARCH_BAR (priv->search_bar))) {
-    gtk_widget_grab_focus (GTK_WIDGET (self));
-  }
-}
-
-
-static void
-search_changed (GtkSearchBar *bar,
-                KgxTab       *self)
-{
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
-  const char *search = NULL;
-  VteRegex *regex;
-  g_autoptr (GError) error = NULL;
-  gboolean narrowing_down;
-  guint32 flags = PCRE2_MULTILINE;
-
-  search = gtk_editable_get_text (GTK_EDITABLE (priv->search_entry));
-
-  if (search) {
-    g_autofree char *lowercase = g_utf8_strdown (search, -1);
-
-    if (!g_strcmp0 (lowercase, search))
-      flags |= PCRE2_CASELESS;
-  }
-
-  regex = vte_regex_new_for_search (g_regex_escape_string (search, -1),
-                                    -1, flags, &error);
-
-  if (error) {
-    g_warning ("Search error: %s", error->message);
-    return;
-  }
-
-  /* Since VTE doesn't automatically highlight the search match and doesn't have
-   * an API to do that or select text manually, we have to be creative.
-   *
-   * The goals are to:
-   * 1. immediately highlight text for type-to-search
-   * 2. make sure we don't jump to another match when pressing backspace
-   *
-   * Achieving 1. is easy by going to the previous match before setting the
-   * regex and the next match after setting it. However, this fails with 2:
-   * consider a buffer like "foo bar baz". If "baz" is currently highlighted and
-   * we press backspace, our regex is "ba" so "ba" in "bar" starts to match as
-   * well. If we go to the previous match, change regex from "bar" to "ba" and
-   * go next, it will select the occurrence in "bar" while we want it to stay on
-   * "baz". Hence, if we're narrowing down the search, go previous/next after
-   * setting the regex and not before. */
-
-  narrowing_down = search && priv->last_search &&
-                   g_strrstr (priv->last_search, search);
-
-  g_set_str (&priv->last_search, search);
-
-  if (!narrowing_down)
-    vte_terminal_search_find_previous (VTE_TERMINAL (priv->terminal));
-
-  vte_terminal_search_set_regex (VTE_TERMINAL (priv->terminal),
-                                 regex, 0);
-
-  if (narrowing_down)
-    vte_terminal_search_find_previous (VTE_TERMINAL (priv->terminal));
-
-  vte_terminal_search_find_next (VTE_TERMINAL (priv->terminal));
-}
-
-
-static void
-search_next (GtkSearchBar *bar,
-             KgxTab       *self)
-{
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
-
-  vte_terminal_search_find_next (VTE_TERMINAL (priv->terminal));
-}
-
-
-static void
-search_prev (GtkSearchBar *bar,
-             KgxTab       *self)
-{
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
-
-  vte_terminal_search_find_previous (VTE_TERMINAL (priv->terminal));
-}
 
 
 static inline void
@@ -340,9 +295,6 @@ kgx_tab_get_property (GObject    *object,
     case PROP_NEEDS_ATTENTION:
       g_value_set_boolean (value, priv->needs_attention);
       break;
-    case PROP_SEARCH_MODE_ENABLED:
-      g_value_set_boolean (value, priv->search_mode_enabled);
-      break;
     case PROP_RINGING:
       g_value_set_boolean (value, priv->ringing);
       break;
@@ -415,7 +367,10 @@ kgx_tab_set_property (GObject      *object,
       kgx_application_add_page (priv->application, self);
       break;
     case PROP_SETTINGS:
-      g_set_object (&priv->settings, g_value_get_object (value));
+      if (g_set_object (&priv->settings, g_value_get_object (value))) {
+        g_signal_group_set_target (priv->settings_signals, priv->settings);
+        kgx_tab_update_content_opacity (self);
+      }
       break;
     case PROP_TERMINAL:
       g_set_object (&priv->terminal, g_value_get_object (value));
@@ -449,9 +404,6 @@ kgx_tab_set_property (GObject      *object,
       break;
     case PROP_NEEDS_ATTENTION:
       kgx_set_boolean_prop (object, pspec, &priv->needs_attention, value);
-      break;
-    case PROP_SEARCH_MODE_ENABLED:
-      kgx_set_boolean_prop (object, pspec, &priv->search_mode_enabled, value);
       break;
     case PROP_DROPPING:
       kgx_set_boolean_prop (object, pspec, &priv->dropping, value);
@@ -599,7 +551,13 @@ spad_thrown (KgxSpadSource *source,
                                   "action-target", bundle,
                                   NULL);
 
-  adw_toast_overlay_add_toast (priv->toasts, toast);
+  {
+    GtkWidget *overlay = gtk_widget_get_ancestor (GTK_WIDGET (self),
+                                                  ADW_TYPE_TOAST_OVERLAY);
+    if (overlay) {
+      adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (overlay), toast);
+    }
+  }
 
   return TRUE;
 }
@@ -624,7 +582,6 @@ kgx_tab_class_init (KgxTabClass *klass)
   object_class->dispose = kgx_tab_dispose;
   object_class->get_property = kgx_tab_get_property;
   object_class->set_property = kgx_tab_set_property;
-
   widget_class->grab_focus = kgx_tab_grab_focus;
 
   tab_class->start = kgx_tab_real_start;
@@ -713,11 +670,6 @@ kgx_tab_class_init (KgxTabClass *klass)
 
   pspecs[PROP_NEEDS_ATTENTION] =
     g_param_spec_boolean ("needs-attention", NULL, NULL,
-                          FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
-  pspecs[PROP_SEARCH_MODE_ENABLED] =
-    g_param_spec_boolean ("search-mode-enabled", NULL, NULL,
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
@@ -815,17 +767,10 @@ kgx_tab_class_init (KgxTabClass *klass)
   gtk_widget_class_bind_template_child_private (widget_class, KgxTab, stack);
   gtk_widget_class_bind_template_child_private (widget_class, KgxTab, exit_revealer);
   gtk_widget_class_bind_template_child_private (widget_class, KgxTab, exit_message);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxTab, search_entry);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxTab, search_bar);
   gtk_widget_class_bind_template_child_private (widget_class, KgxTab, train_signals);
   gtk_widget_class_bind_template_child_private (widget_class, KgxTab, terminal_signals);
   gtk_widget_class_bind_template_child_private (widget_class, KgxTab, drop_target);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxTab, toasts);
 
-  gtk_widget_class_bind_template_callback (widget_class, search_enabled);
-  gtk_widget_class_bind_template_callback (widget_class, search_changed);
-  gtk_widget_class_bind_template_callback (widget_class, search_next);
-  gtk_widget_class_bind_template_callback (widget_class, search_prev);
   gtk_widget_class_bind_template_callback (widget_class, drop);
   gtk_widget_class_bind_template_callback (widget_class, spad_thrown);
 
@@ -986,6 +931,15 @@ kgx_tab_init (KgxTab *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
+  gtk_widget_add_css_class (GTK_WIDGET (self), "starting");
+
+  priv->settings_signals = g_signal_group_new (KGX_TYPE_SETTINGS);
+  g_signal_group_connect_object (priv->settings_signals,
+                                 "notify::transparency-level",
+                                 G_CALLBACK (content_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+
   g_signal_group_connect_object (priv->train_signals,
                                  "pid-died", G_CALLBACK (pid_died),
                                  self, G_CONNECT_DEFAULT);
@@ -1006,10 +960,8 @@ kgx_tab_init (KgxTab *self)
                           "spad-thrown", G_CALLBACK (spad_thrown),
                           self),
 
-  gtk_search_bar_connect_entry (GTK_SEARCH_BAR (priv->search_bar),
-                                GTK_EDITABLE (priv->search_entry));
-
   kgx_drop_target_mount_on (priv->drop_target, GTK_WIDGET (self));
+  kgx_tab_update_content_opacity (self);
 }
 
 
@@ -1025,6 +977,7 @@ kgx_tab_start (KgxTab              *self,
 
   KGX_TAB_GET_CLASS (self)->start (self, callback, callback_data);
 }
+
 
 
 void
@@ -1046,6 +999,21 @@ kgx_tab_start_finish (KgxTab        *self,
 
   gtk_stack_set_visible_child (GTK_STACK (priv->stack), priv->content);
   gtk_widget_grab_focus (GTK_WIDGET (self));
+
+  /* If this tab isn't active yet (deferred from add_tab), select it now
+   * that the terminal content is ready — avoids a blank flash. */
+  {
+    GtkWidget *pages = gtk_widget_get_ancestor (GTK_WIDGET (self), KGX_TYPE_PAGES);
+    if (pages) {
+      kgx_pages_focus_page (KGX_PAGES (pages), self);
+    }
+  }
+
+  priv->started = TRUE;
+
+  gtk_widget_remove_css_class (GTK_WIDGET (self), "starting");
+
+  kgx_tab_update_content_opacity (self);
 
   if (g_set_object (&priv->train, train)) {
     g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_TRAIN]);

@@ -23,7 +23,7 @@
 
 G_BEGIN_DECLS
 
-#define KGX_DISPLAY_NAME _("Console")
+#define KGX_DISPLAY_NAME _("Chigüiro")
 
 #define KGX_TYPE_APPLICATION (kgx_application_get_type())
 

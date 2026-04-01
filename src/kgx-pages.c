@@ -49,15 +49,7 @@ struct _KgxPagesPrivate {
   KgxTab               *active_page;
   gboolean              is_active;
   KgxStatus             page_status;
-  gboolean              search_mode_enabled;
   gboolean              ringing;
-
-  GtkWidget            *status_message;
-  GtkWidget            *status_revealer;
-
-  int                   last_cols;
-  int                   last_rows;
-  guint                 timeout;
 
   GSignalGroup         *active_page_signals;
   GBindingGroup        *active_page_binds;
@@ -91,7 +83,6 @@ enum {
   PROP_ACTIVE_PAGE,
   PROP_IS_ACTIVE,
   PROP_STATUS,
-  PROP_SEARCH_MODE_ENABLED,
   PROP_RINGING,
   LAST_PROP
 };
@@ -107,15 +98,29 @@ enum {
 static guint signals[N_SIGNALS];
 
 
+
 static void
 kgx_pages_dispose (GObject *object)
 {
   KgxPages *self = KGX_PAGES (object);
   KgxPagesPrivate *priv = kgx_pages_get_instance_private (self);
 
-  g_clear_object (&priv->settings);
+  /* Disconnect signal/binding groups before their targets are destroyed */
+  if (priv->active_page_signals) {
+    g_signal_group_set_target (priv->active_page_signals, NULL);
+  }
+  if (priv->active_page_binds) {
+    g_binding_group_set_source (priv->active_page_binds, NULL);
+  }
+  if (priv->settings_signals) {
+    g_signal_group_set_target (priv->settings_signals, NULL);
+  }
+  if (priv->style_manager_signals) {
+    g_signal_group_set_target (priv->style_manager_signals, NULL);
+  }
 
-  g_clear_handle_id (&priv->timeout, g_source_remove);
+
+  g_clear_object (&priv->settings);
 
   g_clear_pointer (&priv->title, g_free);
   g_clear_object (&priv->path);
@@ -157,9 +162,6 @@ kgx_pages_get_property (GObject    *object,
       break;
     case PROP_STATUS:
       g_value_set_flags (value, priv->page_status);
-      break;
-    case PROP_SEARCH_MODE_ENABLED:
-      g_value_set_boolean (value, priv->search_mode_enabled);
       break;
     case PROP_RINGING:
       g_value_set_boolean (value, priv->ringing);
@@ -240,9 +242,6 @@ kgx_pages_set_property (GObject      *object,
     case PROP_STATUS:
       priv->page_status = g_value_get_flags (value);
       break;
-    case PROP_SEARCH_MODE_ENABLED:
-      kgx_set_boolean_prop (object, pspec, &priv->search_mode_enabled, value);
-      break;
     case PROP_RINGING:
       kgx_set_boolean_prop (object, pspec, &priv->ringing, value);
       break;
@@ -250,65 +249,6 @@ kgx_pages_set_property (GObject      *object,
   }
 }
 
-
-static void
-size_timeout (gpointer data)
-{
-  KgxPages *self = data;
-  KgxPagesPrivate *priv = kgx_pages_get_instance_private (self);
-
-  priv->timeout = 0;
-
-  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->status_revealer), FALSE);
-}
-
-
-static void
-size_changed (KgxTab   *tab,
-              guint     rows,
-              guint     cols,
-              KgxPages *self)
-{
-  KgxPagesPrivate *priv = kgx_pages_get_instance_private (self);
-  g_autofree char *label = NULL;
-  g_autofree char *a11y_label = NULL;
-  g_autofree char *a11y_announce = NULL;
-
-  if (gtk_widget_in_destruction (GTK_WIDGET (self)))
-    return;
-
-  if (cols == priv->last_cols && rows == priv->last_rows) {
-    return;
-  }
-
-  priv->last_cols = cols;
-  priv->last_rows = rows;
-
-  if (gtk_window_is_maximized (GTK_WINDOW (gtk_widget_get_root (GTK_WIDGET (self))))) {
-    // Don't show when maximised as it isn't very interesting
-    return;
-  }
-
-  g_clear_handle_id (&priv->timeout, g_source_remove);
-  priv->timeout = g_timeout_add_once (1200, size_timeout, self);
-  g_source_set_name_by_id (priv->timeout, "[kgx] resize label timeout");
-
-  label = g_strdup_printf ("%i × %i", cols, rows);
-  /* Translators: columns by rows, describing terminal size */
-  a11y_label = g_strdup_printf (_("%i by %i"), cols, rows);
-  a11y_announce = g_strdup_printf (_("%i columns %i rows"), cols, rows);
-
-  gtk_label_set_label (GTK_LABEL (priv->status_message), label);
-  gtk_accessible_update_property (GTK_ACCESSIBLE (priv->status_message),
-                                  GTK_ACCESSIBLE_PROPERTY_LABEL, a11y_label,
-                                  -1);
-
-  gtk_revealer_set_reveal_child (GTK_REVEALER (priv->status_revealer), TRUE);
-
-  gtk_accessible_announce (GTK_ACCESSIBLE (priv->status_message),
-                           a11y_announce,
-                           GTK_ACCESSIBLE_ANNOUNCEMENT_PRIORITY_MEDIUM);
-}
 
 
 static void
@@ -611,11 +551,6 @@ kgx_pages_class_init (KgxPagesClass *klass)
                         KGX_NONE,
                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_SEARCH_MODE_ENABLED] =
-    g_param_spec_boolean ("search-mode-enabled", NULL, NULL,
-                          FALSE,
-                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
   pspecs[PROP_RINGING] =
     g_param_spec_boolean ("ringing", NULL, NULL,
                           FALSE,
@@ -664,8 +599,6 @@ kgx_pages_class_init (KgxPagesClass *klass)
                                                KGX_APPLICATION_PATH "kgx-pages.ui");
 
   gtk_widget_class_bind_template_child_private (widget_class, KgxPages, view);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxPages, status_message);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxPages, status_revealer);
   gtk_widget_class_bind_template_child_private (widget_class, KgxPages, active_page_signals);
   gtk_widget_class_bind_template_child_private (widget_class, KgxPages, active_page_binds);
   gtk_widget_class_bind_template_child_private (widget_class, KgxPages, settings_signals);
@@ -717,13 +650,6 @@ kgx_pages_init (KgxPages *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  g_signal_group_connect (priv->active_page_signals,
-                          "size-changed", G_CALLBACK (size_changed),
-                          self);
-
-  g_signal_group_connect_swapped (priv->settings_signals, "notify::theme",
-                                  G_CALLBACK (adw_tab_view_invalidate_thumbnails),
-                                  priv->view);
 
   g_signal_group_connect (priv->style_manager_signals,
                           "notify::dark",
@@ -733,10 +659,6 @@ kgx_pages_init (KgxPages *self)
                           "notify::high-contrast",
                           G_CALLBACK (style_changed),
                           priv->view);
-
-  g_binding_group_bind (priv->active_page_binds, "search-mode-enabled",
-                        self, "search-mode-enabled",
-                        G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
 
   adw_tab_view_remove_shortcuts (ADW_TAB_VIEW (priv->view),
                                  ADW_TAB_VIEW_SHORTCUT_CONTROL_HOME |
@@ -770,6 +692,7 @@ kgx_pages_add_page (KgxPages *self,
                        class_priv->page_expression_scope,
                        class_priv->page_expression_data);
 }
+
 
 
 /**

@@ -20,9 +20,11 @@
 
 #include <glib/gi18n.h>
 
+#define PCRE2_CODE_UNIT_WIDTH 0
+#include <pcre2.h>
+
 #include <adwaita.h>
 
-#include "kgx-about.h"
 #include "kgx-application.h"
 #include "kgx-close-dialog.h"
 #include "kgx-empty.h"
@@ -30,11 +32,10 @@
 #include "kgx-fullscreen-box.h"
 #include "kgx-pages.h"
 #include "kgx-settings.h"
+#include "kgx-settings-page.h"
 #include "kgx-shared-closures.h"
 #include "kgx-terminal.h"
-#include "kgx-theme-switcher.h"
 #include "kgx-utils.h"
-#include "preferences/kgx-preferences-window.h"
 
 #include "kgx-window.h"
 
@@ -50,17 +51,25 @@ struct _KgxWindowPrivate {
 
   gboolean              close_anyway;
 
+  gboolean              settings_visible;
+
   /* Template widgets */
-  GtkWidget            *theme_switcher;
+  GtkWidget            *header_bar;
   GtkWidget            *tab_bar;
-  GtkWidget            *tab_overview;
   GtkWidget            *pages;
+  GtkWidget            *search_bar;
+  GtkWidget            *search_entry;
+  GtkWidget            *content_stack;
+  GtkWidget            *settings_page;
 
   GBindingGroup        *surface_binds;
 };
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (KgxWindow, kgx_window, ADW_TYPE_APPLICATION_WINDOW)
+
+/* Shared CSS provider for chrome styling — lives for the process lifetime */
+static GtkCssProvider *chrome_css = NULL;
 
 
 enum {
@@ -69,9 +78,15 @@ enum {
   PROP_SEARCH_MODE_ENABLED,
   PROP_FLOATING,
   PROP_TRANSLUCENT,
+  PROP_SETTINGS_VISIBLE,
   LAST_PROP
 };
 static GParamSpec *pspecs[LAST_PROP] = { NULL, };
+
+
+static void kgx_window_update_opaque_region (KgxWindow *self);
+static void kgx_window_update_chrome_opacity (KgxWindow *self);
+static void chrome_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
 
 
 static void
@@ -79,6 +94,15 @@ kgx_window_dispose (GObject *object)
 {
   KgxWindow *self = KGX_WINDOW (object);
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+
+  if (priv->settings_binds) {
+    g_binding_group_set_source (priv->settings_binds, NULL);
+  }
+  if (priv->surface_binds) {
+    g_binding_group_set_source (priv->surface_binds, NULL);
+  }
+
+  /* chrome_css is a process-lifetime singleton — don't clear it */
 
   g_clear_object (&priv->settings);
 
@@ -97,7 +121,25 @@ kgx_window_set_property (GObject      *object,
 
   switch (property_id) {
     case PROP_SETTINGS:
-      g_set_object (&priv->settings, g_value_get_object (value));
+      if (g_set_object (&priv->settings, g_value_get_object (value)) &&
+          priv->settings) {
+        g_signal_connect_object (priv->settings,
+                                 "notify::chrome-opacity",
+                                 G_CALLBACK (chrome_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+        g_signal_connect_object (priv->settings,
+                                 "notify::chrome-color",
+                                 G_CALLBACK (chrome_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+        g_signal_connect_object (priv->settings,
+                                 "notify::accent-color",
+                                 G_CALLBACK (chrome_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+        kgx_window_update_chrome_opacity (self);
+      }
       break;
     case PROP_SEARCH_MODE_ENABLED:
       kgx_set_boolean_prop (object, pspec, &priv->search_enabled, value);
@@ -106,11 +148,23 @@ kgx_window_set_property (GObject      *object,
       kgx_set_boolean_prop (object, pspec, &priv->floating, value);
       break;
     case PROP_TRANSLUCENT:
-      if (kgx_set_boolean_prop (object, pspec, &priv->translucent, value)) {
-        if (priv->translucent) {
-          gtk_widget_add_css_class (GTK_WIDGET (self), "translucent");
-        } else {
-          gtk_widget_remove_css_class (GTK_WIDGET (self), "translucent");
+      /* Always translucent */
+      priv->translucent = TRUE;
+      gtk_widget_add_css_class (GTK_WIDGET (self), "translucent");
+      kgx_window_update_opaque_region (self);
+      gtk_widget_queue_allocate (GTK_WIDGET (self));
+      gtk_widget_queue_draw (GTK_WIDGET (self));
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_SETTINGS_VISIBLE:
+      if (kgx_set_boolean_prop (object, pspec, &priv->settings_visible, value)) {
+        if (priv->content_stack) {
+          gtk_stack_set_visible_child_name (
+            GTK_STACK (priv->content_stack),
+            priv->settings_visible ? "settings" : "terminal");
+        }
+        if (!priv->settings_visible && priv->pages) {
+          gtk_widget_grab_focus (priv->pages);
         }
       }
       break;
@@ -143,6 +197,9 @@ kgx_window_get_property (GObject    *object,
     case PROP_TRANSLUCENT:
       g_value_set_boolean (value, priv->translucent);
       break;
+    case PROP_SETTINGS_VISIBLE:
+      g_value_set_boolean (value, priv->settings_visible);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -151,14 +208,42 @@ kgx_window_get_property (GObject    *object,
 
 
 static void
+kgx_window_update_opaque_region (KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  GdkSurface *surface;
+
+  if (!gtk_widget_get_realized (GTK_WIDGET (self))) {
+    return;
+  }
+
+  surface = gtk_native_get_surface (GTK_NATIVE (self));
+  if (!surface) {
+    return;
+  }
+
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  {
+    /* Always set empty opaque region — entire window is transparent */
+    cairo_region_t *region = cairo_region_create ();
+    gdk_surface_set_opaque_region (surface, region);
+    cairo_region_destroy (region);
+  }
+  G_GNUC_END_IGNORE_DEPRECATIONS
+}
+
+
+static void
 kgx_window_realize (GtkWidget *widget)
 {
-  KgxWindowPrivate *priv = kgx_window_get_instance_private (KGX_WINDOW (widget));
+  KgxWindow *self = KGX_WINDOW (widget);
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
   GTK_WIDGET_CLASS (kgx_window_parent_class)->realize (widget);
 
   g_binding_group_set_source (priv->surface_binds,
                               gtk_native_get_surface (GTK_NATIVE (widget)));
+  kgx_window_update_opaque_region (self);
 }
 
 
@@ -170,6 +255,16 @@ kgx_window_unrealize (GtkWidget *widget)
   g_binding_group_set_source (priv->surface_binds, NULL);
 
   GTK_WIDGET_CLASS (kgx_window_parent_class)->unrealize (widget);
+}
+
+
+static void
+kgx_window_css_changed (GtkWidget         *widget,
+                        GtkCssStyleChange *change)
+{
+  GTK_WIDGET_CLASS (kgx_window_parent_class)->css_changed (widget, change);
+
+  kgx_window_update_opaque_region (KGX_WINDOW (widget));
 }
 
 
@@ -242,14 +337,109 @@ fullscreened_changed (KgxWindow *self)
 }
 
 
-static char *
-content_or_empty (G_GNUC_UNUSED GObject *object, int n_pages)
+
+static void
+kgx_window_update_chrome_opacity (KgxWindow *self)
 {
-  if (G_LIKELY (n_pages > 0)) {
-    return g_strdup ("content");
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  double chrome_opacity = 1.0;
+  g_autofree char *chrome_color = NULL;
+  g_autofree char *accent_color = NULL;
+  g_autofree char *css = NULL;
+  GdkRGBA rgba;
+
+  if (!priv->settings || !chrome_css) {
+    return;
   }
 
-  return g_strdup ("empty");
+  g_object_get (priv->settings,
+                "chrome-opacity", &chrome_opacity,
+                "chrome-color", &chrome_color,
+                "accent-color", &accent_color,
+                NULL);
+
+  /* Parse the hex color, default to black if invalid */
+  if (!chrome_color || !gdk_rgba_parse (&rgba, chrome_color)) {
+    rgba = (GdkRGBA) { 0.0, 0.0, 0.0, 1.0 };
+  }
+
+  /* Use CSS background-color with alpha instead of widget opacity —
+   * this keeps labels, buttons, and icons at full opacity. */
+  {
+    int r = (int)(rgba.red * 255);
+    int g = (int)(rgba.green * 255);
+    int b = (int)(rgba.blue * 255);
+    double a = chrome_opacity;
+
+    css = g_strdup_printf (
+      /* All chrome elements get the same color+opacity */
+      ".terminal-window headerbar,"
+      ".terminal-window tabbar,"
+      ".terminal-window tabbar tab,"
+      ".terminal-window tabbar tab:checked,"
+      ".terminal-window tabbar tab:hover,"
+      ".terminal-window tabbar tab label,"
+      ".terminal-window tabbar tabbox,"
+      ".terminal-window tabbar > revealer,"
+      ".terminal-window tabbar > revealer > widget,"
+      ".terminal-window tabbar > revealer > widget > box,"
+      ".terminal-window tabbar > revealer > widget > box > scrolledwindow,"
+      ".terminal-window tabbar > revealer > widget > box > scrolledwindow > tabbox,"
+      ".terminal-window searchbar,"
+      ".terminal-window searchbar > revealer,"
+      ".terminal-window searchbar > revealer > box,"
+      ".terminal-window settings-page,"
+      ".terminal-window settings-page list,"
+      ".terminal-window settings-page row,"
+      ".terminal-window settings-page scale trough,"
+      ".terminal-window settings-page spinbutton,"
+      ".terminal-window scrollbar,"
+      ".terminal-window scrollbar trough {"
+      "  background-color: rgba(%d, %d, %d, %f);"
+      "  background-image: none;"
+      "  border-color: transparent;"
+      "  box-shadow: none;"
+      "}"
+      /* Scrollbar slider — lighter for contrast */
+      ".terminal-window scrollbar slider {"
+      "  background-color: rgba(%d, %d, %d, %f);"
+      "  border: none;"
+      "  min-width: 6px;"
+      "}",
+      r, g, b, a,
+      CLAMP (r + 100, 0, 255), CLAMP (g + 100, 0, 255), CLAMP (b + 100, 0, 255), 0.5);
+  }
+
+  /* Apply accent color override */
+  if (accent_color && accent_color[0] != '\0') {
+    GdkRGBA accent_rgba;
+    if (gdk_rgba_parse (&accent_rgba, accent_color)) {
+      g_autofree char *accent_css = g_strdup_printf (
+        "@define-color accent_bg_color %s;"
+        "@define-color accent_color %s;"
+        "@define-color accent_fg_color white;"
+        ".terminal-window, .terminal-window * {"
+        "  --accent-bg-color: %s;"
+        "  --accent-color: %s;"
+        "  --accent-fg-color: white;"
+        "}", accent_color, accent_color, accent_color, accent_color);
+      g_autofree char *combined = g_strconcat (css, accent_css, NULL);
+      gtk_css_provider_load_from_string (chrome_css, combined);
+    } else {
+      gtk_css_provider_load_from_string (chrome_css, css);
+    }
+  } else {
+    gtk_css_provider_load_from_string (chrome_css, css);
+  }
+}
+
+
+static void
+chrome_opacity_changed (G_GNUC_UNUSED GObject    *object,
+                        G_GNUC_UNUSED GParamSpec *pspec,
+                        KgxWindow                *self)
+{
+  kgx_window_update_chrome_opacity (self);
 }
 
 
@@ -304,12 +494,6 @@ create_tearoff_host (KgxPages *pages, KgxWindow *self)
 static void
 maybe_close_window (KgxWindow *self)
 {
-  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
-
-  if (adw_tab_overview_get_open (ADW_TAB_OVERVIEW (priv->tab_overview))) {
-    return;
-  }
-
   gtk_window_close (GTK_WINDOW (self));
 }
 
@@ -357,6 +541,7 @@ ringing_changed (GObject *object, GParamSpec *pspec, gpointer data)
 }
 
 
+
 static void
 extra_drag_drop (AdwTabBar        *bar,
                  AdwTabPage       *page,
@@ -369,37 +554,107 @@ extra_drag_drop (AdwTabBar        *bar,
 }
 
 
-static AdwTabPage *
-create_tab_cb (KgxWindow *self)
+
+static VteTerminal *
+get_active_terminal (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  AdwTabPage *page;
+  KgxTab *tab;
+  KgxTerminal *terminal = NULL;
 
-  gtk_widget_activate_action (GTK_WIDGET (self), "win.new-tab", NULL);
+  page = kgx_pages_get_selected_page (KGX_PAGES (priv->pages));
+  if (!page) {
+    return NULL;
+  }
 
-  return kgx_pages_get_selected_page (KGX_PAGES (priv->pages));
+  tab = KGX_TAB (adw_tab_page_get_child (page));
+  g_object_get (tab, "terminal", &terminal, NULL);
+
+  if (!terminal) {
+    return NULL;
+  }
+
+  /* g_object_get returns a ref, drop it — terminal is owned by the tab */
+  g_object_unref (terminal);
+
+  return VTE_TERMINAL (terminal);
 }
 
 
 static void
-breakpoint_applied (KgxWindow *self)
+search_enabled (GObject    *object,
+                GParamSpec *pspec,
+                KgxWindow  *self)
 {
-  gtk_widget_action_set_enabled (GTK_WIDGET (self),
-                                 "win.show-tabs-desktop",
-                                 FALSE);
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+
+  if (!gtk_search_bar_get_search_mode (GTK_SEARCH_BAR (priv->search_bar))) {
+    gtk_widget_grab_focus (GTK_WIDGET (priv->pages));
+  }
 }
 
 
 static void
-breakpoint_unapplied (KgxWindow *self)
+search_changed (GtkSearchEntry *entry,
+                KgxWindow      *self)
 {
-  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  VteTerminal *terminal;
+  const char *search = NULL;
+  VteRegex *regex;
+  g_autoptr (GError) error = NULL;
+  guint32 flags = PCRE2_MULTILINE;
 
-  gtk_widget_action_set_enabled (GTK_WIDGET (self),
-                                 "win.show-tabs-desktop",
-                                 TRUE);
+  terminal = get_active_terminal (self);
+  if (!terminal) {
+    return;
+  }
 
-  if (kgx_pages_count (KGX_PAGES (priv->pages)) > 0) {
-    adw_tab_overview_set_open (ADW_TAB_OVERVIEW (priv->tab_overview), FALSE);
+  search = gtk_editable_get_text (GTK_EDITABLE (entry));
+
+  if (search) {
+    g_autofree char *lowercase = g_utf8_strdown (search, -1);
+
+    if (!g_strcmp0 (lowercase, search))
+      flags |= PCRE2_CASELESS;
+  }
+
+  regex = vte_regex_new_for_search (g_regex_escape_string (search, -1),
+                                    -1, flags, &error);
+
+  if (error) {
+    g_warning ("Search error: %s", error->message);
+    return;
+  }
+
+  vte_terminal_search_find_previous (terminal);
+
+  vte_terminal_search_set_regex (terminal, regex, 0);
+
+  vte_terminal_search_find_next (terminal);
+}
+
+
+static void
+search_next (GtkWidget *widget,
+             KgxWindow *self)
+{
+  VteTerminal *terminal = get_active_terminal (self);
+
+  if (terminal) {
+    vte_terminal_search_find_next (terminal);
+  }
+}
+
+
+static void
+search_prev (GtkWidget *widget,
+             KgxWindow *self)
+{
+  VteTerminal *terminal = get_active_terminal (self);
+
+  if (terminal) {
+    vte_terminal_search_find_previous (terminal);
   }
 }
 
@@ -468,40 +723,8 @@ new_tab_activated (GtkWidget  *widget,
 }
 
 
-static void
-about_activated  (GtkWidget                *widget,
-                  G_GNUC_UNUSED const char *action_name,
-                  G_GNUC_UNUSED GVariant   *parameter)
-{
-  kgx_about_present_dialogue (widget);
-}
 
 
-static void
-tab_switcher_activated (GtkWidget  *widget,
-                        const char *action_name,
-                        GVariant   *parameter)
-{
-  KgxWindow *self = KGX_WINDOW (widget);
-  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
-
-  adw_tab_overview_set_open (ADW_TAB_OVERVIEW (priv->tab_overview), TRUE);
-}
-
-
-static void
-show_preferences_window_activated (GtkWidget  *widget,
-                                   const char *action_name,
-                                   GVariant   *parameter)
-{
-  KgxWindowPrivate *priv =
-    kgx_window_get_instance_private (KGX_WINDOW (widget));
-
-  adw_dialog_present (g_object_new (KGX_TYPE_PREFERENCES_WINDOW,
-                                    "settings", priv->settings,
-                                    NULL),
-                      widget);
-}
 
 
 static void
@@ -515,9 +738,9 @@ kgx_window_class_init (KgxWindowClass *klass)
   object_class->set_property = kgx_window_set_property;
   object_class->get_property = kgx_window_get_property;
 
+  widget_class->css_changed = kgx_window_css_changed;
   widget_class->realize = kgx_window_realize;
   widget_class->unrealize = kgx_window_unrealize;
-
   window_class->close_request = kgx_window_close_request;
 
   pspecs[PROP_SETTINGS] =
@@ -540,43 +763,52 @@ kgx_window_class_init (KgxWindowClass *klass)
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
+  pspecs[PROP_SETTINGS_VISIBLE] =
+    g_param_spec_boolean ("settings-visible", NULL, NULL,
+                          FALSE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
 
   gtk_widget_class_install_property_action (widget_class,
                                             "win.find",
                                             "search-mode-enabled");
+  gtk_widget_class_install_property_action (widget_class,
+                                            "win.toggle-settings",
+                                            "settings-visible");
 
   g_type_ensure (KGX_TYPE_EMPTY);
   g_type_ensure (KGX_TYPE_FULLSCREEN_BOX);
   g_type_ensure (KGX_TYPE_PAGES);
-  g_type_ensure (KGX_TYPE_THEME_SWITCHER);
-
+  g_type_ensure (KGX_TYPE_SETTINGS_PAGE);
   gtk_widget_class_set_template_from_resource (widget_class,
                                                KGX_APPLICATION_PATH "kgx-window.ui");
 
-  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, theme_switcher);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, header_bar);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, tab_bar);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, tab_overview);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, pages);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_bar);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_entry);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, content_stack);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, settings_page);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, settings_binds);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, surface_binds);
 
   gtk_widget_class_bind_template_callback (widget_class, fullscreened_changed);
-  gtk_widget_class_bind_template_callback (widget_class, content_or_empty);
   gtk_widget_class_bind_template_callback (widget_class, zoom);
   gtk_widget_class_bind_template_callback (widget_class, create_tearoff_host);
   gtk_widget_class_bind_template_callback (widget_class, maybe_close_window);
   gtk_widget_class_bind_template_callback (widget_class, status_changed);
   gtk_widget_class_bind_template_callback (widget_class, ringing_changed);
   gtk_widget_class_bind_template_callback (widget_class, extra_drag_drop);
-  gtk_widget_class_bind_template_callback (widget_class, create_tab_cb);
-  gtk_widget_class_bind_template_callback (widget_class, breakpoint_applied);
-  gtk_widget_class_bind_template_callback (widget_class, breakpoint_unapplied);
+  gtk_widget_class_bind_template_callback (widget_class, search_enabled);
+  gtk_widget_class_bind_template_callback (widget_class, search_changed);
+  gtk_widget_class_bind_template_callback (widget_class, search_next);
+  gtk_widget_class_bind_template_callback (widget_class, search_prev);
 
   gtk_widget_class_bind_template_callback (widget_class, kgx_gtk_settings_for_display);
   gtk_widget_class_bind_template_callback (widget_class, kgx_text_or_fallback);
   gtk_widget_class_bind_template_callback (widget_class, kgx_bool_and);
-  gtk_widget_class_bind_template_callback (widget_class, kgx_format_percentage);
   gtk_widget_class_bind_template_callback (widget_class, kgx_decoration_layout_is_inverted);
   gtk_widget_class_bind_template_callback (widget_class, kgx_file_as_subtitle);
 
@@ -595,23 +827,6 @@ kgx_window_class_init (KgxWindowClass *klass)
                                    "win.close-tab",
                                    NULL,
                                    close_tab_activated);
-  gtk_widget_class_install_action (widget_class,
-                                   "win.about",
-                                   NULL,
-                                   about_activated);
-  gtk_widget_class_install_action (widget_class,
-                                   "win.show-tabs",
-                                   NULL,
-                                   tab_switcher_activated);
-  gtk_widget_class_install_action (widget_class,
-                                   "win.show-tabs-desktop",
-                                   NULL,
-                                   tab_switcher_activated);
-  gtk_widget_class_install_action (widget_class,
-                                   "win.show-preferences-window",
-                                   NULL,
-                                   show_preferences_window_activated);
-
   gtk_widget_class_install_action (widget_class,
                                    "win.fullscreen",
                                    NULL,
@@ -653,9 +868,18 @@ kgx_window_init (KgxWindow *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  g_binding_group_bind (priv->settings_binds, "theme",
-                        priv->theme_switcher, "theme",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  /* Always translucent */
+  priv->translucent = TRUE;
+  gtk_widget_add_css_class (GTK_WIDGET (self), "translucent");
+
+  /* Shared CSS provider for chrome styling — create once */
+  if (!chrome_css) {
+    chrome_css = gtk_css_provider_new ();
+    gtk_style_context_add_provider_for_display (
+      gdk_display_get_default (),
+      GTK_STYLE_PROVIDER (chrome_css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+  }
 
   g_binding_group_bind_full (priv->surface_binds, "state",
                              self, "floating",
@@ -672,10 +896,9 @@ kgx_window_init (KgxWindow *self)
                                        GDK_ACTION_COPY,
                                        drop_types,
                                        G_N_ELEMENTS (drop_types));
-  adw_tab_overview_setup_extra_drop_target (ADW_TAB_OVERVIEW (priv->tab_overview),
-                                            GDK_ACTION_COPY,
-                                            drop_types,
-                                            G_N_ELEMENTS (drop_types));
+
+  gtk_search_bar_connect_entry (GTK_SEARCH_BAR (priv->search_bar),
+                                GTK_EDITABLE (priv->search_entry));
 
   fullscreened_changed (self);
 
@@ -728,5 +951,10 @@ kgx_window_add_tab (KgxWindow *self,
   priv = kgx_window_get_instance_private (self);
 
   kgx_pages_add_page (KGX_PAGES (priv->pages), tab);
-  kgx_pages_focus_page (KGX_PAGES (priv->pages), tab);
+
+  /* Only focus immediately if this is the first tab (nothing else to show).
+   * Otherwise, defer focus until the terminal spawns to avoid a blank flash. */
+  if (kgx_pages_count (KGX_PAGES (priv->pages)) <= 1) {
+    kgx_pages_focus_page (KGX_PAGES (priv->pages), tab);
+  }
 }

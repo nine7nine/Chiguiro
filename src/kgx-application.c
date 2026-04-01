@@ -123,45 +123,16 @@ kgx_application_activate (GApplication *app)
 }
 
 
-static gboolean
-theme_to_colour_scheme (GBinding     *binding,
-                        const GValue *from_value,
-                        GValue       *to_value,
-                        gpointer      user_data)
-{
-  switch (g_value_get_enum (from_value)) {
-    case KGX_THEME_AUTO:
-      g_value_set_enum (to_value, ADW_COLOR_SCHEME_PREFER_LIGHT);
-      break;
-    case KGX_THEME_DAY:
-      g_value_set_enum (to_value, ADW_COLOR_SCHEME_FORCE_LIGHT);
-      break;
-    case KGX_THEME_NIGHT:
-    case KGX_THEME_HACKER:
-    default:
-      g_value_set_enum (to_value, ADW_COLOR_SCHEME_FORCE_DARK);
-      break;
-  }
-
-  return TRUE;
-}
-
-
 static void
 kgx_application_startup (GApplication *app)
 {
-  KgxApplication *self = KGX_APPLICATION (app);
-  AdwStyleManager *style_manager;
-
   g_resources_register (kgx_get_resource ());
 
   G_APPLICATION_CLASS (kgx_application_parent_class)->startup (app);
 
-  style_manager = adw_style_manager_get_default ();
-  g_object_bind_property_full (self->settings, "theme",
-                               style_manager, "color-scheme",
-                               G_BINDING_SYNC_CREATE,
-                               theme_to_colour_scheme, NULL, NULL, NULL);
+  /* Follow system color scheme preference automatically */
+  adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
+                                      ADW_COLOR_SCHEME_PREFER_DARK);
 
   gtk_application_set_accels_for_action (GTK_APPLICATION (app),
                                          "win.new-window",
@@ -190,12 +161,6 @@ kgx_application_startup (GApplication *app)
   gtk_application_set_accels_for_action (GTK_APPLICATION (app),
                                          "app.zoom-normal",
                                          (const char *[]) { "<primary>0", NULL });
-  gtk_application_set_accels_for_action (GTK_APPLICATION (app),
-                                         "win.show-tabs",
-                                         (const char *[]) { "<shift><primary>o", NULL });
-  gtk_application_set_accels_for_action (GTK_APPLICATION (app),
-                                         "win.show-tabs-desktop",
-                                         (const char *[]) { "<shift><primary>o", NULL });
   gtk_application_set_accels_for_action (GTK_APPLICATION (app),
                                          "win.fullscreen",
                                          (const char *[]) { "<shift><primary>F11", NULL });
@@ -689,7 +654,6 @@ static void
 kgx_application_init (KgxApplication *self)
 {
   GAction *action;
-  g_autoptr (GPropertyAction) theme_action = NULL;
   g_autofree char *version = kgx_about_dup_version_string ();
   /* Translators: %s is the version string, KGX is a codename and should be left as-is */
   g_autofree char *summary = g_strdup_printf (_("KGX %s — Terminal Emulator"), version);
@@ -725,9 +689,6 @@ kgx_application_init (KgxApplication *self)
   g_object_bind_property (self->settings, "scale-can-increase",
                           action, "enabled",
                           G_BINDING_SYNC_CREATE);
-
-  theme_action = g_property_action_new ("theme", self->settings, "theme");
-  g_action_map_add_action (G_ACTION_MAP (self), G_ACTION (theme_action));
 
   self->watcher = g_object_new (KGX_TYPE_WATCHER, NULL);
   g_object_bind_property (self, "in-background",

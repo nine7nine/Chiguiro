@@ -7,7 +7,7 @@
 
 @keyframes bell {
   50% {
-    background-color: oklch(from var(--accent-orange) var(--headerbar-bell-oklch));
+    border-bottom: 2px solid var(--accent-orange);
   }
 }
 
@@ -17,9 +17,64 @@ kgx-tab .top-bar {
   color: var(--view-fg-color);
 }
 
-.terminal-window.translucent {
-  background: transparent;
+/* ── Transparency cascade ────────────────────────────────
+ * Every widget between the window surface and the VTE terminal
+ * must be transparent so the compositor can see through.
+ *
+ * Widget path:
+ *   window > toastoverlay > fullscreenbox > toolbarview
+ *     > pages > tabview > kgx-tab > overlay > stack
+ *       > scrolledwindow.terminal > vte-terminal
+ */
+
+window.terminal-window.translucent,
+window.terminal-window.translucent.background,
+window.terminal-window.translucent.background.csd {
+  --window-bg-color: transparent;
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid rgba(0, 0, 0, 0.8);
 }
+
+/* Every widget between window and VTE must be transparent.
+ * Use descendant selectors (not >) since internal widgets vary. */
+.terminal-window.translucent.background,
+.terminal-window.translucent > widget,
+.terminal-window.translucent > widget > widget,
+.terminal-window.translucent toastoverlay,
+.terminal-window.translucent fullscreenbox,
+.terminal-window.translucent fullscreenbox > toolbarview,
+.terminal-window.translucent fullscreenbox > toolbarview > revealer.background,
+.terminal-window.translucent pages,
+.terminal-window.translucent tabview,
+.terminal-window.translucent tabview > widget,
+.terminal-window.translucent tabview > widget > revealer,
+.terminal-window.translucent tabview > widget > revealer.raised,
+.terminal-window.translucent tabview > widget > revealer.bottom-bar,
+.terminal-window.translucent kgx-tab,
+.terminal-window.translucent kgx-tab > overlay,
+.terminal-window.translucent kgx-tab > overlay > stack,
+.terminal-window.translucent scrolledwindow.terminal,
+.terminal-window.translucent scrolledwindow.terminal > revealer.background,
+.terminal-window.translucent scrolledwindow.terminal > revealer.top-bar,
+.terminal-window.translucent scrolledwindow.terminal > revealer.bottom-bar {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+.terminal-window scrolledwindow.terminal > undershoot,
+.terminal-window scrolledwindow.terminal > overshoot {
+  background: none;
+  box-shadow: none;
+}
+
+.terminal-window kgx-tab.starting > overlay > stack {
+  background-color: var(--view-bg-color);
+  background-image: none;
+}
+
+/* ── Status indicators ─────────────────────────────────── */
 
 .terminal-window.root {
   --headerbar-bg-color: oklch(from var(--accent-red) var(--headerbar-bg-oklch));
@@ -51,15 +106,23 @@ kgx-tab .top-bar {
 }
 
 .terminal-window.bell .top-bar.raised {
-  animation: bell 0.5s ease-out;
+  animation: bell 0.3s ease-out;
 }
+
+/* ── Terminal padding ──────────────────────────────────── */
 
 .terminal-window vte-terminal {
   padding-left: 6px;
   padding-right: 6px;
 }
 
-/* Taken from nautilus */
+.terminal-window.translucent vte-terminal {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ── Floating bar (terminal dimensions) ────────────────── */
+
 .floating-bar {
   padding: 3px 8px;
   background-color: var(--view-bg-color);
@@ -73,16 +136,22 @@ kgx-tab .top-bar {
   opacity: 0.7;
 }
 
+/* ── Empty state ───────────────────────────────────────── */
+
 kgx-empty {
-  background: var(--view-bg-color);
+  background: transparent;
   color: color-mix(in srgb, var(--view-fg-color) var(--dim-opacity), transparent);
 }
+
+/* ── Exit info bar ─────────────────────────────────────── */
 
 .exit-info {
   padding: 6px;
   border-top: 2px solid var(--accent-bg-color);
   background: oklch(from var(--accent-bg-color) l calc(c * 2) h / 20%);
 }
+
+/* ── Close dialog ──────────────────────────────────────── */
 
 .process-list row .header {
   min-height: 0;
@@ -92,55 +161,14 @@ kgx-empty {
   font-family: monospace;
 }
 
-themeswitcher {
-  padding: 6px;
+/* ── Settings page ─────────────────────────────────────── */
+
+settings-page list,
+settings-page row {
+  background-color: transparent;
 }
 
-themeswitcher .check {
-  background: var(--accent-bg-color);
-  color: var(--accent-fg-color);
-  padding: 2px;
-  border-radius: 17px;
-  margin: 3px;
-}
-
-/* Adapted from https://gitlab.gnome.org/GNOME/gnome-text-editor/-/blob/bf8c0c249f06a0be69e65aed3b786ba02a9f999e/src/TextEditor.css#L51 */
-
-themeswitcher checkbutton {
-  outline-offset: 1px;
-  transition: none;
-}
-
-themeswitcher checkbutton radio {
-  -gtk-icon-source: none;
-  background: none;
-  padding: 12px;
-  min-height: 24px;
-  min-width: 24px;
-  border: none;
-  outline-color: currentColor;
-  transition: none;
-  box-shadow: inset 0 0 0 1px var(--border-color);
-
-  --light-bg: white;
-  --dark-bg: #1e1e1e;
-}
-
-themeswitcher checkbutton radio:checked {
-  box-shadow: inset 0 0 0 2px var(--accent-bg-color);
-}
-
-themeswitcher checkbutton.system radio {
-  background: linear-gradient(-45deg, var(--dark-bg) 49.99%, var(--light-bg) 50.01%);
-}
-
-themeswitcher checkbutton.light radio {
-  background-color: var(--light-bg);
-}
-
-themeswitcher checkbutton.dark radio {
-  background-color: var(--dark-bg);
-}
+/* ── Font picker ───────────────────────────────────────── */
 
 .font-picker {
   margin: 6px;
@@ -150,18 +178,20 @@ themeswitcher checkbutton.dark radio {
   margin: 6px;
 }
 
-/* Remove default adwaita style */
+/* ── Drag and drop ─────────────────────────────────────── */
+
 kgx-tab:drop(active):focus,
 kgx-tab:drop(active) {
   box-shadow: none;
 }
 
-/* Drag overlay */
 .drop-highlight {
   border-radius: 8px;
   background-color: color-mix(in srgb, var(--accent-bg-color) 35%, transparent);
   margin: 24px;
 }
+
+/* ── Error dialog ──────────────────────────────────────── */
 
 dialog.error-details textview {
   background: none;
