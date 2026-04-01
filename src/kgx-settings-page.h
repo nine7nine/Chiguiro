@@ -1,6 +1,6 @@
-/* kgx-preferences-window.h
+/* kgx-settings-page.h
  *
- * Copyright 2023 Maximiliano Sandoval
+ * Copyright 2024 Zander Brown
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,11 +20,12 @@
 
 #include <adwaita.h>
 
+#include "kgx-settings.h"
+
 G_BEGIN_DECLS
 
-#define KGX_TYPE_PREFERENCES_WINDOW (kgx_preferences_window_get_type ())
+#define KGX_TYPE_SETTINGS_PAGE (kgx_settings_page_get_type ())
 
-G_DECLARE_FINAL_TYPE (KgxPreferencesWindow, kgx_preferences_window, KGX, PREFERENCES_WINDOW, AdwPreferencesDialog)
-
+G_DECLARE_FINAL_TYPE (KgxSettingsPage, kgx_settings_page, KGX, SETTINGS_PAGE, AdwBin)
 
 G_END_DECLS
