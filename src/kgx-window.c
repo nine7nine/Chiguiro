@@ -57,7 +57,7 @@ struct _KgxWindowPrivate {
   GtkWidget            *header_bar;
   GtkWidget            *tab_bar;
   GtkWidget            *pages;
-  GtkWidget            *search_bar;
+  GtkWidget            *search_revealer;
   GtkWidget            *search_entry;
   GtkWidget            *content_stack;
   GtkWidget            *settings_page;
@@ -377,7 +377,6 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
        * doesn't compound across layers when chrome_opacity < 1.0. */
       ".terminal-window headerbar,"
       ".terminal-window tabbar,"
-      ".terminal-window searchbar,"
       ".terminal-window settings-page,"
       ".terminal-window scrollbar,"
       ".terminal-window scrollbar trough {"
@@ -405,14 +404,12 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       ".terminal-window tabbar > revealer > widget > box,"
       ".terminal-window tabbar > revealer > widget > box > scrolledwindow,"
       ".terminal-window tabbar > revealer > widget > box > scrolledwindow > tabbox,"
-      ".terminal-window searchbar > revealer,"
-      ".terminal-window searchbar > revealer > box,"
-      /* Search bar internals — entry, text area, and nav buttons */
-      ".terminal-window searchbar entry,"
-      ".terminal-window searchbar entry > text,"
-      ".terminal-window searchbar entry:focus,"
-      ".terminal-window searchbar entry:focus > text,"
-      ".terminal-window searchbar button,"
+      /* Search entry in headerbar — transparent so alpha doesn't compound */
+      ".terminal-window headerbar entry,"
+      ".terminal-window headerbar entry > text,"
+      ".terminal-window headerbar entry:focus,"
+      ".terminal-window headerbar entry:focus > text,"
+      ".terminal-window headerbar revealer button,"
       /* AdwToolbarView internal revealers wrapping the header area */
       ".terminal-window toolbarview > stack > revealer,"
       ".terminal-window toolbarview > stack > revealer > windowhandle,"
@@ -460,13 +457,22 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       ".terminal-window settings-page .about-accent {"
       "  color: %s;"
       "}"
-      /* Search entry border — accent color */
-      ".terminal-window searchbar entry {"
-      "  border-color: %s;"
+      /* Search entry — accent color at 50%% opacity, toned-down focus */
+      ".terminal-window headerbar entry {"
+      "  border-color: color-mix(in srgb, %s 50%%, transparent);"
+      "}"
+      ".terminal-window headerbar entry:focus-within {"
+      "  outline-color: color-mix(in srgb, %s 30%%, transparent);"
+      "  border-color: color-mix(in srgb, %s 60%%, transparent);"
       "}"
       /* Switch active state — accent color */
       ".terminal-window settings-page switch:checked {"
       "  background-color: %s;"
+      "  background-image: none;"
+      "}"
+      /* Tab close button hover — accent color at 85%% opacity */
+      ".terminal-window tabbar button.image-button:hover {"
+      "  background-color: color-mix(in srgb, %s 85%%, transparent);"
       "  background-image: none;"
       "}"
       /* Shortcut key badges — accent color border */
@@ -478,6 +484,9 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       "}",
       r, g, b, a,
       CLAMP (r + 100, 0, 255), CLAMP (g + 100, 0, 255), CLAMP (b + 100, 0, 255), 0.5,
+      accent_color && accent_color[0] ? accent_color : "#3584e4",
+      accent_color && accent_color[0] ? accent_color : "#3584e4",
+      accent_color && accent_color[0] ? accent_color : "#3584e4",
       accent_color && accent_color[0] ? accent_color : "#3584e4",
       accent_color && accent_color[0] ? accent_color : "#3584e4",
       accent_color && accent_color[0] ? accent_color : "#3584e4",
@@ -657,7 +666,9 @@ search_enabled (GObject    *object,
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
-  if (!gtk_search_bar_get_search_mode (GTK_SEARCH_BAR (priv->search_bar))) {
+  if (gtk_revealer_get_reveal_child (GTK_REVEALER (priv->search_revealer))) {
+    gtk_widget_grab_focus (priv->search_entry);
+  } else {
     gtk_widget_grab_focus (GTK_WIDGET (priv->pages));
   }
 }
@@ -862,7 +873,7 @@ kgx_window_class_init (KgxWindowClass *klass)
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, header_bar);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, tab_bar);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, pages);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_bar);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_revealer);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_entry);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, content_stack);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, settings_page);
@@ -972,8 +983,6 @@ kgx_window_init (KgxWindow *self)
                                        drop_types,
                                        G_N_ELEMENTS (drop_types));
 
-  gtk_search_bar_connect_entry (GTK_SEARCH_BAR (priv->search_bar),
-                                GTK_EDITABLE (priv->search_entry));
 
   fullscreened_changed (self);
 
