@@ -164,7 +164,10 @@ kgx_terminal_apply_palette (KgxTerminal *self)
                     NULL);
       if (chrome_color) {
         gdk_rgba_parse (&background, chrome_color);
-        background.alpha = (float) chrome_opacity;
+        /* Use alpha 1.0 here — the scrolled window's widget opacity
+         * (from transparency-level) already provides transparency.
+         * Using chrome_opacity would double-apply alpha. */
+        background.alpha = 1.0f;
       }
     }
   }
@@ -209,7 +212,23 @@ kgx_terminal_set_property (GObject      *object,
 
   switch (property_id) {
     case PROP_SETTINGS:
-      if (g_set_object (&self->settings, g_value_get_object (value))) {
+      if (g_set_object (&self->settings, g_value_get_object (value)) &&
+          self->settings) {
+        g_signal_connect_object (self->settings,
+                                 "notify::use-chrome-bg",
+                                 G_CALLBACK (kgx_terminal_apply_palette),
+                                 self,
+                                 G_CONNECT_SWAPPED);
+        g_signal_connect_object (self->settings,
+                                 "notify::chrome-color",
+                                 G_CALLBACK (kgx_terminal_apply_palette),
+                                 self,
+                                 G_CONNECT_SWAPPED);
+        g_signal_connect_object (self->settings,
+                                 "notify::chrome-opacity",
+                                 G_CALLBACK (kgx_terminal_apply_palette),
+                                 self,
+                                 G_CONNECT_SWAPPED);
         g_object_notify_by_pspec (object, pspec);
       }
       break;

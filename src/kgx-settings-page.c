@@ -37,6 +37,8 @@ struct _KgxSettingsPage {
   GBindingGroup        *settings_binds;
 
 
+  GtkWidget            *scrolled_window;
+
   GtkWidget            *audible_bell;
   GtkWidget            *visual_bell;
   GtkWidget            *use_system_font;
@@ -280,6 +282,20 @@ opacity_percent_to_value (GBinding     *binding,
 
 
 static void
+kgx_settings_page_map (GtkWidget *widget)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
+  GtkAdjustment *vadj;
+
+  GTK_WIDGET_CLASS (kgx_settings_page_parent_class)->map (widget);
+
+  /* Scroll to top when the settings page becomes visible */
+  vadj = gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (self->scrolled_window));
+  gtk_adjustment_set_value (vadj, 0.0);
+}
+
+
+static void
 kgx_settings_page_class_init (KgxSettingsPageClass *klass)
 {
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
@@ -287,6 +303,7 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
 
   object_class->dispose = kgx_settings_page_dispose;
   object_class->set_property = kgx_settings_page_set_property;
+  widget_class->map = kgx_settings_page_map;
   object_class->get_property = kgx_settings_page_get_property;
 
   pspecs[PROP_SETTINGS] =
@@ -312,6 +329,7 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrolled_window);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
 
   gtk_widget_class_bind_template_callback (widget_class, font_as_attributes);

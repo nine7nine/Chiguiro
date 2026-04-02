@@ -372,27 +372,13 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
     double a = chrome_opacity;
 
     css = g_strdup_printf (
-      /* All chrome elements get the same color+opacity */
+      /* Only the headerbar, settings-page, and scrollbar get the chrome
+       * color — everything nested inside must be transparent so alpha
+       * doesn't compound across layers when chrome_opacity < 1.0. */
       ".terminal-window headerbar,"
       ".terminal-window tabbar,"
-      ".terminal-window tabbar tab,"
-      ".terminal-window tabbar tab:checked,"
-      ".terminal-window tabbar tab:hover,"
-      ".terminal-window tabbar tab label,"
-      ".terminal-window tabbar tabbox,"
-      ".terminal-window tabbar > revealer,"
-      ".terminal-window tabbar > revealer > widget,"
-      ".terminal-window tabbar > revealer > widget > box,"
-      ".terminal-window tabbar > revealer > widget > box > scrolledwindow,"
-      ".terminal-window tabbar > revealer > widget > box > scrolledwindow > tabbox,"
       ".terminal-window searchbar,"
-      ".terminal-window searchbar > revealer,"
-      ".terminal-window searchbar > revealer > box,"
       ".terminal-window settings-page,"
-      ".terminal-window settings-page list,"
-      ".terminal-window settings-page row,"
-      ".terminal-window settings-page scale trough,"
-      ".terminal-window settings-page spinbutton,"
       ".terminal-window scrollbar,"
       ".terminal-window scrollbar trough {"
       "  background-color: rgba(%d, %d, %d, %f);"
@@ -405,9 +391,61 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       "  background-color: rgba(%d, %d, %d, %f);"
       "  border: none;"
       "  min-width: 6px;"
+      "}"
+      /* Internal children of tabbar/searchbar — transparent so they
+       * don't compound alpha with their parent's background. */
+      ".terminal-window tabbar tab,"
+      ".terminal-window tabbar tab:checked,"
+      ".terminal-window tabbar tab:hover,"
+      ".terminal-window tabbar tab label,"
+      ".terminal-window tabbar tab indicator,"
+      ".terminal-window tabbar tabbox,"
+      ".terminal-window tabbar > revealer,"
+      ".terminal-window tabbar > revealer > widget,"
+      ".terminal-window tabbar > revealer > widget > box,"
+      ".terminal-window tabbar > revealer > widget > box > scrolledwindow,"
+      ".terminal-window tabbar > revealer > widget > box > scrolledwindow > tabbox,"
+      ".terminal-window searchbar > revealer,"
+      ".terminal-window searchbar > revealer > box,"
+      /* AdwToolbarView internal revealers wrapping the header area */
+      ".terminal-window toolbarview > stack > revealer,"
+      ".terminal-window toolbarview > stack > revealer > windowhandle,"
+      ".terminal-window toolbarview > stack > revealer > windowhandle > box,"
+      /* Settings page internals */
+      ".terminal-window settings-page list,"
+      ".terminal-window settings-page row,"
+      ".terminal-window settings-page row:hover,"
+      ".terminal-window settings-page row:active,"
+      ".terminal-window settings-page scale trough,"
+      ".terminal-window settings-page spinbutton,"
+      ".terminal-window settings-page preferencesgroup,"
+      ".terminal-window settings-page preferencesgroup > box,"
+      ".terminal-window settings-page preferencesgroup > box > box,"
+      ".terminal-window settings-page preferencesgroup > box > list {"
+      "  background-color: transparent;"
+      "  background-image: none;"
+      "  border-color: transparent;"
+      "  box-shadow: none;"
+      "}"
+      /* Row separators — Adwaita uses border-bottom on rows */
+      ".terminal-window settings-page list row,"
+      ".terminal-window settings-page list row:not(:last-child) {"
+      "  border-bottom-color: transparent;"
+      "  border-color: transparent;"
+      "}"
+      /* Switch widget rows — also clear outline/focus ring artifacts */
+      ".terminal-window settings-page switch,"
+      ".terminal-window settings-page switch slider {"
+      "  box-shadow: none;"
+      "}"
+      /* Settings page section titles — accent color */
+      ".terminal-window settings-page .title-1,"
+      ".terminal-window settings-page preferencesgroup > box > label {"
+      "  color: %s;"
       "}",
       r, g, b, a,
-      CLAMP (r + 100, 0, 255), CLAMP (g + 100, 0, 255), CLAMP (b + 100, 0, 255), 0.5);
+      CLAMP (r + 100, 0, 255), CLAMP (g + 100, 0, 255), CLAMP (b + 100, 0, 255), 0.5,
+      accent_color && accent_color[0] ? accent_color : "#3584e4");
   }
 
   /* Apply accent color override */

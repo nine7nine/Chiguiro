@@ -3,22 +3,27 @@
   <requires lib="gtk" version="4.0" />
   <template class="KgxSettingsPage" parent="AdwBin">
     <property name="child">
-      <object class="AdwClamp">
-                    <property name="maximum-size">1200</property>
-                    <property name="valign">start</property>
-                    <property name="margin-top">24</property>
-                    <property name="margin-bottom">24</property>
-                    <property name="margin-start">24</property>
-                    <property name="margin-end">24</property>
-                    <property name="child">
-                      <object class="GtkBox">
-                        <property name="orientation">vertical</property>
-                        <property name="spacing">16</property>
+      <object class="GtkScrolledWindow" id="scrolled_window">
+        <property name="hscrollbar-policy">never</property>
+        <child>
+          <object class="AdwClamp">
+            <property name="maximum-size">1200</property>
+            <property name="valign">start</property>
+            <property name="vexpand">False</property>
+            <property name="margin-top">24</property>
+            <property name="margin-bottom">315</property>
+            <property name="margin-start">24</property>
+            <property name="margin-end">24</property>
+            <property name="child">
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">16</property>
                     <!-- About Section -->
                     <child>
                       <object class="GtkBox">
                         <property name="orientation">vertical</property>
                         <property name="halign">center</property>
+                        <property name="valign">start</property>
                         <property name="spacing">4</property>
                         <child>
                           <object class="GtkPicture" id="logo_picture">
@@ -84,6 +89,7 @@
                         <property name="orientation">horizontal</property>
                         <property name="spacing">24</property>
                         <property name="homogeneous">True</property>
+                        <property name="vexpand">False</property>
 
                         <!-- Left Column: Preferences -->
                         <child>
@@ -145,7 +151,6 @@
                                   <object class="AdwSpinRow" id="text_scale">
                                     <property name="title" translatable="yes">Text _Scale</property>
                                     <property name="use-underline">True</property>
-                                    <property name="subtitle" translatable="yes">Percentage of the default terminal size</property>
                                     <property name="numeric">True</property>
                                     <property name="digits">0</property>
                                     <property name="adjustment">
@@ -169,7 +174,22 @@
                                   <object class="AdwSpinRow" id="transparency_level">
                                     <property name="title" translatable="yes">Window _Opacity</property>
                                     <property name="use-underline">True</property>
-                                    <property name="subtitle" translatable="yes">100 is fully opaque, 0 is fully transparent</property>
+                                    <property name="numeric">True</property>
+                                    <property name="digits">0</property>
+                                    <property name="adjustment">
+                                      <object class="GtkAdjustment">
+                                        <property name="lower">0</property>
+                                        <property name="upper">100</property>
+                                        <property name="page-increment">10</property>
+                                        <property name="step-increment">1</property>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="AdwSpinRow" id="chrome_opacity">
+                                    <property name="title" translatable="yes">Chrome _Opacity</property>
+                                    <property name="use-underline">True</property>
                                     <property name="numeric">True</property>
                                     <property name="digits">0</property>
                                     <property name="adjustment">
@@ -192,7 +212,6 @@
                                   <object class="AdwActionRow">
                                     <property name="title" translatable="yes">Chrome _Color</property>
                                     <property name="use-underline">True</property>
-                                    <property name="subtitle" translatable="yes">Background color for header bar, tab bar, and search bar</property>
                                     <property name="activatable-widget">chrome_color</property>
                                     <child type="suffix">
                                       <object class="GtkColorDialogButton" id="chrome_color">
@@ -212,7 +231,6 @@
                                   <object class="AdwActionRow">
                                     <property name="title" translatable="yes">Accent _Color</property>
                                     <property name="use-underline">True</property>
-                                    <property name="subtitle" translatable="yes">Override system accent color (leave empty for system default)</property>
                                     <property name="activatable-widget">accent_color</property>
                                     <child type="suffix">
                                       <object class="GtkColorDialogButton" id="accent_color">
@@ -226,23 +244,6 @@
                                         </property>
                                       </object>
                                     </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwSpinRow" id="chrome_opacity">
-                                    <property name="title" translatable="yes">Chrome _Opacity</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="subtitle" translatable="yes">Opacity of the header bar, tab bar, and search bar</property>
-                                    <property name="numeric">True</property>
-                                    <property name="digits">0</property>
-                                    <property name="adjustment">
-                                      <object class="GtkAdjustment">
-                                        <property name="lower">0</property>
-                                        <property name="upper">100</property>
-                                        <property name="page-increment">10</property>
-                                        <property name="step-increment">1</property>
-                                      </object>
-                                    </property>
                                   </object>
                                 </child>
                               </object>
@@ -468,7 +469,9 @@
                   </object>
                 </property>
               </object>
-            </property>
+            </child>
+          </object>
+        </property>
   </template>
   <object class="GBindingGroup" id="settings_binds">
     <property name="source" bind-source="KgxSettingsPage" bind-property="settings"

@@ -163,9 +163,34 @@ kgx-empty {
 
 /* ── Settings page ─────────────────────────────────────── */
 
+settings-page,
 settings-page list,
-settings-page row {
+settings-page row,
+settings-page row:hover,
+settings-page row:active,
+settings-page preferencesgroup,
+settings-page preferencesgroup > box,
+settings-page preferencesgroup > box > box,
+settings-page preferencesgroup > box > list,
+settings-page headerbar,
+settings-page scrolledwindow,
+settings-page viewport,
+settings-page clamp,
+settings-page box {
   background-color: transparent;
+  background-image: none;
+}
+
+settings-page .dim-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+settings-page .title-1 {
+  color: var(--accent-bg-color);
+}
+
+settings-page preferencesgroup > box > label {
+  color: var(--accent-bg-color);
 }
 
 /* ── Font picker ───────────────────────────────────────── */
