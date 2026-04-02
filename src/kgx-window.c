@@ -407,6 +407,12 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       ".terminal-window tabbar > revealer > widget > box > scrolledwindow > tabbox,"
       ".terminal-window searchbar > revealer,"
       ".terminal-window searchbar > revealer > box,"
+      /* Search bar internals — entry, text area, and nav buttons */
+      ".terminal-window searchbar entry,"
+      ".terminal-window searchbar entry > text,"
+      ".terminal-window searchbar entry:focus,"
+      ".terminal-window searchbar entry:focus > text,"
+      ".terminal-window searchbar button,"
       /* AdwToolbarView internal revealers wrapping the header area */
       ".terminal-window toolbarview > stack > revealer,"
       ".terminal-window toolbarview > stack > revealer > windowhandle,"
@@ -418,6 +424,7 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       ".terminal-window settings-page row:active,"
       ".terminal-window settings-page scale trough,"
       ".terminal-window settings-page spinbutton,"
+      ".terminal-window settings-page spinbutton button,"
       ".terminal-window settings-page preferencesgroup,"
       ".terminal-window settings-page preferencesgroup > box,"
       ".terminal-window settings-page preferencesgroup > box > box,"
@@ -440,11 +447,32 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       "}"
       /* Settings page section titles — accent color */
       ".terminal-window settings-page .title-1,"
-      ".terminal-window settings-page preferencesgroup > box > label {"
+      ".terminal-window settings-page preferencesgroup > box > label,"
+      ".terminal-window settings-page .title-4,"
+      ".terminal-window settings-page .heading {"
       "  color: %s;"
+      "}"
+      /* Search entry border — accent color */
+      ".terminal-window searchbar entry {"
+      "  border-color: %s;"
+      "}"
+      /* Switch active state — accent color */
+      ".terminal-window settings-page switch:checked {"
+      "  background-color: %s;"
+      "  background-image: none;"
+      "}"
+      /* Shortcut key badges — accent color border */
+      ".terminal-window settings-page .keycap {"
+      "  background-color: transparent;"
+      "  background-image: none;"
+      "  border-color: %s;"
+      "  box-shadow: none;"
       "}",
       r, g, b, a,
       CLAMP (r + 100, 0, 255), CLAMP (g + 100, 0, 255), CLAMP (b + 100, 0, 255), 0.5,
+      accent_color && accent_color[0] ? accent_color : "#3584e4",
+      accent_color && accent_color[0] ? accent_color : "#3584e4",
+      accent_color && accent_color[0] ? accent_color : "#3584e4",
       accent_color && accent_color[0] ? accent_color : "#3584e4");
   }
 

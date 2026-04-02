@@ -38,7 +38,6 @@ window.terminal-window.translucent.background.csd {
 
 /* Every widget between window and VTE must be transparent.
  * Use descendant selectors (not >) since internal widgets vary. */
-.terminal-window.translucent.background,
 .terminal-window.translucent > widget,
 .terminal-window.translucent > widget > widget,
 .terminal-window.translucent toastoverlay,
@@ -61,6 +60,14 @@ window.terminal-window.translucent.background.csd {
   background-color: transparent;
   background-image: none;
   box-shadow: none;
+}
+
+/* Headerbar action buttons — clear the gray Adwaita background so they
+ * blend with the translucent chrome. Exclude windowcontrols buttons
+ * (close/min/max) which rely on CSS backgrounds for their appearance. */
+.terminal-window headerbar button:not(.close):not(.minimize):not(.maximize) {
+  background-color: transparent;
+  background-image: none;
 }
 
 .terminal-window scrolledwindow.terminal > undershoot,

@@ -90,6 +90,17 @@
                   <object class="GtkButton">
                     <property name="visible" bind-source="KgxWindow"
                       bind-property="fullscreened"
+                      bind-flags="sync-create|invert-boolean" />
+                    <property name="focus-on-click">False</property>
+                    <property name="icon-name">view-fullscreen-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Fullscreen</property>
+                    <property name="action-name">win.fullscreen</property>
+                  </object>
+                </child>
+                <child type="end">
+                  <object class="GtkButton">
+                    <property name="visible" bind-source="KgxWindow"
+                      bind-property="fullscreened"
                       bind-flags="sync-create" />
                     <property name="can-focus">0</property>
                     <property name="receives-default">0</property>
@@ -112,17 +123,6 @@
                     <property name="action-name">win.new-window</property>
                     <property name="tooltip-text" translatable="yes">New Window</property>
                     <property name="icon-name">window-new-symbolic</property>
-                  </object>
-                </child>
-                <child type="end">
-                  <object class="GtkButton">
-                    <property name="visible" bind-source="KgxWindow"
-                      bind-property="fullscreened"
-                      bind-flags="sync-create|invert-boolean" />
-                    <property name="focus-on-click">False</property>
-                    <property name="icon-name">view-fullscreen-symbolic</property>
-                    <property name="tooltip-text" translatable="yes">Fullscreen</property>
-                    <property name="action-name">win.fullscreen</property>
                   </object>
                 </child>
                 <child type="end">
