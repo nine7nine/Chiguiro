@@ -3,11 +3,12 @@
 
 -- Scope: Window management, tabs, and GUI chrome
 -- Includes: Window lifecycle, tab management, close confirmation,
---           search, fullscreen, size persistence
+--           search, fullscreen, size persistence, chrome styling,
+--           accent color, dynamic tab titles, service mode
 -- Excludes:
 --   - Core terminal behavior (see terminal-core.allium)
 --   - Preferences dialog layout (pure UI)
---   - D-Bus service activation (infrastructure)
+--   - D-Bus service activation mechanics (infrastructure)
 --
 -- Fork guidance: This module represents GUI chrome that a minimal fork
 -- may strip or replace. The terminal-core spec is the behavioral contract
@@ -29,6 +30,7 @@ entity Tab {
     terminal: core/Terminal
     session: core/Session?
     title: String
+    vte_title: String?
     path: String?
     status: Set<core/SessionFlag>
     is_active: Boolean
@@ -40,6 +42,10 @@ entity Tab {
 
     -- Derived
     has_running_processes: session != null and session.children.count > 0
+    -- fallback_title: displayed when VTE provides no window title.
+    -- Format is "shell: child_process" when a foreground child is running,
+    -- otherwise just the shell name from the session tag.
+    fallback_title: String
 }
 
 entity Pages {
@@ -71,15 +77,20 @@ entity Window {
     -- Derived
     effective_translucent: settings.transparency and floating
     has_tabs: not pages.is_empty
+    chrome_opacity: settings.chrome_opacity
+    chrome_color: settings.chrome_color
+    accent_color: settings.accent_color
 }
 
 entity Application {
     windows: Set<Window>
     settings: core/Settings
     in_background: Boolean
+    service_mode: Boolean
 
     -- Derived
     has_active_windows: windows.any(w => w.is_active)
+    has_visible_windows: windows.count > 0
 }
 
 ------------------------------------------------------------
@@ -297,6 +308,96 @@ rule WindowStatusChanged {
 }
 
 ------------------------------------------------------------
+-- Rules — Chrome Styling
+------------------------------------------------------------
+
+rule ChromeStyleApplied {
+    when: ChromeSettingChanged(window)
+
+    ensures: ChromeStyleUpdated(window, window.chrome_color, window.chrome_opacity)
+
+    @guidance
+        -- Apply chrome_color with chrome_opacity as rgba background-color
+        -- to top-level chrome containers ONLY: headerbar, tabbar, searchbar,
+        -- settings-page, scrollbar.
+        -- All children inside these containers (tabs, revealers, tabbox,
+        -- search entry/buttons, preference rows/groups) MUST be set to
+        -- background-color: transparent to prevent alpha compounding.
+        -- The toolbarview > stack > revealer wrapping the header area
+        -- must also be transparent.
+        -- See invariant TransparencyNoAlphaCompounding.
+}
+
+rule AccentColorApplied {
+    when: AccentColorChanged(window)
+
+    ensures: AccentColorUpdated(window, window.accent_color)
+
+    @guidance
+        -- The accent color setting is always used as an override (no
+        -- "follow system" toggle). Applied to:
+        --   - Tab close button hover state
+        --   - Settings section titles
+        --   - Active tab indicator
+        --   - Any other interactive highlight elements
+        -- Parsed as a hex colour string into GdkRGBA.
+}
+
+------------------------------------------------------------
+-- Rules — Dynamic Tab Titles
+------------------------------------------------------------
+
+rule TabTitleFromVte {
+    when: VteTitleChanged(tab, new_title)
+    requires: new_title != null
+
+    ensures: tab.vte_title = new_title
+    ensures: tab.title = new_title
+
+    @guidance
+        -- VTE window title is authoritative when present. No override case.
+        -- The title set by the shell escape sequence takes precedence over
+        -- all other title sources.
+}
+
+rule TabTitleFallback {
+    when: VteTitleChanged(tab, new_title)
+    requires: new_title = null
+
+    ensures: tab.vte_title = null
+    ensures: tab.title = tab.fallback_title
+
+    @guidance
+        -- When VTE provides no title, fall back to the computed fallback.
+        -- Format: "shell: child" when a foreground child process is running,
+        -- e.g. "bash: vim". When no child is running, just the shell name
+        -- from the session tag, e.g. "bash".
+}
+
+------------------------------------------------------------
+-- Rules — Service Mode
+------------------------------------------------------------
+
+rule ServiceModeActive {
+    when: application: Application.has_visible_windows becomes false
+    requires: application.service_mode
+
+    ensures: ApplicationPersists(application)
+
+    @guidance
+        -- Application remains running without visible windows until a
+        -- D-Bus request creates one. The process stays alive to service
+        -- incoming activation requests.
+}
+
+rule ServiceModeWindowRequested {
+    when: ServiceActivationRequested(application)
+    requires: application.service_mode and not application.has_visible_windows
+
+    ensures: CreateWindow(application)
+}
+
+------------------------------------------------------------
 -- Rules — Search
 ------------------------------------------------------------
 
@@ -323,6 +424,20 @@ rule ToggleFullscreen {
         -- In fullscreen: auto-hide header bar after 300ms idle.
         -- Show header on mouse move to top 5px.
         -- Hide tab bar, show only exit-fullscreen button.
+}
+
+------------------------------------------------------------
+-- Rules — Settings Page
+------------------------------------------------------------
+
+rule SettingsPageToggle {
+    when: ToggleSettingsPage(window)
+
+    ensures: SettingsPageToggled(window)
+
+    @guidance
+        -- Opens or closes the preferences panel.
+        -- Implemented as an AdwPreferencesDialog.
 }
 
 ------------------------------------------------------------
@@ -381,6 +496,44 @@ invariant WindowSizePositive {
         or (w.width > 0 and w.height > 0)
 }
 
+invariant GlassSheet {
+    -- The window is a sheet of glass. The desktop wallpaper is visible
+    -- through every part of it. Any CSS change that introduces a
+    -- background-color, background-image, or box-shadow on a widget
+    -- risks breaking the glass by adding an opaque layer.
+    --
+    -- Only designated chrome containers (headerbar, tabbar, searchbar,
+    -- settings-page, scrollbar) may carry an rgba background — and
+    -- each container gets exactly ONE layer at the configured chrome
+    -- opacity. Every other widget in the tree must be fully transparent:
+    --   - Intermediate wrappers (toolbarview revealers, windowhandle, box)
+    --   - Children inside chrome (tabs, tabbox, search entry, buttons)
+    --   - Settings page internals (rows, groups, spinbutton buttons)
+    --   - Headerbar action buttons (except window controls close/min/max)
+    --
+    -- Alpha compounding is the primary threat: N nested layers at 0.9
+    -- alpha yield (1 - 0.1^N) effective opacity — three layers give
+    -- 0.999, visually indistinguishable from solid. Every new widget
+    -- that Adwaita styles with a default background must be explicitly
+    -- cleared to transparent.
+    --
+    -- The window node's own box-shadow must be preserved; overly broad
+    -- selectors (e.g. .translucent.background matching the window
+    -- itself) will kill the compositor shadow.
+    --
+    -- When use_chrome_bg is enabled, the terminal VTE background uses
+    -- alpha 1.0 (not chrome_opacity) because the scrolled window's
+    -- widget opacity already provides transparency — double alpha
+    -- would make the terminal darker than the chrome.
+    for w in Windows:
+        w.translucent implies
+            SingleLayerChromeAlpha(w)
+            and NoIntermediateBackgrounds(w)
+            and NoChildBackgroundsInChromeContainers(w)
+            and WindowShadowPreserved(w)
+            and NoDoubleAlphaOnTerminal(w)
+}
+
 ------------------------------------------------------------
 -- Actor Declarations
 ------------------------------------------------------------
@@ -428,6 +581,9 @@ surface WindowChrome {
         window.translucent
         window.fullscreened
         window.pages.status
+        window.chrome_color
+        window.chrome_opacity
+        window.accent_color
 
     provides:
         CreateWindow(application)
@@ -435,10 +591,42 @@ surface WindowChrome {
         ToggleFullscreen(window)
         ToggleSearch(window.pages.active_tab)
             when window.pages.active_tab != null
+        ToggleSettingsPage(window)
 
     @guarantee CloseConfirmation
         -- Windows and tabs with running processes always prompt
         -- for confirmation before closing.
+}
+
+surface SettingsPage {
+    facing user: User
+
+    context settings: core/Settings
+
+    exposes:
+        settings.use_system_font
+        settings.custom_font
+        settings.font_scale
+        settings.scrollback_lines
+        settings.ignore_scrollback_limit
+        settings.audible_bell
+        settings.visual_bell
+        settings.transparency
+        settings.transparency_level
+        settings.chrome_opacity
+        settings.chrome_color
+        settings.use_chrome_bg
+        settings.accent_color
+        settings.restore_window_size
+
+    provides:
+        ToggleSettingsPage(window)
+        ChromeSettingChanged(window)
+        AccentColorChanged(window)
+
+    @guarantee SettingsLive
+        -- All setting changes take effect immediately without restart.
+        -- Bound via GObject property bindings.
 }
 
 ------------------------------------------------------------

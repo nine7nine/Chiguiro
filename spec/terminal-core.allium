@@ -3,12 +3,16 @@
 
 -- Scope: Core terminal emulator behavior
 -- Includes: Session lifecycle, process tracking, terminal interaction,
---           color scheme resolution, transparency, settings, paste safety
+--           color scheme resolution, transparency, chrome appearance,
+--           settings, paste safety
 -- Excludes:
 --   - Window/tab chrome (see window-chrome.allium)
 --   - Preferences UI (implementation detail)
 --   - Keyboard shortcuts (implementation detail, keybindings vary per fork)
 --   - D-Bus activation, CLI argument parsing (infrastructure)
+--
+-- Fork note: Chiguiro always uses dark mode. The theme switcher
+-- (auto/night/day/hacker) from upstream Console has been removed.
 
 ------------------------------------------------------------
 -- External Entities
@@ -39,10 +43,6 @@ value ProcessTitle {
 ------------------------------------------------------------
 -- Enumerations
 ------------------------------------------------------------
-
-enum Theme { auto | night | day | hacker }
-
-enum ResolvedTheme { night | day }
 
 enum SessionFlag { remote | privileged | playbox }
 
@@ -76,16 +76,21 @@ entity Settings {
     -- Transparency
     transparency: Boolean
     transparency_level: Decimal
+    -- content_opacity = 1.0 - transparency_level, applied as widget opacity
+    -- on the terminal content stack when transparency is active
     content_opacity: Decimal
 
     -- Shell
     shell: List<String>
 
-    -- Theme
-    theme: Theme
-
     -- Color scheme
     livery: Livery
+
+    -- Chrome appearance
+    chrome_opacity: Decimal
+    chrome_color: String
+    use_chrome_bg: Boolean
+    accent_color: String
 
     -- Window persistence
     restore_window_size: Boolean
@@ -99,7 +104,6 @@ entity Settings {
     scale_can_increase: font_scale < 4.0
     scale_can_decrease: font_scale > 0.5
     resolved_scrollback: if ignore_scrollback_limit then -1 else scrollback_lines
-    resolved_theme(is_dark_environment: Boolean): ResolvedTheme
 }
 
 value Palette {
@@ -186,6 +190,9 @@ config {
     paste_danger_pattern: String = "sudo"
     watcher_foreground_interval: Duration = 0.5.seconds
     watcher_background_interval: Duration = 2.seconds
+    default_chrome_opacity: Decimal = 0.94
+    default_chrome_color: String = "#1b1b1f"
+    default_accent_color: String = "#3584e4"
 }
 
 ------------------------------------------------------------
@@ -214,41 +221,12 @@ default Livery xterm = {
 }
 
 ------------------------------------------------------------
--- Rules — Theme Resolution
-------------------------------------------------------------
-
-rule ResolveThemeAuto {
-    when: ResolveTheme(settings, is_dark_environment)
-    requires: settings.theme = auto
-
-    ensures:
-        if is_dark_environment:
-            ResolvedAs(night)
-        else:
-            ResolvedAs(day)
-}
-
-rule ResolveThemeNight {
-    when: ResolveTheme(settings, _)
-    requires: settings.theme = night or settings.theme = hacker
-
-    ensures: ResolvedAs(night)
-}
-
-rule ResolveThemeDay {
-    when: ResolveTheme(settings, _)
-    requires: settings.theme = day
-
-    ensures: ResolvedAs(day)
-}
-
-------------------------------------------------------------
 -- Rules — Livery Resolution
 ------------------------------------------------------------
 
 rule ResolveLivery {
-    when: ResolveLivery(livery, resolved_theme, translucent, transparency_level)
-    let base_palette = if resolved_theme = day and livery.has_day_palette then livery.day else livery.night
+    when: ResolveLivery(livery, translucent, transparency_level)
+    let base_palette = livery.night
 
     ensures:
         if translucent:
@@ -257,6 +235,7 @@ rule ResolveLivery {
             PaletteResolved(base_palette, 0.0)
 
     @guidance
+        -- Always uses the night palette (Chiguiro is dark-mode only).
         -- When not translucent, resolve with transparency=0.0 (fully opaque).
         -- Cache opaque palettes to avoid reallocation.
 }
@@ -457,6 +436,34 @@ rule ContentOpacityApplied {
 }
 
 ------------------------------------------------------------
+-- Rules — Chrome as Terminal Background
+------------------------------------------------------------
+
+rule TerminalChromeBackground {
+    when: ChromeBgSettingChanged(terminal)
+    requires: terminal.settings.use_chrome_bg
+
+    ensures: TerminalBgOverridden(terminal, terminal.settings.chrome_color, 1.0)
+
+    @guidance
+        -- When use_chrome_bg is enabled, the terminal background colour
+        -- is replaced by the chrome_color with alpha forced to 1.0 (fully
+        -- opaque), giving a seamless look between chrome and content area.
+        -- This overrides the livery background but not the palette foreground
+        -- or ANSI colours.
+}
+
+rule TerminalChromeBackgroundDisabled {
+    when: ChromeBgSettingChanged(terminal)
+    requires: not terminal.settings.use_chrome_bg
+
+    ensures: TerminalBgRestored(terminal)
+
+    @guidance
+        -- Reverts the terminal background to the livery palette background.
+}
+
+------------------------------------------------------------
 -- Rules — Terminal Bell
 ------------------------------------------------------------
 
@@ -556,11 +563,9 @@ invariant SessionStatusReflectsChildren {
         and (playbox in s.status) implies s.has_playbox
 }
 
-invariant ThemeHackerIsNight {
-    -- hacker is a legacy alias; always resolves to night
+invariant ChromeOpacityBounded {
     for s in Settings:
-        s.theme = hacker implies s.resolved_theme(true) = night
-            and s.resolved_theme(false) = night
+        s.chrome_opacity >= 0.0 and s.chrome_opacity <= 1.0
 }
 
 invariant LiveryAlwaysResolves {
