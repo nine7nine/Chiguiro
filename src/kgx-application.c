@@ -130,6 +130,12 @@ kgx_application_startup (GApplication *app)
 
   G_APPLICATION_CLASS (kgx_application_parent_class)->startup (app);
 
+  /* In service mode (--gapplication-service), hold a reference so the
+   * app stays alive indefinitely waiting for D-Bus requests.  Without
+   * this, GApplication quits after ~10 s of inactivity. */
+  if (g_application_get_flags (app) & G_APPLICATION_IS_SERVICE)
+    g_application_hold (app);
+
   /* Follow system color scheme preference automatically */
   adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
                                       ADW_COLOR_SCHEME_PREFER_DARK);

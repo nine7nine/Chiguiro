@@ -1,0 +1,14 @@
+[Unit]
+Description=Chigüiro Terminal Server
+Documentation=https://github.com/ninez/console
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=@KGX_APPLICATION_ID_RAW@
+ExecStart=@BIN_DIR@/@BIN_NAME@ --gapplication-service
+Restart=on-failure
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target

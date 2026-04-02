@@ -79,6 +79,17 @@ configure_file(
      install_dir: datadir / 'dbus-1/services'
 )
 
+systemd_service = configure_file(
+           input: 'org.ninez.Chiguiro.service.systemd.in',
+          output: app_id + '-server.service',
+   configuration: conf,
+)
+
+install_data(systemd_service,
+     install_dir: prefix / 'lib/systemd/user',
+          rename: app_id + '.service',
+)
+
 install_data(icon_filename,
      install_dir: datadir / 'icons/hicolor/scalable/apps',
           rename: app_id + '.svg',
