@@ -34,7 +34,7 @@
                         </child>
                         <child>
                           <object class="GtkLabel">
-                            <property name="label" translatable="yes">Chigüiro</property>
+                            <property name="label" translatable="yes">· C h i g ü i r o ·</property>
                             <property name="use-markup">True</property>
                             <style>
                               <class name="title-1" />
@@ -42,6 +42,7 @@
                             <attributes>
                               <attribute name="weight" value="bold" />
                               <attribute name="scale" value="1.4" />
+                              <attribute name="letter-spacing" value="4096" />
                             </attributes>
                           </object>
                         </child>
@@ -49,7 +50,7 @@
                           <object class="GtkLabel" id="version_label">
                             <property name="label">v0.01-alpha</property>
                             <style>
-                              <class name="dim-label" />
+                              <class name="about-accent" />
                             </style>
                           </object>
                         </child>
@@ -57,7 +58,7 @@
                           <object class="GtkLabel">
                             <property name="label" translatable="yes">© 2026 Jordan Johnston</property>
                             <style>
-                              <class name="dim-label" />
+                              <class name="about-accent" />
                             </style>
                           </object>
                         </child>
@@ -70,6 +71,12 @@
                               <object class="GtkLinkButton">
                                 <property name="label" translatable="yes">Github</property>
                                 <property name="uri">https://github.com/nine7nine/Chiguiro</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLinkButton">
+                                <property name="label" translatable="yes">Issues</property>
+                                <property name="uri">https://github.com/nine7nine/Chiguiro/issues</property>
                               </object>
                             </child>
                           </object>

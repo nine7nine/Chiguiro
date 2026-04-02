@@ -450,7 +450,8 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       ".terminal-window settings-page preferencesgroup > box > label,"
       ".terminal-window settings-page .title-4,"
       ".terminal-window settings-page .heading,"
-      ".terminal-window settings-page button.link > label {"
+      ".terminal-window settings-page button.link > label,"
+      ".terminal-window settings-page .about-accent {"
       "  color: %s;"
       "}"
       /* Search entry border — accent color */
