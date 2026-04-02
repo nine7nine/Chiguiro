@@ -455,7 +455,7 @@ fallback_title (G_GNUC_UNUSED GObject *self,
 
     /* If there's a child process, show "shell: child" */
     {
-      GPtrArray *children = kgx_train_get_children (train);
+      g_autoptr(GPtrArray) children = kgx_train_get_children (train);
 
       if (children && children->len > 0) {
         KgxProcess *child = g_ptr_array_index (children, children->len - 1);

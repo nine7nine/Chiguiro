@@ -623,6 +623,7 @@ extra_drag_drop (AdwTabBar        *bar,
 
 
 
+/* Returns: (transfer full): caller must unref with g_object_unref */
 static VteTerminal *
 get_active_terminal (KgxWindow *self)
 {
@@ -639,14 +640,7 @@ get_active_terminal (KgxWindow *self)
   tab = KGX_TAB (adw_tab_page_get_child (page));
   g_object_get (tab, "terminal", &terminal, NULL);
 
-  if (!terminal) {
-    return NULL;
-  }
-
-  /* g_object_get returns a ref, drop it — terminal is owned by the tab */
-  g_object_unref (terminal);
-
-  return VTE_TERMINAL (terminal);
+  return terminal ? VTE_TERMINAL (terminal) : NULL;
 }
 
 
@@ -667,13 +661,15 @@ static void
 search_changed (GtkSearchEntry *entry,
                 KgxWindow      *self)
 {
+  g_autoptr (GObject) terminal_ref = NULL;
   VteTerminal *terminal;
   const char *search = NULL;
   VteRegex *regex;
   g_autoptr (GError) error = NULL;
   guint32 flags = PCRE2_MULTILINE;
 
-  terminal = get_active_terminal (self);
+  terminal_ref = (GObject *) get_active_terminal (self);
+  terminal = (VteTerminal *) terminal_ref;
   if (!terminal) {
     return;
   }
@@ -687,8 +683,10 @@ search_changed (GtkSearchEntry *entry,
       flags |= PCRE2_CASELESS;
   }
 
-  regex = vte_regex_new_for_search (g_regex_escape_string (search, -1),
-                                    -1, flags, &error);
+  {
+    g_autofree char *escaped = g_regex_escape_string (search, -1);
+    regex = vte_regex_new_for_search (escaped, -1, flags, &error);
+  }
 
   if (error) {
     g_warning ("Search error: %s", error->message);
@@ -698,6 +696,7 @@ search_changed (GtkSearchEntry *entry,
   vte_terminal_search_find_previous (terminal);
 
   vte_terminal_search_set_regex (terminal, regex, 0);
+  vte_regex_unref (regex);
 
   vte_terminal_search_find_next (terminal);
 }
@@ -707,7 +706,8 @@ static void
 search_next (GtkWidget *widget,
              KgxWindow *self)
 {
-  VteTerminal *terminal = get_active_terminal (self);
+  g_autoptr (GObject) terminal_ref = (GObject *) get_active_terminal (self);
+  VteTerminal *terminal = (VteTerminal *) terminal_ref;
 
   if (terminal) {
     vte_terminal_search_find_next (terminal);
@@ -719,7 +719,8 @@ static void
 search_prev (GtkWidget *widget,
              KgxWindow *self)
 {
-  VteTerminal *terminal = get_active_terminal (self);
+  g_autoptr (GObject) terminal_ref = (GObject *) get_active_terminal (self);
+  VteTerminal *terminal = (VteTerminal *) terminal_ref;
 
   if (terminal) {
     vte_terminal_search_find_previous (terminal);

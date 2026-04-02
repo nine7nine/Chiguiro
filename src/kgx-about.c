@@ -161,11 +161,6 @@ kgx_about_present_dialogue (GtkWidget *parent)
     NULL,
   };
   const char *designers[] = { "Tobias Bernard", NULL };
-  const char *credits[] = {
-    "Forked from GNOME Console",
-    "https://gitlab.gnome.org/GNOME/console",
-    NULL,
-  };
 
   kgx_about_append_sys_info (buf, gtk_widget_get_root (parent));
 
