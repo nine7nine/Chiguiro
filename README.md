@@ -4,16 +4,13 @@ A fast, transparent, and customizable terminal emulator for Linux, forked from [
 
 ## Features
 
-- **Transparent backgrounds** with configurable window and chrome opacity
-- **Custom chrome color** with per-element accent color theming
-- **Use chrome color for terminal background** for a seamless look
-- **Headless server mode** for instant window startup via D-Bus (like gnome-terminal-server)
-- **Animated capybara mascot** in the settings page
-- **Integrated settings page** with preferences and keyboard shortcuts in one view
-- **Keyboard shortcut reference** built into the settings page
-- **GTK4 + libadwaita** with full dark mode support
-- **VTE terminal** with configurable scrollback, bell, and font settings
-- **Systemd user service** for persistent background operation
+- **Glass-sheet transparency** — window and chrome opacity, seamless terminal-to-chrome blending
+- **Custom chrome and accent colors** — live-updating, no restart required
+- **Dynamic tab titles** — running process name with braille activity indicator (`bash: htop ⠲`)
+- **No menus** — single-pane settings overlay with keyboard shortcuts side-by-side
+- **Headless server mode** — systemd user service for instant window startup via D-Bus
+- **Smooth animations** — slide transitions, translucent hover states, animated sprite branding
+- **GTK4 + libadwaita** — dark mode, VTE terminal, configurable scrollback, bell, and fonts
 
 ## Building
 
