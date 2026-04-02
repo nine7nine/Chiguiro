@@ -44,8 +44,8 @@ else
   log_domain = 'Chiguiro'
 endif
 
-kgx_homepage_url = 'https://apps.gnome.org/Console/'
-kgx_issue_url = 'https://gitlab.gnome.org/GNOME/console/-/issues/'
+kgx_homepage_url = 'https://github.com/nine7nine/Chiguiro'
+kgx_issue_url = ''
 copyright_range = '2019-2025'
 vcs_tag_fallback = 'no-tag'
 

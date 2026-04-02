@@ -68,14 +68,8 @@
                             <property name="spacing">12</property>
                             <child>
                               <object class="GtkLinkButton">
-                                <property name="label" translatable="yes">Homepage</property>
-                                <property name="uri">https://apps.gnome.org/Console/</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkLinkButton">
-                                <property name="label" translatable="yes">Report an Issue</property>
-                                <property name="uri">https://gitlab.gnome.org/GNOME/console/-/issues/</property>
+                                <property name="label" translatable="yes">Github</property>
+                                <property name="uri">https://github.com/nine7nine/Chiguiro</property>
                               </object>
                             </child>
                           </object>

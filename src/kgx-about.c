@@ -155,17 +155,26 @@ kgx_about_present_dialogue (GtkWidget *parent)
   g_autofree char *version = kgx_about_dup_version_string ();
   g_autofree char *copyright = kgx_about_dup_copyright_string ();
   g_autoptr (GString) buf = g_string_new (NULL);
-  const char *developers[] = { "Zander Brown <zbrown@gnome.org>", NULL };
+  const char *developers[] = {
+    "jordan Johnston",
+    "Zander Brown <zbrown@gnome.org> (original GNOME Console)",
+    NULL,
+  };
   const char *designers[] = { "Tobias Bernard", NULL };
+  const char *credits[] = {
+    "Forked from GNOME Console",
+    "https://gitlab.gnome.org/GNOME/console",
+    NULL,
+  };
 
   kgx_about_append_sys_info (buf, gtk_widget_get_root (parent));
 
   adw_show_about_dialog (parent,
                          "application-name", KGX_DISPLAY_NAME,
                          "application-icon", KGX_APPLICATION_ID,
-                         "developer-name", _("The GNOME Project"),
-                         "issue-url", KGX_ISSUE_URL,
+                         "developer-name", "jordan Johnston",
                          "website", KGX_HOMEPAGE_URL,
+                         "comments", _("Forked from GNOME Console\nhttps://gitlab.gnome.org/GNOME/console"),
                          "version", version,
                          "copyright", copyright,
                          "debug-info", buf->str,
