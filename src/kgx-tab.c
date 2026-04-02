@@ -846,6 +846,17 @@ pid_died (KgxTrain *train,
 
 
 static void
+child_changed (KgxTrain   *train,
+               KgxProcess *child,
+               gpointer    user_data)
+{
+  /* Force the fallback title expression to re-evaluate by notifying
+   * that the train property has changed. */
+  g_object_notify (G_OBJECT (user_data), "train");
+}
+
+
+static void
 child_removed (KgxTrain   *train,
                KgxProcess *child,
                gpointer    user_data)
@@ -942,6 +953,12 @@ kgx_tab_init (KgxTab *self)
 
   g_signal_group_connect_object (priv->train_signals,
                                  "pid-died", G_CALLBACK (pid_died),
+                                 self, G_CONNECT_DEFAULT);
+  g_signal_group_connect_object (priv->train_signals,
+                                 "child-added", G_CALLBACK (child_changed),
+                                 self, G_CONNECT_DEFAULT);
+  g_signal_group_connect_object (priv->train_signals,
+                                 "child-removed", G_CALLBACK (child_changed),
                                  self, G_CONNECT_DEFAULT);
   g_signal_group_connect_object (priv->train_signals,
                                  "child-removed", G_CALLBACK (child_removed),

@@ -8,7 +8,9 @@
           <lookup name="child">AdwTabPage</lookup>
         </lookup>
         <closure type='gchararray' function='fallback_title'>
-          <lookup name="child">AdwTabPage</lookup>
+          <lookup name="train" type="KgxTab">
+            <lookup name="child">AdwTabPage</lookup>
+          </lookup>
         </closure>
       </closure>
     </binding>

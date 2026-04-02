@@ -439,13 +439,47 @@ setup_menu (AdwTabView *view,
 
 static char *
 fallback_title (G_GNUC_UNUSED GObject *self,
-                KgxTab                *tab)
+                KgxTrain              *train)
 {
-  /* Translators: %i is, from the users perspective, a random number.
-   * this string will only be seen when the running program has
-   * failed to set a title, and exists purely to avoid blank tabs
-   */
-  return g_strdup_printf (_("Tab %i"), kgx_tab_get_id (tab));
+  if (train) {
+    g_autofree char *shell_name = NULL;
+    GPid pid = kgx_train_get_pid (train);
+
+    /* Get the shell process name */
+    if (pid > 0) {
+      g_autofree char *comm_path = g_strdup_printf ("/proc/%d/comm", pid);
+
+      if (g_file_get_contents (comm_path, &shell_name, NULL, NULL) && shell_name)
+        g_strstrip (shell_name);
+    }
+
+    /* If there's a child process, show "shell: child" */
+    {
+      GPtrArray *children = kgx_train_get_children (train);
+
+      if (children && children->len > 0) {
+        KgxProcess *child = g_ptr_array_index (children, children->len - 1);
+        GStrv argv = kgx_process_get_argv (child);
+
+        if (argv && argv[0]) {
+          g_autofree char *child_name = g_path_get_basename (argv[0]);
+
+          if (child_name && child_name[0] != '\0') {
+            if (shell_name && shell_name[0] != '\0')
+              return g_strdup_printf ("%s: %s", shell_name, child_name);
+            else
+              return g_steal_pointer (&child_name);
+          }
+        }
+      }
+    }
+
+    /* No children — just the shell name */
+    if (shell_name && shell_name[0] != '\0')
+      return g_steal_pointer (&shell_name);
+  }
+
+  return g_strdup ("Terminal");
 }
 
 
