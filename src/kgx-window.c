@@ -445,6 +445,12 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       ".terminal-window settings-page switch slider {"
       "  box-shadow: none;"
       "}"
+      /* Prevent negative min-width from cleared borders/padding */
+      ".terminal-window tabbar tabboxchild,"
+      ".terminal-window settings-page scale marks {"
+      "  min-width: 0;"
+      "  min-height: 0;"
+      "}"
       /* Settings page section titles — accent color */
       ".terminal-window settings-page .title-1,"
       ".terminal-window settings-page preferencesgroup > box > label,"

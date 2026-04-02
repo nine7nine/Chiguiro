@@ -61,6 +61,8 @@ struct _KgxTabPrivate {
 
   gboolean              dropping;
   int                   working;
+  guint                 activity_timer;
+  int                   activity_frame;
 
   KgxTerminal          *terminal;
   GSignalGroup         *terminal_signals;
@@ -212,6 +214,7 @@ kgx_tab_dispose (GObject *object)
   g_clear_object (&priv->path);
 
   g_clear_handle_id (&priv->ringing_timeout, g_source_remove);
+  g_clear_handle_id (&priv->activity_timer, g_source_remove);
 
   g_clear_pointer (&priv->initial_title, g_free);
   g_clear_object (&priv->initial_path);
@@ -845,14 +848,54 @@ pid_died (KgxTrain *train,
 }
 
 
-static void
-child_changed (KgxTrain   *train,
-               KgxProcess *child,
-               gpointer    user_data)
+static gboolean
+activity_tick (gpointer user_data)
 {
-  /* Force the fallback title expression to re-evaluate by notifying
-   * that the train property has changed. */
-  g_object_notify (G_OBJECT (user_data), "train");
+  KgxTab *self = KGX_TAB (user_data);
+  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
+
+  priv->activity_frame = (priv->activity_frame + 1) % 4;
+  g_object_notify (G_OBJECT (self), "train");
+
+  return G_SOURCE_CONTINUE;
+}
+
+
+static void
+on_child_added (KgxTrain   *train,
+                KgxProcess *child,
+                gpointer    user_data)
+{
+  KgxTab *self = KGX_TAB (user_data);
+  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
+
+  g_object_notify (G_OBJECT (self), "train");
+
+  if (priv->activity_timer == 0) {
+    priv->activity_frame = 0;
+    priv->activity_timer = g_timeout_add (1200, activity_tick, self);
+  }
+}
+
+
+static void
+on_child_removed (KgxTrain   *train,
+                  KgxProcess *child,
+                  gpointer    user_data)
+{
+  KgxTab *self = KGX_TAB (user_data);
+  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
+
+  g_object_notify (G_OBJECT (self), "train");
+
+  /* Stop animation when no children remain */
+  {
+    g_autoptr(GPtrArray) children = kgx_train_get_children (train);
+
+    if (!children || children->len == 0) {
+      g_clear_handle_id (&priv->activity_timer, g_source_remove);
+    }
+  }
 }
 
 
@@ -955,10 +998,10 @@ kgx_tab_init (KgxTab *self)
                                  "pid-died", G_CALLBACK (pid_died),
                                  self, G_CONNECT_DEFAULT);
   g_signal_group_connect_object (priv->train_signals,
-                                 "child-added", G_CALLBACK (child_changed),
+                                 "child-added", G_CALLBACK (on_child_added),
                                  self, G_CONNECT_DEFAULT);
   g_signal_group_connect_object (priv->train_signals,
-                                 "child-removed", G_CALLBACK (child_changed),
+                                 "child-removed", G_CALLBACK (on_child_removed),
                                  self, G_CONNECT_DEFAULT);
   g_signal_group_connect_object (priv->train_signals,
                                  "child-removed", G_CALLBACK (child_removed),

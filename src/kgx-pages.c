@@ -453,8 +453,10 @@ fallback_title (G_GNUC_UNUSED GObject *self,
         g_strstrip (shell_name);
     }
 
-    /* If there's a child process, show "shell: child" */
+    /* If there's a child process, show "shell: child" with activity indicator */
     {
+      static const char *activity_chars[] = { "⠂", "⠒", "⠲", "⠰", "⠠", "⠤", "⠦", "⠆" };
+      static int frame = 0;
       g_autoptr(GPtrArray) children = kgx_train_get_children (train);
 
       if (children && children->len > 0) {
@@ -463,18 +465,31 @@ fallback_title (G_GNUC_UNUSED GObject *self,
 
         if (argv && argv[0]) {
           g_autofree char *child_name = g_path_get_basename (argv[0]);
+          const char *indicator = activity_chars[frame++ % G_N_ELEMENTS (activity_chars)];
 
           if (child_name && child_name[0] != '\0') {
             if (shell_name && shell_name[0] != '\0')
-              return g_strdup_printf ("%s: %s", shell_name, child_name);
+              return g_strdup_printf ("%s: %s %s", shell_name, child_name, indicator);
             else
-              return g_steal_pointer (&child_name);
+              return g_strdup_printf ("%s %s", child_name, indicator);
           }
         }
       }
     }
 
-    /* No children — just the shell name */
+    /* No active children — show last child if one ran */
+    {
+      const char *last = kgx_train_get_last_child_name (train);
+
+      if (last && last[0] != '\0') {
+        if (shell_name && shell_name[0] != '\0')
+          return g_strdup_printf ("%s: %s", shell_name, last);
+        else
+          return g_strdup (last);
+      }
+    }
+
+    /* No children ever ran — just the shell name */
     if (shell_name && shell_name[0] != '\0')
       return g_steal_pointer (&shell_name);
   }

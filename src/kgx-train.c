@@ -35,6 +35,7 @@ struct _KgxTrainPrivate {
   char *tag;
   GPid pid;
   KgxStatus status;
+  char *last_child_name;
 
   GHashTable *root;
   GHashTable *remote;
@@ -77,6 +78,7 @@ kgx_train_dispose (GObject *object)
 
   g_clear_pointer (&priv->uuid, g_free);
   g_clear_pointer (&priv->tag, g_free);
+  g_clear_pointer (&priv->last_child_name, g_free);
 
   g_clear_pointer (&priv->root, g_hash_table_unref);
   g_clear_pointer (&priv->remote, g_hash_table_unref);
@@ -342,6 +344,19 @@ kgx_train_get_pid (KgxTrain *self)
 }
 
 
+const char *
+kgx_train_get_last_child_name (KgxTrain *self)
+{
+  KgxTrainPrivate *priv;
+
+  g_return_val_if_fail (KGX_IS_TRAIN (self), NULL);
+
+  priv = kgx_train_get_instance_private (self);
+
+  return priv->last_child_name;
+}
+
+
 /**
  * kgx_train_get_children:
  * @self: the #KgxTrain
@@ -432,6 +447,10 @@ kgx_train_push_child (KgxTrain   *self,
 
   if (G_LIKELY (argv[0] != NULL)) {
     g_autofree char *program = g_path_get_basename (argv[0]);
+
+    /* Remember the last child process name for tab title fallback */
+    g_free (priv->last_child_name);
+    priv->last_child_name = g_strdup (program);
 
     if (G_UNLIKELY (kgx_is_remote (program, argv))) {
       new_status |= push_type (priv->remote, pid, NULL, KGX_REMOTE);

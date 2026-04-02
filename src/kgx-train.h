@@ -52,8 +52,9 @@ G_DECLARE_DERIVABLE_TYPE (KgxTrain, kgx_train, KGX, TRAIN, GObject)
 
 const char        *kgx_train_get_uuid        (KgxTrain     *self);
 const char        *kgx_train_get_tag         (KgxTrain     *self);
-GPid               kgx_train_get_pid         (KgxTrain     *self);
-GPtrArray         *kgx_train_get_children    (KgxTrain     *self);
+GPid               kgx_train_get_pid             (KgxTrain     *self);
+const char        *kgx_train_get_last_child_name (KgxTrain     *self);
+GPtrArray         *kgx_train_get_children        (KgxTrain     *self);
 void               kgx_train_push_child      (KgxTrain     *self,
                                               KgxProcess   *process);
 void               kgx_train_pop_child       (KgxTrain     *self,
