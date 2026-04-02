@@ -437,6 +437,16 @@ setup_menu (AdwTabView *view,
 }
 
 
+static gint
+compare_process_pid (gconstpointer a, gconstpointer b)
+{
+  GPid pa = kgx_process_get_pid (*(KgxProcess **) a);
+  GPid pb = kgx_process_get_pid (*(KgxProcess **) b);
+
+  return pa < pb ? -1 : pa > pb ? 1 : 0;
+}
+
+
 static char *
 fallback_title (G_GNUC_UNUSED GObject *self,
                 KgxTrain              *train)
@@ -453,27 +463,44 @@ fallback_title (G_GNUC_UNUSED GObject *self,
         g_strstrip (shell_name);
     }
 
-    /* If there's a child process, show "shell: child" with activity indicator */
+    /* If there are child processes, build full chain: >shell>child>grandchild */
     {
       static const char *activity_chars[] = { "⠂", "⠒", "⠲", "⠰", "⠠", "⠤", "⠦", "⠆" };
       static int frame = 0;
       g_autoptr(GPtrArray) children = kgx_train_get_children (train);
 
       if (children && children->len > 0) {
-        KgxProcess *child = g_ptr_array_index (children, children->len - 1);
-        GStrv argv = kgx_process_get_argv (child);
+        g_autoptr(GString) chain = g_string_new (NULL);
+        const char *indicator = activity_chars[frame++ % G_N_ELEMENTS (activity_chars)];
 
-        if (argv && argv[0]) {
-          g_autofree char *child_name = g_path_get_basename (argv[0]);
-          const char *indicator = activity_chars[frame++ % G_N_ELEMENTS (activity_chars)];
+        g_ptr_array_sort (children, compare_process_pid);
 
-          if (child_name && child_name[0] != '\0') {
-            if (shell_name && shell_name[0] != '\0')
-              return g_strdup_printf ("%s: %s %s", shell_name, child_name, indicator);
-            else
-              return g_strdup_printf ("%s %s", child_name, indicator);
+        {
+          g_autoptr(GHashTable) seen = g_hash_table_new (g_str_hash, g_str_equal);
+
+          if (shell_name && shell_name[0] != '\0') {
+            g_string_append_printf (chain, ">%s", shell_name);
+            g_hash_table_add (seen, shell_name);
+          }
+
+          for (guint i = 0; i < children->len; i++) {
+            KgxProcess *child = g_ptr_array_index (children, i);
+            GStrv argv = kgx_process_get_argv (child);
+
+            if (argv && argv[0]) {
+              g_autofree char *name = g_path_get_basename (argv[0]);
+
+              if (name && name[0] != '\0' &&
+                  !g_hash_table_contains (seen, name)) {
+                g_hash_table_add (seen, g_strdup (name));
+                g_string_append_printf (chain, ">%s", name);
+              }
+            }
           }
         }
+
+        if (chain->len > 0)
+          return g_strdup_printf ("%s %s", indicator, chain->str);
       }
     }
 

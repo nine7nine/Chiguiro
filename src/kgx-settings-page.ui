@@ -3,476 +3,671 @@
   <requires lib="gtk" version="4.0" />
   <template class="KgxSettingsPage" parent="AdwBin">
     <property name="child">
-      <object class="GtkScrolledWindow" id="scrolled_window">
-        <property name="hscrollbar-policy">never</property>
+      <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">8</property>
+            <property name="margin-bottom">260</property>
+
+        <!-- ═══ Static About Section (always visible) ═══ -->
         <child>
-          <object class="AdwClamp">
-            <property name="maximum-size">1200</property>
-            <property name="valign">start</property>
-            <property name="vexpand">False</property>
-            <property name="margin-top">24</property>
-            <property name="margin-bottom">315</property>
-            <property name="margin-start">24</property>
-            <property name="margin-end">24</property>
-            <property name="child">
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="halign">center</property>
+            <property name="spacing">4</property>
+            <property name="margin-top">16</property>
+            <child>
+              <object class="GtkPicture" id="logo_picture">
+                <property name="can-shrink">False</property>
+                <property name="halign">center</property>
+                <property name="content-fit">contain</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">· C h i g ü i r o ·</property>
+                <property name="use-markup">True</property>
+                <style>
+                  <class name="title-1" />
+                </style>
+                <attributes>
+                  <attribute name="weight" value="bold" />
+                  <attribute name="scale" value="1.4" />
+                  <attribute name="letter-spacing" value="4096" />
+                </attributes>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="version_label">
+                <property name="label">v0.01-alpha</property>
+                <style>
+                  <class name="about-accent" />
+                </style>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">© 2026 Jordan Johnston</property>
+                <style>
+                  <class name="about-accent" />
+                </style>
+              </object>
+            </child>
+            <child>
               <object class="GtkBox">
-                <property name="orientation">vertical</property>
-                <property name="spacing">16</property>
-                    <!-- About Section -->
-                    <child>
-                      <object class="GtkBox">
-                        <property name="orientation">vertical</property>
-                        <property name="halign">center</property>
-                        <property name="valign">start</property>
-                        <property name="spacing">4</property>
+                <property name="orientation">horizontal</property>
+                <property name="halign">center</property>
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkLinkButton">
+                    <property name="label" translatable="yes">Github</property>
+                    <property name="uri">https://github.com/nine7nine/Chiguiro</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLinkButton">
+                    <property name="label" translatable="yes">Issues</property>
+                    <property name="uri">https://github.com/nine7nine/Chiguiro/issues</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <!-- ═══ Page indicator + dots ═══ -->
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="halign">center</property>
+            <property name="spacing">4</property>
+            <property name="margin-top">4</property>
+            <property name="margin-bottom">4</property>
+            <child>
+              <object class="GtkLabel" id="page_title">
+                <property name="label" translatable="yes">· General ·</property>
+                <style>
+                  <class name="title-1" />
+                </style>
+                <attributes>
+                  <attribute name="weight" value="bold" />
+                  <attribute name="scale" value="1.15" />
+                </attributes>
+              </object>
+            </child>
+            <child>
+              <object class="AdwCarouselIndicatorDots">
+                <property name="carousel">carousel</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <!-- ═══ Carousel (paginated settings) ═══ -->
+        <child>
+          <object class="AdwCarousel" id="carousel">
+            <property name="hexpand">True</property>
+            <property name="allow-mouse-drag">True</property>
+            <property name="allow-scroll-wheel">True</property>
+            <property name="allow-long-swipes">True</property>
+            <property name="spacing">0</property>
+
+            <!-- ── Page 1: General ── -->
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">600</property>
+                <property name="valign">start</property>
+                <property name="hexpand">True</property>
+                <property name="margin-top">8</property>
+                <property name="margin-bottom">12</property>
+                <property name="margin-start">24</property>
+                <property name="margin-end">24</property>
+                <property name="child">
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">16</property>
+
+                        <!-- Font Group -->
                         <child>
-                          <object class="GtkPicture" id="logo_picture">
-                            <property name="can-shrink">False</property>
-                            <property name="halign">center</property>
-                            <property name="content-fit">contain</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">· C h i g ü i r o ·</property>
-                            <property name="use-markup">True</property>
-                            <style>
-                              <class name="title-1" />
-                            </style>
-                            <attributes>
-                              <attribute name="weight" value="bold" />
-                              <attribute name="scale" value="1.4" />
-                              <attribute name="letter-spacing" value="4096" />
-                            </attributes>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel" id="version_label">
-                            <property name="label">v0.01-alpha</property>
-                            <style>
-                              <class name="about-accent" />
-                            </style>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkLabel">
-                            <property name="label" translatable="yes">© 2026 Jordan Johnston</property>
-                            <style>
-                              <class name="about-accent" />
-                            </style>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">horizontal</property>
-                            <property name="halign">center</property>
-                            <property name="spacing">12</property>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Font</property>
                             <child>
-                              <object class="GtkLinkButton">
-                                <property name="label" translatable="yes">Github</property>
-                                <property name="uri">https://github.com/nine7nine/Chiguiro</property>
+                              <object class="AdwSwitchRow" id="use_system_font">
+                                <property name="title" translatable="yes">Use _System Default</property>
+                                <property name="use-underline">True</property>
                               </object>
                             </child>
                             <child>
-                              <object class="GtkLinkButton">
-                                <property name="label" translatable="yes">Issues</property>
-                                <property name="uri">https://github.com/nine7nine/Chiguiro/issues</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </child>
-
-                    <!-- Two Column Layout -->
-                    <child>
-                      <object class="GtkBox">
-                        <property name="orientation">horizontal</property>
-                        <property name="spacing">24</property>
-                        <property name="homogeneous">True</property>
-                        <property name="vexpand">False</property>
-
-                        <!-- Left Column: Preferences -->
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">vertical</property>
-                            <property name="spacing">16</property>
-
-                            <!-- Font Group -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Font</property>
-                                <child>
-                                  <object class="AdwSwitchRow" id="use_system_font">
-                                    <property name="title" translatable="yes">Use _System Default</property>
-                                    <property name="use-underline">True</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow" id="custom_font">
-                                    <property name="title" translatable="yes">Custom _Font</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="activatable">True</property>
-                                    <property name="action-name">settings.select-font</property>
-                                    <child type="suffix">
-                                      <object class="GtkBox">
-                                        <property name="spacing">6</property>
-                                        <child>
-                                          <object class="GtkLabel">
-                                            <binding name="attributes">
-                                              <closure type="PangoAttrList" function="font_as_attributes">
-                                                <lookup name="custom-font">
-                                                  <lookup name="settings">KgxSettingsPage</lookup>
-                                                </lookup>
-                                              </closure>
-                                            </binding>
-                                            <binding name="label">
-                                              <closure type="gchararray" function="font_as_label">
-                                                <lookup name="custom-font">
-                                                  <lookup name="settings">KgxSettingsPage</lookup>
-                                                </lookup>
-                                              </closure>
-                                            </binding>
-                                            <property name="ellipsize">middle</property>
-                                            <style>
-                                              <class name="dim-label" />
-                                            </style>
-                                          </object>
-                                        </child>
-                                        <child>
-                                          <object class="GtkImage">
-                                            <property name="icon-name">go-next-symbolic</property>
-                                          </object>
-                                        </child>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwSpinRow" id="text_scale">
-                                    <property name="title" translatable="yes">Text _Scale</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="numeric">True</property>
-                                    <property name="digits">0</property>
-                                    <property name="adjustment">
-                                      <object class="GtkAdjustment">
-                                        <property name="lower">50</property>
-                                        <property name="upper">400</property>
-                                        <property name="page-increment">25</property>
-                                        <property name="step-increment">10</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-
-                            <!-- Appearance Group -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Appearance</property>
-                                <child>
-                                  <object class="AdwSpinRow" id="transparency_level">
-                                    <property name="title" translatable="yes">Window _Opacity</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="numeric">True</property>
-                                    <property name="digits">0</property>
-                                    <property name="adjustment">
-                                      <object class="GtkAdjustment">
-                                        <property name="lower">0</property>
-                                        <property name="upper">100</property>
-                                        <property name="page-increment">10</property>
-                                        <property name="step-increment">1</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwSpinRow" id="chrome_opacity">
-                                    <property name="title" translatable="yes">Chrome _Opacity</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="numeric">True</property>
-                                    <property name="digits">0</property>
-                                    <property name="adjustment">
-                                      <object class="GtkAdjustment">
-                                        <property name="lower">0</property>
-                                        <property name="upper">100</property>
-                                        <property name="page-increment">10</property>
-                                        <property name="step-increment">1</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwSwitchRow" id="use_chrome_bg">
-                                    <property name="title" translatable="yes">Use Chrome Color for Terminal</property>
-                                    <property name="use-underline">True</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Chrome _Color</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="activatable-widget">chrome_color</property>
-                                    <child type="suffix">
-                                      <object class="GtkColorDialogButton" id="chrome_color">
-                                        <property name="valign">center</property>
-                                        <property name="margin-top">8</property>
-                                        <property name="margin-bottom">8</property>
-                                        <property name="dialog">
-                                          <object class="GtkColorDialog">
-                                            <property name="with-alpha">False</property>
-                                          </object>
-                                        </property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Accent _Color</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="activatable-widget">accent_color</property>
-                                    <child type="suffix">
-                                      <object class="GtkColorDialogButton" id="accent_color">
-                                        <property name="valign">center</property>
-                                        <property name="margin-top">8</property>
-                                        <property name="margin-bottom">8</property>
-                                        <property name="dialog">
-                                          <object class="GtkColorDialog">
-                                            <property name="with-alpha">False</property>
-                                          </object>
-                                        </property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-
-                            <!-- Behavior Group -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Behavior</property>
-                                <child>
-                                  <object class="AdwSwitchRow" id="unlimited_scrollback">
-                                    <property name="title" translatable="yes">_Unlimited Scrollback</property>
-                                    <property name="use-underline">True</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwSpinRow" id="scrollback">
-                                    <property name="title" translatable="yes">_Scrollback Lines</property>
-                                    <property name="use-underline">True</property>
-                                    <property name="sensitive" bind-source="unlimited_scrollback" bind-property="active"
-                                      bind-flags="sync-create|invert-boolean" />
-                                    <property name="numeric">True</property>
-                                    <property name="digits">0</property>
-                                    <property name="adjustment">
-                                      <object class="GtkAdjustment">
-                                        <property name="lower">0</property>
-                                        <property name="upper">800000</property>
-                                        <property name="page-increment">1000</property>
-                                        <property name="step-increment">1000</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-
-                            <!-- Terminal Bell Group -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Terminal Bell</property>
-                                <property name="description" translatable="yes">Control how alerts are indicated</property>
-                                <child>
-                                  <object class="AdwSwitchRow" id="audible_bell">
-                                    <property name="title" translatable="yes">Play _Sound</property>
-                                    <property name="use-underline">True</property>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwSwitchRow" id="visual_bell">
-                                    <property name="title" translatable="yes">_Visual Effects</property>
-                                    <property name="use-underline">True</property>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-
-                          </object>
-                        </child>
-
-                        <!-- Right Column: Keyboard Shortcuts -->
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">vertical</property>
-                            <property name="spacing">16</property>
-
-                            <!-- Application Shortcuts -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Application</property>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">New Window</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;n</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-
-                            <!-- Terminal Shortcuts -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Terminal</property>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Find</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;f</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Copy</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;c</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Paste</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;v</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-
-                            <!-- Tabs Shortcuts -->
-                            <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Tabs</property>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">New Tab</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;t</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Close Tab</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Primary&gt;w</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Next Tab</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Primary&gt;Page_Down</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Previous Tab</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Primary&gt;Page_Up</property>
-                                        <property name="valign">center</property>
-                                      </object>
-                                    </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Switch to Tab 1–9</property>
-                                    <child type="suffix">
+                              <object class="AdwActionRow" id="custom_font">
+                                <property name="title" translatable="yes">Custom _Font</property>
+                                <property name="use-underline">True</property>
+                                <property name="activatable">True</property>
+                                <property name="action-name">settings.select-font</property>
+                                <child type="suffix">
+                                  <object class="GtkBox">
+                                    <property name="spacing">6</property>
+                                    <child>
                                       <object class="GtkLabel">
-                                        <property name="label">Alt + 1 … 9</property>
-                                        <property name="valign">center</property>
+                                        <binding name="attributes">
+                                          <closure type="PangoAttrList" function="font_as_attributes">
+                                            <lookup name="custom-font">
+                                              <lookup name="settings">KgxSettingsPage</lookup>
+                                            </lookup>
+                                          </closure>
+                                        </binding>
+                                        <binding name="label">
+                                          <closure type="gchararray" function="font_as_label">
+                                            <lookup name="custom-font">
+                                              <lookup name="settings">KgxSettingsPage</lookup>
+                                            </lookup>
+                                          </closure>
+                                        </binding>
+                                        <property name="ellipsize">middle</property>
                                         <style>
                                           <class name="dim-label" />
                                         </style>
                                       </object>
                                     </child>
-                                  </object>
-                                </child>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Switch to Tab 10</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Alt&gt;0</property>
-                                        <property name="valign">center</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">go-next-symbolic</property>
                                       </object>
                                     </child>
                                   </object>
                                 </child>
                               </object>
                             </child>
-
-                            <!-- Window Shortcuts -->
                             <child>
-                              <object class="AdwPreferencesGroup">
-                                <property name="title" translatable="yes">Window</property>
-                                <child>
-                                  <object class="AdwActionRow">
-                                    <property name="title" translatable="yes">Fullscreen</property>
-                                    <child type="suffix">
-                                      <object class="GtkShortcutLabel">
-                                        <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;F11</property>
-                                        <property name="valign">center</property>
+                              <object class="AdwSpinRow" id="text_scale">
+                                <property name="title" translatable="yes">Text _Scale</property>
+                                <property name="use-underline">True</property>
+                                <property name="numeric">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">50</property>
+                                    <property name="upper">400</property>
+                                    <property name="page-increment">25</property>
+                                    <property name="step-increment">10</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Appearance Group -->
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Appearance</property>
+                            <child>
+                              <object class="AdwSpinRow" id="transparency_level">
+                                <property name="title" translatable="yes">Window _Opacity</property>
+                                <property name="use-underline">True</property>
+                                <property name="numeric">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">0</property>
+                                    <property name="upper">100</property>
+                                    <property name="page-increment">10</property>
+                                    <property name="step-increment">1</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="chrome_opacity">
+                                <property name="title" translatable="yes">Chrome _Opacity</property>
+                                <property name="use-underline">True</property>
+                                <property name="numeric">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">0</property>
+                                    <property name="upper">100</property>
+                                    <property name="page-increment">10</property>
+                                    <property name="step-increment">1</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="use_chrome_bg">
+                                <property name="title" translatable="yes">Use Chrome Color for Terminal</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Chrome _Color</property>
+                                <property name="use-underline">True</property>
+                                <property name="activatable-widget">chrome_color</property>
+                                <child type="suffix">
+                                  <object class="GtkColorDialogButton" id="chrome_color">
+                                    <property name="valign">center</property>
+                                    <property name="margin-top">8</property>
+                                    <property name="margin-bottom">8</property>
+                                    <property name="dialog">
+                                      <object class="GtkColorDialog">
+                                        <property name="with-alpha">False</property>
                                       </object>
-                                    </child>
+                                    </property>
                                   </object>
                                 </child>
                               </object>
                             </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Accent _Color</property>
+                                <property name="use-underline">True</property>
+                                <property name="activatable-widget">accent_color</property>
+                                <child type="suffix">
+                                  <object class="GtkColorDialogButton" id="accent_color">
+                                    <property name="valign">center</property>
+                                    <property name="margin-top">8</property>
+                                    <property name="margin-bottom">8</property>
+                                    <property name="dialog">
+                                      <object class="GtkColorDialog">
+                                        <property name="with-alpha">False</property>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
 
+                        <!-- Behavior Group -->
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Behavior</property>
+                            <child>
+                              <object class="AdwSwitchRow" id="unlimited_scrollback">
+                                <property name="title" translatable="yes">_Unlimited Scrollback</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="scrollback">
+                                <property name="title" translatable="yes">_Scrollback Lines</property>
+                                <property name="use-underline">True</property>
+                                <property name="sensitive" bind-source="unlimited_scrollback" bind-property="active"
+                                  bind-flags="sync-create|invert-boolean" />
+                                <property name="numeric">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">0</property>
+                                    <property name="upper">800000</property>
+                                    <property name="page-increment">1000</property>
+                                    <property name="step-increment">1000</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+
+                        <!-- Terminal Bell Group -->
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Terminal Bell</property>
+                            <property name="description" translatable="yes">Control how alerts are indicated</property>
+                            <child>
+                              <object class="AdwSwitchRow" id="audible_bell">
+                                <property name="title" translatable="yes">Play _Sound</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="visual_bell">
+                                <property name="title" translatable="yes">_Visual Effects</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
 
                       </object>
-                    </child>
-                  </object>
-                </property>
+                  </property>
               </object>
             </child>
+
+            <!-- ── Page 2: Particles ── -->
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">600</property>
+                <property name="valign">start</property>
+                <property name="hexpand">True</property>
+                <property name="margin-top">8</property>
+                <property name="margin-bottom">12</property>
+                <property name="margin-start">24</property>
+                <property name="margin-end">24</property>
+                <property name="child">
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">16</property>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Particles</property>
+                            <child>
+                              <object class="AdwSwitchRow" id="edge_overscroll">
+                                <property name="title" translatable="yes">_Overscroll Indicator</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Overscroll Co_lor</property>
+                                <property name="use-underline">True</property>
+                                <property name="activatable-widget">edge_overscroll_color</property>
+                                <child type="suffix">
+                                  <object class="GtkColorDialogButton" id="edge_overscroll_color">
+                                    <property name="valign">center</property>
+                                    <property name="dialog">
+                                      <object class="GtkColorDialog">
+                                        <property name="with-alpha">False</property>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="edge_privilege">
+                                <property name="title" translatable="yes">_Privilege Indicator</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Privilege C_olor</property>
+                                <property name="use-underline">True</property>
+                                <property name="activatable-widget">edge_privilege_color</property>
+                                <child type="suffix">
+                                  <object class="GtkColorDialogButton" id="edge_privilege_color">
+                                    <property name="valign">center</property>
+                                    <property name="dialog">
+                                      <object class="GtkColorDialog">
+                                        <property name="with-alpha">False</property>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_thickness">
+                                <property name="title" translatable="yes">_Thickness</property>
+                                <property name="use-underline">True</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">2</property>
+                                    <property name="upper">20</property>
+                                    <property name="step-increment">1</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_speed">
+                                <property name="title" translatable="yes">_Speed</property>
+                                <property name="use-underline">True</property>
+                                <property name="digits">1</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">10</property>
+                                    <property name="upper">300</property>
+                                    <property name="step-increment">10</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_pulse_depth">
+                                <property name="title" translatable="yes">Pulse _Depth</property>
+                                <property name="use-underline">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">0</property>
+                                    <property name="upper">100</property>
+                                    <property name="step-increment">5</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_tail_length">
+                                <property name="title" translatable="yes">Tail _Length</property>
+                                <property name="use-underline">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">10</property>
+                                    <property name="upper">300</property>
+                                    <property name="step-increment">10</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_pulse_speed">
+                                <property name="title" translatable="yes">_Pulse Speed</property>
+                                <property name="use-underline">True</property>
+                                <property name="digits">1</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">10</property>
+                                    <property name="upper">500</property>
+                                    <property name="step-increment">10</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_burst_count">
+                                <property name="title" translatable="yes">_Burst Count</property>
+                                <property name="use-underline">True</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">1</property>
+                                    <property name="upper">8</property>
+                                    <property name="step-increment">1</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwSpinRow" id="edge_burst_spread">
+                                <property name="title" translatable="yes">_Burst Spread</property>
+                                <property name="use-underline">True</property>
+                                <property name="digits">0</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">50</property>
+                                    <property name="upper">500</property>
+                                    <property name="step-increment">10</property>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                  </property>
+              </object>
+            </child>
+
+            <!-- ── Page 3: Shortcuts ── -->
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">600</property>
+                <property name="valign">start</property>
+                <property name="hexpand">True</property>
+                <property name="margin-top">8</property>
+                <property name="margin-bottom">12</property>
+                <property name="margin-start">24</property>
+                <property name="margin-end">24</property>
+                <property name="child">
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">16</property>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Application</property>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">New Window</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;n</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Terminal</property>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Find</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;f</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Copy</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;c</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Paste</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;v</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Tabs</property>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">New Tab</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;t</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Close Tab</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Primary&gt;w</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Next Tab</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Primary&gt;Page_Down</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Previous Tab</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Primary&gt;Page_Up</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Switch to Tab 1–9</property>
+                                <child type="suffix">
+                                  <object class="GtkLabel">
+                                    <property name="label">Alt + 1 … 9</property>
+                                    <property name="valign">center</property>
+                                    <style>
+                                      <class name="dim-label" />
+                                    </style>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Switch to Tab 10</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Alt&gt;0</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Window</property>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Fullscreen</property>
+                                <child type="suffix">
+                                  <object class="GtkShortcutLabel">
+                                    <property name="accelerator">&lt;Shift&gt;&lt;Primary&gt;F11</property>
+                                    <property name="valign">center</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                  </property>
+              </object>
+            </child>
+
           </object>
-        </property>
+        </child>
+
+      </object>
+    </property>
   </template>
   <object class="GBindingGroup" id="settings_binds">
     <property name="source" bind-source="KgxSettingsPage" bind-property="settings"

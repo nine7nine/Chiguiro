@@ -37,8 +37,6 @@ struct _KgxSettingsPage {
   GBindingGroup        *settings_binds;
 
 
-  GtkWidget            *scrolled_window;
-
   GtkWidget            *audible_bell;
   GtkWidget            *visual_bell;
   GtkWidget            *use_system_font;
@@ -51,7 +49,20 @@ struct _KgxSettingsPage {
   GtkWidget            *accent_color;
   GtkWidget            *unlimited_scrollback;
   GtkWidget            *scrollback;
+  GtkWidget            *edge_overscroll;
+  GtkWidget            *edge_overscroll_color;
+  GtkWidget            *edge_privilege;
+  GtkWidget            *edge_privilege_color;
+  GtkWidget            *edge_thickness;
+  GtkWidget            *edge_speed;
+  GtkWidget            *edge_pulse_depth;
+  GtkWidget            *edge_tail_length;
+  GtkWidget            *edge_pulse_speed;
+  GtkWidget            *edge_burst_count;
+  GtkWidget            *edge_burst_spread;
   GtkWidget            *logo_picture;
+  GtkWidget            *page_title;
+  AdwCarousel          *carousel;
   KgxSprite            *sprite;
 
   GtkExpressionWatch   *font_watch;
@@ -281,18 +292,7 @@ opacity_percent_to_value (GBinding     *binding,
 }
 
 
-static void
-kgx_settings_page_map (GtkWidget *widget)
-{
-  KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
-  GtkAdjustment *vadj;
 
-  GTK_WIDGET_CLASS (kgx_settings_page_parent_class)->map (widget);
-
-  /* Scroll to top when the settings page becomes visible */
-  vadj = gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (self->scrolled_window));
-  gtk_adjustment_set_value (vadj, 0.0);
-}
 
 
 static void
@@ -303,8 +303,8 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
 
   object_class->dispose = kgx_settings_page_dispose;
   object_class->set_property = kgx_settings_page_set_property;
-  widget_class->map = kgx_settings_page_map;
   object_class->get_property = kgx_settings_page_get_property;
+
 
   pspecs[PROP_SETTINGS] =
     g_param_spec_object ("settings", NULL, NULL,
@@ -329,8 +329,20 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrolled_window);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_overscroll);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_overscroll_color);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_privilege);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_privilege_color);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_count);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_spread);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
 
   gtk_widget_class_bind_template_callback (widget_class, font_as_attributes);
   gtk_widget_class_bind_template_callback (widget_class, font_as_label);
@@ -382,6 +394,48 @@ notify_use_system (gpointer user_data)
 }
 
 
+static const char *page_titles[] = { "· General ·", "· Particles ·", "· Shortcuts ·" };
+
+
+static gboolean
+carousel_scroll (GtkEventControllerScroll *controller,
+                 double                    dx,
+                 double                    dy,
+                 KgxSettingsPage          *self)
+{
+  int n_pages = adw_carousel_get_n_pages (self->carousel);
+  double pos  = adw_carousel_get_position (self->carousel);
+  int target;
+
+  if (dy > 0)
+    target = (int) pos + 1;
+  else if (dy < 0)
+    target = (int) pos - 1;
+  else
+    return FALSE;
+
+  if (target < 0 || target >= n_pages)
+    return FALSE;
+
+  adw_carousel_scroll_to (self->carousel,
+                          adw_carousel_get_nth_page (self->carousel, target),
+                          TRUE);
+  return TRUE;
+}
+
+
+static void
+carousel_page_changed (AdwCarousel     *carousel,
+                       guint            index,
+                       KgxSettingsPage *self)
+{
+  guint page = adw_carousel_get_position (carousel) + 0.5;
+
+  if (page < G_N_ELEMENTS (page_titles))
+    gtk_label_set_label (GTK_LABEL (self->page_title), page_titles[page]);
+}
+
+
 static void
 kgx_settings_page_init (KgxSettingsPage *self)
 {
@@ -389,6 +443,18 @@ kgx_settings_page_init (KgxSettingsPage *self)
   g_autoptr (WatchData) data = watch_data_alloc ();
 
   gtk_widget_init_template (GTK_WIDGET (self));
+
+  g_signal_connect (self->carousel, "notify::position",
+                    G_CALLBACK (carousel_page_changed), self);
+
+  {
+    GtkEventController *scroll_ctrl;
+    scroll_ctrl = gtk_event_controller_scroll_new (
+                    GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
+    g_signal_connect (scroll_ctrl, "scroll",
+                      G_CALLBACK (carousel_scroll), self);
+    gtk_widget_add_controller (GTK_WIDGET (self->carousel), scroll_ctrl);
+  }
 
   /* Capybara sprite animation — credit: https://rainloaf.itch.io/capybara-sprite-sheet */
   self->sprite = kgx_sprite_new (KGX_APPLICATION_PATH "icons/capybara.png",
@@ -462,4 +528,46 @@ kgx_settings_page_init (KgxSettingsPage *self)
   g_binding_group_bind (self->settings_binds, "scrollback-limit",
                         self->scrollback, "value",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+
+  /* Edge effects */
+  g_binding_group_bind (self->settings_binds, "edge-overscroll",
+                        self->edge_overscroll, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-overscroll-color",
+                             self->edge_overscroll_color, "rgba",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             string_to_rgba, rgba_to_string, NULL, NULL);
+  g_binding_group_bind (self->settings_binds, "edge-privilege",
+                        self->edge_privilege, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-privilege-color",
+                             self->edge_privilege_color, "rgba",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             string_to_rgba, rgba_to_string, NULL, NULL);
+  g_binding_group_bind (self->settings_binds, "edge-thickness",
+                        self->edge_thickness, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed",
+                             self->edge_speed, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth",
+                             self->edge_pulse_depth, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length",
+                             self->edge_tail_length, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed",
+                             self->edge_pulse_speed, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind (self->settings_binds, "edge-burst-count",
+                        self->edge_burst_count, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-burst-spread",
+                             self->edge_burst_spread, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
 }

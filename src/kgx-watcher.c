@@ -120,6 +120,14 @@ handle_watch_iter (gpointer pid,
       g_debug ("watcher: Hello %i!", GPOINTER_TO_INT (pid));
 
       g_tree_insert (self->children, pid, child_watch);
+
+      /* Also watch this child so its descendants are tracked. */
+      if (!g_tree_lookup (self->watching, pid)) {
+        ProcessWatch *descendant_watch = process_watch_alloc ();
+        descendant_watch->process = g_rc_box_acquire (process);
+        g_set_weak_pointer (&descendant_watch->train, watch->train);
+        g_tree_insert (self->watching, pid, descendant_watch);
+      }
     }
 
     kgx_train_push_child (watch->train, process);

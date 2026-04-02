@@ -20,6 +20,8 @@ kgx_sources = files(
   'kgx-despatcher.h',
   'kgx-drop-target.c',
   'kgx-drop-target.h',
+  'kgx-edge.c',
+  'kgx-edge.h',
   'kgx-empty.c',
   'kgx-empty.h',
   'kgx-file-closures.h',

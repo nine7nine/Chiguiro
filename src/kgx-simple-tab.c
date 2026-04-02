@@ -21,6 +21,8 @@
 #include <glib/gi18n.h>
 
 #include "kgx-depot.h"
+#include "kgx-edge.h"
+#include "kgx-window.h"
 #include "kgx-settings.h"
 #include "kgx-train.h"
 #include "kgx-utils.h"
@@ -41,6 +43,8 @@ struct _KgxSimpleTab {
   KgxDepot     *depot;
 
   GCancellable *spawn_cancellable;
+
+  GtkWidget    *scrolled_window;
 };
 
 
@@ -63,6 +67,10 @@ kgx_simple_tab_dispose (GObject *object)
 {
   KgxSimpleTab *self = KGX_SIMPLE_TAB (object);
 
+  g_signal_handlers_disconnect_by_data (self, self);
+
+  self->scrolled_window = NULL;
+
   g_clear_pointer (&self->initial_work_dir, g_free);
   g_clear_pointer (&self->command, g_strfreev);
   g_clear_pointer (&self->environ, g_strfreev);
@@ -70,6 +78,8 @@ kgx_simple_tab_dispose (GObject *object)
 
   g_cancellable_cancel (self->spawn_cancellable);
   g_clear_object (&self->spawn_cancellable);
+
+  gtk_widget_dispose_template (GTK_WIDGET (self), KGX_TYPE_SIMPLE_TAB);
 
   G_OBJECT_CLASS (kgx_simple_tab_parent_class)->dispose (object);
 }
@@ -250,6 +260,51 @@ kgx_simple_tab_start_finish (KgxTab        *page,
 }
 
 
+static gboolean
+edge_scroll (GtkEventControllerScroll *controller,
+             double                    dx,
+             double                    dy,
+             KgxSimpleTab             *self)
+{
+  GtkAdjustment *vadj;
+  double value, lower, upper, page;
+  GdkModifierType mods;
+
+  mods = gtk_event_controller_get_current_event_state (
+           GTK_EVENT_CONTROLLER (controller));
+
+  /* Don't interfere with Ctrl+scroll (zoom). */
+  if (mods & GDK_CONTROL_MASK)
+    return FALSE;
+
+  if (!self->scrolled_window)
+    return FALSE;
+
+  vadj  = gtk_scrolled_window_get_vadjustment (
+            GTK_SCROLLED_WINDOW (self->scrolled_window));
+  value = gtk_adjustment_get_value (vadj);
+  lower = gtk_adjustment_get_lower (vadj);
+  upper = gtk_adjustment_get_upper (vadj);
+  page  = gtk_adjustment_get_page_size (vadj);
+
+  if (dy < 0 && value <= lower) {
+    GtkRoot *root = gtk_widget_get_root (GTK_WIDGET (self));
+    if (KGX_IS_WINDOW (root))
+      kgx_window_fire_overscroll (KGX_WINDOW (root), GTK_POS_TOP);
+    return FALSE;
+  }
+
+  if (dy > 0 && value >= upper - page) {
+    GtkRoot *root = gtk_widget_get_root (GTK_WIDGET (self));
+    if (KGX_IS_WINDOW (root))
+      kgx_window_fire_overscroll (KGX_WINDOW (root), GTK_POS_BOTTOM);
+    return FALSE;
+  }
+
+  return FALSE;
+}
+
+
 static void
 kgx_simple_tab_class_init (KgxSimpleTabClass *klass)
 {
@@ -299,6 +354,8 @@ kgx_simple_tab_class_init (KgxSimpleTabClass *klass)
   gtk_widget_class_set_template_from_resource (widget_class,
                                                KGX_APPLICATION_PATH "kgx-simple-tab.ui");
 
+  gtk_widget_class_bind_template_child (widget_class, KgxSimpleTab, scrolled_window);
+
   gtk_widget_class_bind_template_callback (widget_class, kgx_file_as_display_or_uri);
 }
 
@@ -306,5 +363,13 @@ kgx_simple_tab_class_init (KgxSimpleTabClass *klass)
 static void
 kgx_simple_tab_init (KgxSimpleTab *self)
 {
+  GtkEventController *scroll_ctrl;
+
   gtk_widget_init_template (GTK_WIDGET (self));
+
+  scroll_ctrl = gtk_event_controller_scroll_new (
+                  GTK_EVENT_CONTROLLER_SCROLL_VERTICAL);
+  g_signal_connect (scroll_ctrl, "scroll",
+                    G_CALLBACK (edge_scroll), self);
+  gtk_widget_add_controller (GTK_WIDGET (self->scrolled_window), scroll_ctrl);
 }

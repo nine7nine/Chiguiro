@@ -70,10 +70,14 @@ window.terminal-window.translucent.background.csd {
   background-image: none;
 }
 
-.terminal-window scrolledwindow.terminal > undershoot,
-.terminal-window scrolledwindow.terminal > overshoot {
+.terminal-window scrolledwindow > undershoot,
+.terminal-window scrolledwindow > overshoot {
   background: none;
   box-shadow: none;
+}
+
+kgx-edge {
+  color: var(--accent-bg-color);
 }
 
 .terminal-window kgx-tab.starting > overlay > stack {
@@ -183,6 +187,8 @@ settings-page headerbar,
 settings-page scrolledwindow,
 settings-page viewport,
 settings-page clamp,
+settings-page carousel,
+settings-page carouselindicatordots,
 settings-page box {
   background-color: transparent;
   background-image: none;

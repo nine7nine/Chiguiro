@@ -59,6 +59,20 @@ struct _KgxSettings {
   char                 *chrome_color;
   char                 *accent_color;
 
+  gboolean              edge_overscroll;
+  char                 *edge_overscroll_color;
+  int                   edge_overscroll_style;
+  gboolean              edge_privilege;
+  char                 *edge_privilege_color;
+  int                   edge_thickness;
+  double                edge_speed;
+  double                edge_pulse_speed;
+  double                edge_pulse_depth;
+  double                edge_tail_length;
+  int                   edge_burst_count;
+  double                edge_burst_spread;
+  int                   edge_privilege_direction;
+
   KgxLiveryManager     *livery_manager;
 
   GSettings            *settings;
@@ -91,6 +105,19 @@ enum {
   PROP_CHROME_COLOR,
   PROP_USE_CHROME_BG,
   PROP_ACCENT_COLOR,
+  PROP_EDGE_OVERSCROLL,
+  PROP_EDGE_OVERSCROLL_COLOR,
+  PROP_EDGE_OVERSCROLL_STYLE,
+  PROP_EDGE_PRIVILEGE,
+  PROP_EDGE_PRIVILEGE_COLOR,
+  PROP_EDGE_THICKNESS,
+  PROP_EDGE_SPEED,
+  PROP_EDGE_PULSE_SPEED,
+  PROP_EDGE_PULSE_DEPTH,
+  PROP_EDGE_TAIL_LENGTH,
+  PROP_EDGE_BURST_COUNT,
+  PROP_EDGE_BURST_SPREAD,
+  PROP_EDGE_PRIVILEGE_DIRECTION,
   LAST_PROP
 };
 static GParamSpec *pspecs[LAST_PROP] = { NULL, };
@@ -108,6 +135,8 @@ kgx_settings_dispose (GObject *object)
 
   g_clear_pointer (&self->custom_font, pango_font_description_free);
   g_clear_pointer (&self->livery, kgx_livery_unref);
+  g_clear_pointer (&self->edge_overscroll_color, g_free);
+  g_clear_pointer (&self->edge_privilege_color, g_free);
 
   G_OBJECT_CLASS (kgx_settings_parent_class)->dispose (object);
 }
@@ -232,6 +261,103 @@ kgx_settings_set_property (GObject      *object,
       self->accent_color = g_value_dup_string (value);
       g_object_notify_by_pspec (object, pspec);
       break;
+    case PROP_EDGE_OVERSCROLL:
+      kgx_set_boolean_prop (object, pspec, &self->edge_overscroll, value);
+      break;
+    case PROP_EDGE_OVERSCROLL_COLOR:
+      g_free (self->edge_overscroll_color);
+      self->edge_overscroll_color = g_value_dup_string (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_EDGE_OVERSCROLL_STYLE:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 0, 1);
+        if (new_value != self->edge_overscroll_style) {
+          self->edge_overscroll_style = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_PRIVILEGE:
+      kgx_set_boolean_prop (object, pspec, &self->edge_privilege, value);
+      break;
+    case PROP_EDGE_PRIVILEGE_COLOR:
+      g_free (self->edge_privilege_color);
+      self->edge_privilege_color = g_value_dup_string (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_EDGE_THICKNESS:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 2, 20);
+        if (new_value != self->edge_thickness) {
+          self->edge_thickness = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_SPEED:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.1, 3.0);
+        if (!G_APPROX_VALUE (self->edge_speed, new_value, DBL_EPSILON)) {
+          self->edge_speed = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_PULSE_SPEED:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.1, 5.0);
+        if (!G_APPROX_VALUE (self->edge_pulse_speed, new_value, DBL_EPSILON)) {
+          self->edge_pulse_speed = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_PULSE_DEPTH:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.0, 1.0);
+        if (!G_APPROX_VALUE (self->edge_pulse_depth, new_value, DBL_EPSILON)) {
+          self->edge_pulse_depth = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_TAIL_LENGTH:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.1, 3.0);
+        if (!G_APPROX_VALUE (self->edge_tail_length, new_value, DBL_EPSILON)) {
+          self->edge_tail_length = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_BURST_COUNT:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 1, 8);
+        if (new_value != self->edge_burst_count) {
+          self->edge_burst_count = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_BURST_SPREAD:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.5, 5.0);
+        if (!G_APPROX_VALUE (self->edge_burst_spread, new_value, DBL_EPSILON)) {
+          self->edge_burst_spread = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_PRIVILEGE_DIRECTION:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 0, 1);
+        if (new_value != self->edge_privilege_direction) {
+          self->edge_privilege_direction = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
     case PROP_LIVERY:
       kgx_settings_set_livery (self, g_value_get_boxed (value));
       break;
@@ -305,6 +431,45 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_ACCENT_COLOR:
       g_value_set_string (value, self->accent_color ? self->accent_color : "");
+      break;
+    case PROP_EDGE_OVERSCROLL:
+      g_value_set_boolean (value, self->edge_overscroll);
+      break;
+    case PROP_EDGE_OVERSCROLL_COLOR:
+      g_value_set_string (value, self->edge_overscroll_color ? self->edge_overscroll_color : "");
+      break;
+    case PROP_EDGE_OVERSCROLL_STYLE:
+      g_value_set_int (value, self->edge_overscroll_style);
+      break;
+    case PROP_EDGE_PRIVILEGE:
+      g_value_set_boolean (value, self->edge_privilege);
+      break;
+    case PROP_EDGE_PRIVILEGE_COLOR:
+      g_value_set_string (value, self->edge_privilege_color ? self->edge_privilege_color : "#d940a6");
+      break;
+    case PROP_EDGE_THICKNESS:
+      g_value_set_int (value, self->edge_thickness);
+      break;
+    case PROP_EDGE_SPEED:
+      g_value_set_double (value, self->edge_speed);
+      break;
+    case PROP_EDGE_PULSE_SPEED:
+      g_value_set_double (value, self->edge_pulse_speed);
+      break;
+    case PROP_EDGE_PULSE_DEPTH:
+      g_value_set_double (value, self->edge_pulse_depth);
+      break;
+    case PROP_EDGE_TAIL_LENGTH:
+      g_value_set_double (value, self->edge_tail_length);
+      break;
+    case PROP_EDGE_BURST_COUNT:
+      g_value_set_int (value, self->edge_burst_count);
+      break;
+    case PROP_EDGE_BURST_SPREAD:
+      g_value_set_double (value, self->edge_burst_spread);
+      break;
+    case PROP_EDGE_PRIVILEGE_DIRECTION:
+      g_value_set_int (value, self->edge_privilege_direction);
       break;
     KGX_INVALID_PROP (object, property_id, pspec);
   }
@@ -453,6 +618,71 @@ kgx_settings_class_init (KgxSettingsClass *klass)
     g_param_spec_string ("accent-color", NULL, NULL,
                          "",
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_OVERSCROLL] =
+    g_param_spec_boolean ("edge-overscroll", NULL, NULL,
+                          TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_EDGE_OVERSCROLL_COLOR] =
+    g_param_spec_string ("edge-overscroll-color", NULL, NULL,
+                         "",
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_OVERSCROLL_STYLE] =
+    g_param_spec_int ("edge-overscroll-style", NULL, NULL,
+                      0, 1, 0,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_PRIVILEGE] =
+    g_param_spec_boolean ("edge-privilege", NULL, NULL,
+                          TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_EDGE_PRIVILEGE_COLOR] =
+    g_param_spec_string ("edge-privilege-color", NULL, NULL,
+                         "#d940a6",
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_THICKNESS] =
+    g_param_spec_int ("edge-thickness", NULL, NULL,
+                      2, 20, 6,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_SPEED] =
+    g_param_spec_double ("edge-speed", NULL, NULL,
+                         0.1, 3.0, 1.0,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_PULSE_SPEED] =
+    g_param_spec_double ("edge-pulse-speed", NULL, NULL,
+                         0.1, 5.0, 1.0,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_PULSE_DEPTH] =
+    g_param_spec_double ("edge-pulse-depth", NULL, NULL,
+                         0.0, 1.0, 0.3,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_TAIL_LENGTH] =
+    g_param_spec_double ("edge-tail-length", NULL, NULL,
+                         0.1, 3.0, 1.0,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_BURST_COUNT] =
+    g_param_spec_int ("edge-burst-count", NULL, NULL,
+                      1, 8, 4,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_BURST_SPREAD] =
+    g_param_spec_double ("edge-burst-spread", NULL, NULL,
+                         0.5, 5.0, 1.0,
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_PRIVILEGE_DIRECTION] =
+    g_param_spec_int ("edge-privilege-direction", NULL, NULL,
+                      0, 1, 0,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
 
@@ -641,6 +871,45 @@ kgx_settings_init (KgxSettings *self)
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "accent-color",
                    self, "accent-color",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-overscroll",
+                   self, "edge-overscroll",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-overscroll-color",
+                   self, "edge-overscroll-color",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-overscroll-style",
+                   self, "edge-overscroll-style",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-privilege",
+                   self, "edge-privilege",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-privilege-color",
+                   self, "edge-privilege-color",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-thickness",
+                   self, "edge-thickness",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-speed",
+                   self, "edge-speed",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-pulse-speed",
+                   self, "edge-pulse-speed",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-pulse-depth",
+                   self, "edge-pulse-depth",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-tail-length",
+                   self, "edge-tail-length",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-burst-count",
+                   self, "edge-burst-count",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-burst-spread",
+                   self, "edge-burst-spread",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-privilege-direction",
+                   self, "edge-privilege-direction",
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind_with_mapping (self->settings, "custom-liveries",
                                 self->livery_manager, "custom-liveries",

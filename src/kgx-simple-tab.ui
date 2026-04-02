@@ -9,7 +9,7 @@
       </closure>
     </binding>
     <child type="content">
-      <object class="GtkScrolledWindow">
+      <object class="GtkScrolledWindow" id="scrolled_window">
         <property name="vexpand">1</property>
         <property name="propagate-natural-width">1</property>
         <property name="propagate-natural-height">1</property>

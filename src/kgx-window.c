@@ -37,6 +37,7 @@
 #include "kgx-terminal.h"
 #include "kgx-utils.h"
 
+#include "kgx-edge.h"
 #include "kgx-window.h"
 
 
@@ -61,6 +62,7 @@ struct _KgxWindowPrivate {
   GtkWidget            *search_entry;
   GtkWidget            *content_stack;
   GtkWidget            *settings_page;
+  KgxEdge              *edge;
 
   GBindingGroup        *surface_binds;
 };
@@ -166,6 +168,8 @@ kgx_window_set_property (GObject      *object,
         if (!priv->settings_visible && priv->pages) {
           gtk_widget_grab_focus (priv->pages);
         }
+        /* Ambient edge decoration while settings page is visible. */
+        kgx_edge_set_ambient (priv->edge, priv->settings_visible);
       }
       break;
     default:
@@ -604,8 +608,10 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
 
   if (status & KGX_PRIVILEGED) {
     gtk_widget_add_css_class (GTK_WIDGET (self), KGX_WINDOW_STYLE_ROOT);
+    kgx_edge_set_privileged (priv->edge, TRUE);
   } else {
     gtk_widget_remove_css_class (GTK_WIDGET (self), KGX_WINDOW_STYLE_ROOT);
+    kgx_edge_set_privileged (priv->edge, FALSE);
   }
 }
 
@@ -877,6 +883,9 @@ kgx_window_class_init (KgxWindowClass *klass)
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_entry);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, content_stack);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, settings_page);
+
+  g_type_ensure (KGX_TYPE_EDGE);
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, edge);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, settings_binds);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, surface_binds);
 
@@ -1023,6 +1032,20 @@ kgx_window_get_working_dir (KgxWindow *self)
  *
  * Adopt a (currently unowned) tab into @self, and present it
  */
+void
+kgx_window_fire_overscroll (KgxWindow       *self,
+                           GtkPositionType  edge)
+{
+  KgxWindowPrivate *priv;
+
+  g_return_if_fail (KGX_IS_WINDOW (self));
+
+  priv = kgx_window_get_instance_private (self);
+
+  kgx_edge_fire_overscroll (priv->edge, edge);
+}
+
+
 void
 kgx_window_add_tab (KgxWindow *self,
                     KgxTab    *tab)

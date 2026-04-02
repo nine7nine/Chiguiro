@@ -42,4 +42,7 @@ GFile      *kgx_window_get_working_dir (KgxWindow    *self);
 void        kgx_window_add_tab         (KgxWindow    *self,
                                         KgxTab       *tab);
 
+void        kgx_window_fire_overscroll (KgxWindow       *self,
+                                       GtkPositionType  edge);
+
 G_END_DECLS

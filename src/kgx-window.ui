@@ -2,12 +2,7 @@
 <interface>
   <requires lib="gtk" version="4.0" />
   <template class="KgxWindow" parent="AdwApplicationWindow">
-    <binding name="title">
-      <closure type="gchararray" function="kgx_text_or_fallback">
-        <lookup name="title">pages</lookup>
-        <constant type="gchararray" translatable="yes">Chigüiro</constant>
-      </closure>
-    </binding>
+    <property name="title" translatable="yes">Chigüiro</property>
     <binding name="translucent">
       <lookup name="transparency">
         <lookup name="settings">KgxWindow</lookup>
@@ -17,7 +12,9 @@
     <property name="width-request">360</property>
     <property name="height-request">294</property>
     <property name="content">
-      <object class="AdwToastOverlay" id="toasts">
+      <object class="GtkOverlay">
+        <child>
+          <object class="AdwToastOverlay" id="toasts">
         <property name="child">
           <object class="KgxFullscreenBox">
             <property name="fullscreen" bind-source="KgxWindow" bind-property="fullscreened"
@@ -216,6 +213,74 @@
             </child>
           </object>
         </property>
+      </object>
+        </child>
+        <child type="overlay">
+          <object class="KgxEdge" id="edge">
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <binding name="overscroll-enabled">
+              <lookup name="edge-overscroll">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="overscroll-color">
+              <lookup name="edge-overscroll-color">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="overscroll-style">
+              <lookup name="edge-overscroll-style">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="privilege-enabled">
+              <lookup name="edge-privilege">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="privilege-color">
+              <lookup name="edge-privilege-color">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness">
+              <lookup name="edge-thickness">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed">
+              <lookup name="edge-speed">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed">
+              <lookup name="edge-pulse-speed">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth">
+              <lookup name="edge-pulse-depth">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length">
+              <lookup name="edge-tail-length">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="burst-count">
+              <lookup name="edge-burst-count">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="burst-spread">
+              <lookup name="edge-burst-spread">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+          </object>
+        </child>
       </object>
     </property>
     <style>
