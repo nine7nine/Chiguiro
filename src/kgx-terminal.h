@@ -45,9 +45,15 @@ G_DECLARE_FINAL_TYPE (KgxTerminal, kgx_terminal, KGX, TERMINAL, VteTerminal)
 void kgx_terminal_accept_paste (KgxTerminal *self,
                                 const char  *text);
 
-void kgx_terminal_set_process_bg (KgxTerminal *self,
-                                  const char  *color_hex);
-void kgx_terminal_set_bg_hint    (KgxTerminal *self,
-                                  const char  *color_hex);
+void kgx_terminal_set_process_bg       (KgxTerminal   *self,
+                                        const char    *color_hex);
+void kgx_terminal_set_bg_hint          (KgxTerminal   *self,
+                                        const char    *color_hex);
+void kgx_terminal_set_process_override (KgxTerminal   *self,
+                                        const char    *color_hex);
+void kgx_terminal_apply_bg_immediate   (KgxTerminal   *self,
+                                        const GdkRGBA *bg);
+void kgx_terminal_get_current_bg       (KgxTerminal   *self,
+                                        GdkRGBA       *out);
 
 G_END_DECLS

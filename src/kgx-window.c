@@ -71,6 +71,13 @@ struct _KgxWindowPrivate {
   GtkCssProvider       *override_css;
   char                 *window_css_class;
 
+  /* Unified chrome transition — drives both VTE bg and CSS chrome together. */
+  AdwAnimation         *chrome_transition;
+  GdkRGBA               chrome_from;
+  GdkRGBA               chrome_to;
+  GdkRGBA               chrome_current;
+  gboolean              chrome_has_current;
+
   GSignalGroup         *tab_signals;
 
   GBindingGroup        *surface_binds;
@@ -130,6 +137,11 @@ kgx_window_dispose (GObject *object)
   }
   g_clear_pointer (&priv->window_css_class, g_free);
   g_clear_pointer (&priv->process_chrome_override, g_free);
+
+  if (priv->chrome_transition) {
+    adw_animation_reset (priv->chrome_transition);
+    g_clear_object (&priv->chrome_transition);
+  }
 
   g_clear_object (&priv->tab_signals);
   g_clear_object (&priv->settings);
@@ -614,11 +626,114 @@ maybe_close_window (KgxWindow *self)
 static gboolean update_process_chrome (KgxWindow *self);
 
 
+static void
+apply_chrome_color (KgxWindow     *self,
+                    const GdkRGBA *color)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  int r = (int)(color->red * 255);
+  int g = (int)(color->green * 255);
+  int b = (int)(color->blue * 255);
+
+  /* Update CSS chrome — no CSS transition, we drive every frame. */
+  if (priv->override_css) {
+    g_autofree char *css = g_strdup_printf (
+      ".%s headerbar,"
+      ".%s tabbar,"
+      ".%s settings-page,"
+      ".%s scrollbar,"
+      ".%s scrollbar trough {"
+      "  background-color: rgba(%d, %d, %d, 0.94);"
+      "}",
+      priv->window_css_class, priv->window_css_class,
+      priv->window_css_class, priv->window_css_class,
+      priv->window_css_class,
+      r, g, b);
+    gtk_css_provider_load_from_string (priv->override_css, css);
+  }
+
+  /* Update VTE terminal background — set directly, no separate animation. */
+  {
+    g_autoptr (KgxTab) active = NULL;
+    g_object_get (priv->pages, "active-page", &active, NULL);
+    if (active) {
+      g_autoptr (KgxTerminal) terminal = NULL;
+      g_object_get (active, "terminal", &terminal, NULL);
+      if (terminal)
+        kgx_terminal_apply_bg_immediate (terminal, color);
+    }
+  }
+}
+
+
+static void
+chrome_lerp_cb (double    value,
+                KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  GdkRGBA c;
+
+  /* Guard against callbacks during dispose. */
+  if (!priv->pages)
+    return;
+
+  c.red   = priv->chrome_from.red   + (priv->chrome_to.red   - priv->chrome_from.red)   * value;
+  c.green = priv->chrome_from.green + (priv->chrome_to.green - priv->chrome_from.green) * value;
+  c.blue  = priv->chrome_from.blue  + (priv->chrome_to.blue  - priv->chrome_from.blue)  * value;
+  c.alpha = 1.0f;
+
+  priv->chrome_current = c;
+
+  apply_chrome_color (self, &c);
+}
+
+
+static void
+start_chrome_transition (KgxWindow     *self,
+                         const GdkRGBA *target)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+
+  priv->chrome_from = priv->chrome_current;
+  priv->chrome_to = *target;
+
+  if (!priv->chrome_transition) {
+    AdwAnimationTarget *t = adw_callback_animation_target_new (
+        (AdwAnimationTargetFunc) chrome_lerp_cb, self, NULL);
+    priv->chrome_transition = adw_timed_animation_new (GTK_WIDGET (self),
+                                                        0.0, 1.0, 400, t);
+    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (priv->chrome_transition),
+                                    ADW_EASE_IN_OUT_CUBIC);
+  }
+
+  adw_animation_reset (priv->chrome_transition);
+  adw_animation_play (priv->chrome_transition);
+}
+
+
 static gboolean
 process_check_tick (gpointer data)
 {
   update_process_chrome (KGX_WINDOW (data));
   return G_SOURCE_CONTINUE;
+}
+
+
+static GdkRGBA
+get_default_chrome_color (KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  GdkRGBA def = { 0.106f, 0.106f, 0.122f, 1.0f }; /* fallback #1b1b1f */
+  g_autofree char *hex = NULL;
+
+  if (priv->settings) {
+    g_object_get (priv->settings, "chrome-color", &hex, NULL);
+    if (hex)
+      gdk_rgba_parse (&def, hex);
+  }
+
+  def.alpha = 1.0f;
+  return def;
 }
 
 
@@ -629,6 +744,7 @@ update_process_chrome (KgxWindow *self)
   g_autoptr (KgxTab) active = NULL;
   g_autoptr (KgxSettings) settings = NULL;
   const char *match = NULL;
+  GdkRGBA target;
 
   g_object_get (priv->pages, "active-page", &active, NULL);
   g_object_get (self, "settings", &settings, NULL);
@@ -651,70 +767,49 @@ update_process_chrome (KgxWindow *self)
         }
       }
     }
+  }
 
-    /* Update VTE terminal background. */
-    {
-      g_autoptr (KgxTerminal) terminal = NULL;
-      g_object_get (active, "terminal", &terminal, NULL);
-      if (terminal)
-        kgx_terminal_set_process_bg (terminal, match);
-    }
+  /* Determine target color. */
+  if (match && gdk_rgba_parse (&target, match)) {
+    target.alpha = 1.0f;
+  } else {
+    target = get_default_chrome_color (self);
+    match = NULL;
   }
 
   g_free (priv->process_chrome_override);
   priv->process_chrome_override = match ? g_strdup (match) : NULL;
 
-  /* Update per-window override CSS (scoped to this window only). */
-  if (priv->override_css) {
-    if (match) {
-      GdkRGBA rgba;
-      if (gdk_rgba_parse (&rgba, match)) {
-        int r = (int)(rgba.red * 255);
-        int g = (int)(rgba.green * 255);
-        int b = (int)(rgba.blue * 255);
-        g_autofree char *css = g_strdup_printf (
-          ".%s headerbar,"
-          ".%s tabbar,"
-          ".%s settings-page,"
-          ".%s scrollbar,"
-          ".%s scrollbar trough {"
-          "  background-color: rgba(%d, %d, %d, 0.94);"
-          "  transition: background-color 160ms ease;"
-          "}",
-          priv->window_css_class, priv->window_css_class,
-          priv->window_css_class, priv->window_css_class,
-          priv->window_css_class,
-          r, g, b);
-        gtk_css_provider_load_from_string (priv->override_css, css);
-      }
-    } else {
-      /* Transition back to default chrome color. */
-      g_autofree char *def_color = NULL;
-      GdkRGBA def_rgba;
-      g_object_get (priv->settings, "chrome-color", &def_color, NULL);
-      if (def_color && gdk_rgba_parse (&def_rgba, def_color)) {
-        int dr = (int)(def_rgba.red * 255);
-        int dg = (int)(def_rgba.green * 255);
-        int db = (int)(def_rgba.blue * 255);
-        g_autofree char *revert = g_strdup_printf (
-          ".%s headerbar,"
-          ".%s tabbar,"
-          ".%s settings-page,"
-          ".%s scrollbar,"
-          ".%s scrollbar trough {"
-          "  background-color: rgba(%d, %d, %d, 0.94);"
-          "  transition: background-color 160ms ease;"
-          "}",
-          priv->window_css_class, priv->window_css_class,
-          priv->window_css_class, priv->window_css_class,
-          priv->window_css_class,
-          dr, dg, db);
-        gtk_css_provider_load_from_string (priv->override_css, revert);
-      } else {
-        gtk_css_provider_load_from_string (priv->override_css, "");
-      }
-    }
+  /* Seed chrome_current on first call so transitions have a start point. */
+  if (!priv->chrome_has_current) {
+    priv->chrome_current = get_default_chrome_color (self);
+    priv->chrome_has_current = TRUE;
   }
+
+  /* Skip if already at target. */
+  if (priv->chrome_current.red   == target.red   &&
+      priv->chrome_current.green == target.green &&
+      priv->chrome_current.blue  == target.blue) {
+    /* Keep the terminal's override string consistent. */
+    if (active) {
+      g_autoptr (KgxTerminal) terminal = NULL;
+      g_object_get (active, "terminal", &terminal, NULL);
+      if (terminal)
+        kgx_terminal_set_process_override (terminal, match);
+    }
+    return G_SOURCE_REMOVE;
+  }
+
+  /* Update the terminal's override string so apply_palette knows. */
+  if (active) {
+    g_autoptr (KgxTerminal) terminal = NULL;
+    g_object_get (active, "terminal", &terminal, NULL);
+    if (terminal)
+      kgx_terminal_set_process_override (terminal, match);
+  }
+
+  /* Animate both VTE and CSS chrome together. */
+  start_chrome_transition (self, &target);
 
   return G_SOURCE_REMOVE;
 }
