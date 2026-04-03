@@ -76,9 +76,9 @@ entity Settings {
     -- Transparency
     transparency: Boolean
     transparency_level: Decimal
-    -- content_opacity = 1.0 - transparency_level, applied as widget opacity
-    -- on the terminal content stack when transparency is active
-    content_opacity: Decimal
+    -- Derived: applied as widget opacity on the terminal content stack
+    -- when transparency is active
+    content_opacity: 1.0 - transparency_level
 
     -- Shell
     shell: List<String>
@@ -138,7 +138,7 @@ entity Process {
     argv: List<String>
 
     -- Derived
-    is_root: effective_uid != parent_uid
+    is_root: effective_uid = 0
     -- is_remote: true when argv[0] basename matches ssh, telnet, mosh-client,
     -- mosh, et, or is waypipe wrapping one of these
     is_remote: Boolean
@@ -166,14 +166,14 @@ entity Terminal {
     settings: Settings
     palette: Palette
     translucent: Boolean
-    preview_mode: Boolean
 
     -- Link detection
     current_url: String?
     has_url: current_url != null
 
     -- Derived
-    effective_translucent: translucent and not preview_mode
+    -- Chiguiro fork: always translucent, preview_mode removed
+    effective_translucent: true
 }
 
 ------------------------------------------------------------
@@ -200,10 +200,10 @@ config {
 ------------------------------------------------------------
 
 default Livery standard = {
-    uuid: "kgx",
-    name: "Standard",
+    uuid: "9f1374fd-f199-429f-bae6-9cf1260f6e3e",
+    name: null,
     night: Palette,
-    day: null
+    day: Palette
 }
 
 default Livery linux = {
@@ -413,12 +413,13 @@ rule TransparencySync {
     when: TransparencyChanged(terminal, window_translucent)
 
     ensures:
-        if window_translucent and not terminal.preview_mode:
+        if window_translucent:
             terminal.translucent = true
         else:
             terminal.translucent = false
 
     @guidance
+        -- Chiguiro fork: preview_mode removed, condition is window_translucent only.
         -- When translucent: set VTE clear_background, background alpha = 0.0.
         -- Paint semi-transparent floor under content.
         -- Floor alpha = 1.0 - transparency_level.
@@ -548,12 +549,12 @@ invariant FontScaleBounded {
 
 invariant TransparencyLevelBounded {
     for s in Settings:
-        s.transparency_level >= 0.05 and s.transparency_level <= 0.95
+        s.transparency_level >= 0.0 and s.transparency_level <= 1.0
 }
 
 invariant ContentOpacityBounded {
     for s in Settings:
-        s.content_opacity >= 0.05 and s.content_opacity <= 1.0
+        s.content_opacity >= 0.0 and s.content_opacity <= 1.0
 }
 
 invariant SessionStatusReflectsChildren {

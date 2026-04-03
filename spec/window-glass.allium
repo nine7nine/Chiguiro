@@ -75,7 +75,8 @@ entity Window {
     maximised: Boolean
 
     -- Derived
-    effective_translucent: settings.transparency and floating
+    -- Fork: Chigüiro windows are always translucent regardless of settings.
+    effective_translucent: true
     has_tabs: not pages.is_empty
     glass_opacity: settings.glass_opacity
     glass_color: settings.glass_color
@@ -233,7 +234,7 @@ rule CreateWindow {
     ensures: Window.created(
         pages: Pages,
         settings: s,
-        translucent: false,
+        translucent: true,
         fullscreened: false,
         is_active: false,
         width: if s.restore_window_size then s.last_window_size_width else -1,
@@ -284,11 +285,12 @@ rule PersistWindowSize {
 rule WindowTranslucencySync {
     when: TranslucencySettingChanged(window)
 
-    ensures: window.translucent = window.effective_translucent
+    ensures: window.translucent = true
 
     @guidance
-        -- When translucent: set opaque region to empty, add "translucent" CSS class.
-        -- Paint floor with alpha = 1.0 - transparency_level.
+        -- Fork: Chigüiro is always translucent. The opaque region is always
+        -- empty, the "translucent" CSS class is always applied, and the floor
+        -- is always painted with alpha = 1.0 - transparency_level.
         -- Propagate to all child terminals via root window property.
 }
 
@@ -318,7 +320,7 @@ rule GlassStyleApplied {
 
     @guidance
         -- Apply glass_color with glass_opacity as rgba background-color
-        -- to top-level glass containers ONLY: headerbar, tabbar, searchbar,
+        -- to top-level glass containers ONLY: headerbar, tabbar,
         -- settings-page, scrollbar.
         -- All children inside these containers (tabs, revealers, tabbox,
         -- search entry/buttons, preference rows/groups) MUST be set to
@@ -502,7 +504,7 @@ invariant GlassSheet {
     -- background-color, background-image, or box-shadow on a widget
     -- risks breaking the glass by adding an opaque layer.
     --
-    -- Only designated glass containers (headerbar, tabbar, searchbar,
+    -- Only designated glass containers (headerbar, tabbar,
     -- settings-page, scrollbar) may carry an rgba background — and
     -- each container gets exactly ONE layer at the configured glass
     -- opacity. Every other widget in the tree must be fully transparent:

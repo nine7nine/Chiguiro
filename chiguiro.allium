@@ -31,7 +31,7 @@ external entity SystemProcess {
 -- Value Types
 ------------------------------------------------------------
 
-value Color {
+value Colour {
     red: Decimal
     green: Decimal
     blue: Decimal
@@ -111,11 +111,11 @@ entity Train {
 }
 
 entity Palette {
-    -- A set of terminal colors
-    foreground: Color
-    background: Color
+    -- A set of terminal colours
+    foreground: Colour
+    background: Colour
     transparency: Decimal
-    ansi_colors: List<Color>
+    colours: List<Colour>
 
     -- Derived
     is_opaque: transparency = 0.0
@@ -179,7 +179,7 @@ entity Window {
     has_running_processes: tabs.any(t => t.has_running_processes)
 
     -- Process glass
-    glass_color: Color?
+    glass_color: Colour?
 
     -- Particles
     particle_state: Particles with window = this
@@ -501,7 +501,7 @@ rule ZoomRequested {
             FontScaleDecreased(tab: tab)
 }
 
--- === Color/Theming ===
+-- === Colour/Theming ===
 
 rule SelectLivery {
     -- User selects a livery by UUID
@@ -570,10 +570,12 @@ rule ProcessGlassCheck {
             window.glass_color = null
 
     @guidance
-        -- Runs on a 200ms tick timer.
+        -- Signal-driven: fires on idle callbacks when the active tab or
+        -- train children change, with a 5-second safety-net timer.
         -- Matches child process names against process_glass_colors map.
         -- Glass color applies to headerbar, tab bar, and scrollbar.
-        -- Color transitions animate over 160ms with cubic easing.
+        -- CSS glass transitions animate over 400ms with ADW_EASE_IN_OUT_CUBIC.
+        -- VTE terminal background transitions animate over 160ms.
         -- When use_glass_bg is enabled, terminal background also changes.
 }
 
@@ -792,10 +794,10 @@ invariant LiveryHasNightPalette {
         l.night != null
 }
 
-invariant PaletteHas16Colors {
-    -- Every palette has exactly 16 ANSI colors
+invariant PaletteHas16Colours {
+    -- Every palette has exactly 16 ANSI colours
     for p in Palettes:
-        p.ansi_colors.count = 16
+        p.colours.count = 16
 }
 
 ------------------------------------------------------------
