@@ -172,12 +172,12 @@ kgx_palette_serialise_to (KgxPalette *self, GVariantBuilder *builder)
                                 "{'foreground', <(%d, %d, %d)>}",
                                 self->foreground.red,
                                 self->foreground.green,
-                                self->foreground.red);
+                                self->foreground.blue);
   g_variant_builder_add_parsed (builder,
                                 "{'background', <(%d, %d, %d)>}",
                                 self->background.red,
                                 self->background.green,
-                                self->background.red);
+                                self->background.blue);
   g_variant_builder_add_parsed (builder,
                                 "{'transparency', <%d>}",
                                 ALPHA_AS_TRANS (self->background.alpha));
@@ -263,7 +263,7 @@ get_colours (GKeyFile           *key_file,
                                                        group,
                                                        key,
                                                        n_colours,
-                                                       error);
+                                                       &local_error);
 
   if (local_error) {
     g_propagate_error (error, g_steal_pointer (&local_error));
@@ -276,7 +276,7 @@ get_colours (GKeyFile           *key_file,
     GdkRGBA colour = {};
 
     kgx_colour_from_string (strings[i], &colour, &local_error);
-    if (*error) {
+    if (local_error) {
       g_propagate_error (error, g_steal_pointer (&local_error));
       return NULL;
     }

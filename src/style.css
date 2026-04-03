@@ -63,7 +63,7 @@ window.terminal-window.translucent.background.csd {
 }
 
 /* Headerbar action buttons — clear the gray Adwaita background so they
- * blend with the translucent chrome. Exclude windowcontrols buttons
+ * blend with the translucent glass. Exclude windowcontrols buttons
  * (close/min/max) which rely on CSS backgrounds for their appearance. */
 .terminal-window headerbar button:not(.close):not(.minimize):not(.maximize) {
   background-color: transparent;

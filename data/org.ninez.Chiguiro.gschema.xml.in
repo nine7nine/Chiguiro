@@ -45,14 +45,14 @@
       <range min="0.0" max="1.0"/>
       <default>0.04</default>
     </key>
-    <key name="chrome-opacity" type="d">
+    <key name="glass-opacity" type="d">
       <range min="0.0" max="1.0"/>
       <default>0.94</default>
     </key>
-    <key name="chrome-color" type="s">
+    <key name="glass-color" type="s">
       <default>'#1b1b1f'</default>
     </key>
-    <key name="use-chrome-bg" type="b">
+    <key name="use-glass-bg" type="b">
       <default>true</default>
     </key>
     <key name="accent-color" type="s">
@@ -106,7 +106,7 @@
       <range min="0" max="1"/>
       <default>0</default>
     </key>
-    <key name="process-chrome-colors" type="a{ss}">
+    <key name="process-glass-colors" type="a{ss}">
       <default>{}</default>
     </key>
     <key name="livery" type="s">

@@ -203,6 +203,9 @@ kgx_tab_dispose (GObject *object)
   /* Dispose template before parent class destroys widget tree */
 
   g_clear_object (&priv->settings_signals);
+  g_clear_object (&priv->train_signals);
+  g_clear_object (&priv->terminal_signals);
+  g_clear_object (&priv->drop_target);
   g_clear_object (&priv->application);
   g_clear_object (&priv->settings);
   g_clear_object (&priv->train);

@@ -1,16 +1,16 @@
 -- allium: 3
--- window-chrome.allium
+-- window-glass.allium
 
--- Scope: Window management, tabs, and GUI chrome
+-- Scope: Window management, tabs, and GUI glass
 -- Includes: Window lifecycle, tab management, close confirmation,
---           search, fullscreen, size persistence, chrome styling,
+--           search, fullscreen, size persistence, glass styling,
 --           accent color, dynamic tab titles, service mode
 -- Excludes:
 --   - Core terminal behavior (see terminal-core.allium)
 --   - Preferences dialog layout (pure UI)
 --   - D-Bus service activation mechanics (infrastructure)
 --
--- Fork guidance: This module represents GUI chrome that a minimal fork
+-- Fork guidance: This module represents GUI glass that a minimal fork
 -- may strip or replace. The terminal-core spec is the behavioral contract
 -- that must be preserved.
 
@@ -77,8 +77,8 @@ entity Window {
     -- Derived
     effective_translucent: settings.transparency and floating
     has_tabs: not pages.is_empty
-    chrome_opacity: settings.chrome_opacity
-    chrome_color: settings.chrome_color
+    glass_opacity: settings.glass_opacity
+    glass_color: settings.glass_color
     accent_color: settings.accent_color
 }
 
@@ -308,17 +308,17 @@ rule WindowStatusChanged {
 }
 
 ------------------------------------------------------------
--- Rules — Chrome Styling
+-- Rules — Glass Styling
 ------------------------------------------------------------
 
-rule ChromeStyleApplied {
-    when: ChromeSettingChanged(window)
+rule GlassStyleApplied {
+    when: GlassSettingChanged(window)
 
-    ensures: ChromeStyleUpdated(window, window.chrome_color, window.chrome_opacity)
+    ensures: GlassStyleUpdated(window, window.glass_color, window.glass_opacity)
 
     @guidance
-        -- Apply chrome_color with chrome_opacity as rgba background-color
-        -- to top-level chrome containers ONLY: headerbar, tabbar, searchbar,
+        -- Apply glass_color with glass_opacity as rgba background-color
+        -- to top-level glass containers ONLY: headerbar, tabbar, searchbar,
         -- settings-page, scrollbar.
         -- All children inside these containers (tabs, revealers, tabbox,
         -- search entry/buttons, preference rows/groups) MUST be set to
@@ -502,12 +502,12 @@ invariant GlassSheet {
     -- background-color, background-image, or box-shadow on a widget
     -- risks breaking the glass by adding an opaque layer.
     --
-    -- Only designated chrome containers (headerbar, tabbar, searchbar,
+    -- Only designated glass containers (headerbar, tabbar, searchbar,
     -- settings-page, scrollbar) may carry an rgba background — and
-    -- each container gets exactly ONE layer at the configured chrome
+    -- each container gets exactly ONE layer at the configured glass
     -- opacity. Every other widget in the tree must be fully transparent:
     --   - Intermediate wrappers (toolbarview revealers, windowhandle, box)
-    --   - Children inside chrome (tabs, tabbox, search entry, buttons)
+    --   - Children inside glass (tabs, tabbox, search entry, buttons)
     --   - Settings page internals (rows, groups, spinbutton buttons)
     --   - Headerbar action buttons (except window controls close/min/max)
     --
@@ -521,15 +521,15 @@ invariant GlassSheet {
     -- selectors (e.g. .translucent.background matching the window
     -- itself) will kill the compositor shadow.
     --
-    -- When use_chrome_bg is enabled, the terminal VTE background uses
-    -- alpha 1.0 (not chrome_opacity) because the scrolled window's
+    -- When use_glass_bg is enabled, the terminal VTE background uses
+    -- alpha 1.0 (not glass_opacity) because the scrolled window's
     -- widget opacity already provides transparency — double alpha
-    -- would make the terminal darker than the chrome.
+    -- would make the terminal darker than the glass.
     for w in Windows:
         w.translucent implies
-            SingleLayerChromeAlpha(w)
+            SingleLayerGlassAlpha(w)
             and NoIntermediateBackgrounds(w)
-            and NoChildBackgroundsInChromeContainers(w)
+            and NoChildBackgroundsInGlassContainers(w)
             and WindowShadowPreserved(w)
             and NoDoubleAlphaOnTerminal(w)
 }
@@ -571,7 +571,7 @@ surface TabBar {
             when pages.active_tab != null
 }
 
-surface WindowChrome {
+surface WindowGlass {
     facing user: User
 
     context window: Window
@@ -581,8 +581,8 @@ surface WindowChrome {
         window.translucent
         window.fullscreened
         window.pages.status
-        window.chrome_color
-        window.chrome_opacity
+        window.glass_color
+        window.glass_opacity
         window.accent_color
 
     provides:
@@ -613,15 +613,15 @@ surface SettingsPage {
         settings.visual_bell
         settings.transparency
         settings.transparency_level
-        settings.chrome_opacity
-        settings.chrome_color
-        settings.use_chrome_bg
+        settings.glass_opacity
+        settings.glass_color
+        settings.use_glass_bg
         settings.accent_color
         settings.restore_window_size
 
     provides:
         ToggleSettingsPage(window)
-        ChromeSettingChanged(window)
+        GlassSettingChanged(window)
         AccentColorChanged(window)
 
     @guarantee SettingsLive

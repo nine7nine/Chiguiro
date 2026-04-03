@@ -3,10 +3,10 @@
 
 -- Scope: Core terminal emulator behavior
 -- Includes: Session lifecycle, process tracking, terminal interaction,
---           color scheme resolution, transparency, chrome appearance,
+--           color scheme resolution, transparency, glass appearance,
 --           settings, paste safety
 -- Excludes:
---   - Window/tab chrome (see window-chrome.allium)
+--   - Window/tab glass (see window-glass.allium)
 --   - Preferences UI (implementation detail)
 --   - Keyboard shortcuts (implementation detail, keybindings vary per fork)
 --   - D-Bus activation, CLI argument parsing (infrastructure)
@@ -86,10 +86,10 @@ entity Settings {
     -- Color scheme
     livery: Livery
 
-    -- Chrome appearance
-    chrome_opacity: Decimal
-    chrome_color: String
-    use_chrome_bg: Boolean
+    -- Glass appearance
+    glass_opacity: Decimal
+    glass_color: String
+    use_glass_bg: Boolean
     accent_color: String
 
     -- Window persistence
@@ -190,8 +190,8 @@ config {
     paste_danger_pattern: String = "sudo"
     watcher_foreground_interval: Duration = 0.5.seconds
     watcher_background_interval: Duration = 2.seconds
-    default_chrome_opacity: Decimal = 0.94
-    default_chrome_color: String = "#1b1b1f"
+    default_glass_opacity: Decimal = 0.94
+    default_glass_color: String = "#1b1b1f"
     default_accent_color: String = "#3584e4"
 }
 
@@ -436,26 +436,26 @@ rule ContentOpacityApplied {
 }
 
 ------------------------------------------------------------
--- Rules — Chrome as Terminal Background
+-- Rules — Glass as Terminal Background
 ------------------------------------------------------------
 
-rule TerminalChromeBackground {
-    when: ChromeBgSettingChanged(terminal)
-    requires: terminal.settings.use_chrome_bg
+rule TerminalGlassBackground {
+    when: GlassBgSettingChanged(terminal)
+    requires: terminal.settings.use_glass_bg
 
-    ensures: TerminalBgOverridden(terminal, terminal.settings.chrome_color, 1.0)
+    ensures: TerminalBgOverridden(terminal, terminal.settings.glass_color, 1.0)
 
     @guidance
-        -- When use_chrome_bg is enabled, the terminal background colour
-        -- is replaced by the chrome_color with alpha forced to 1.0 (fully
-        -- opaque), giving a seamless look between chrome and content area.
+        -- When use_glass_bg is enabled, the terminal background colour
+        -- is replaced by the glass_color with alpha forced to 1.0 (fully
+        -- opaque), giving a seamless look between glass and content area.
         -- This overrides the livery background but not the palette foreground
         -- or ANSI colours.
 }
 
-rule TerminalChromeBackgroundDisabled {
-    when: ChromeBgSettingChanged(terminal)
-    requires: not terminal.settings.use_chrome_bg
+rule TerminalGlassBackgroundDisabled {
+    when: GlassBgSettingChanged(terminal)
+    requires: not terminal.settings.use_glass_bg
 
     ensures: TerminalBgRestored(terminal)
 
@@ -563,9 +563,9 @@ invariant SessionStatusReflectsChildren {
         and (playbox in s.status) implies s.has_playbox
 }
 
-invariant ChromeOpacityBounded {
+invariant GlassOpacityBounded {
     for s in Settings:
-        s.chrome_opacity >= 0.0 and s.chrome_opacity <= 1.0
+        s.glass_opacity >= 0.0 and s.glass_opacity <= 1.0
 }
 
 invariant LiveryAlwaysResolves {

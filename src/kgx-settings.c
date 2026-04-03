@@ -54,9 +54,9 @@ struct _KgxSettings {
   KgxLivery            *livery;
   gboolean              transparency;
   double                transparency_level;
-  double                chrome_opacity;
-  gboolean              use_chrome_bg;
-  char                 *chrome_color;
+  double                glass_opacity;
+  gboolean              use_glass_bg;
+  char                 *glass_color;
   char                 *accent_color;
 
   gboolean              edge_overscroll;
@@ -73,7 +73,7 @@ struct _KgxSettings {
   double                edge_burst_spread;
   int                   edge_privilege_direction;
 
-  GHashTable           *process_chrome_colors;  /* string→string */
+  GHashTable           *process_glass_colors;  /* string→string */
 
   KgxLiveryManager     *livery_manager;
 
@@ -103,11 +103,11 @@ enum {
   PROP_LIVERY,
   PROP_TRANSPARENCY,
   PROP_TRANSPARENCY_LEVEL,
-  PROP_CHROME_OPACITY,
-  PROP_CHROME_COLOR,
-  PROP_USE_CHROME_BG,
+  PROP_GLASS_OPACITY,
+  PROP_GLASS_COLOR,
+  PROP_USE_GLASS_BG,
   PROP_ACCENT_COLOR,
-  PROP_PROCESS_CHROME_COLORS,
+  PROP_PROCESS_GLASS_COLORS,
   PROP_EDGE_OVERSCROLL,
   PROP_EDGE_OVERSCROLL_COLOR,
   PROP_EDGE_OVERSCROLL_STYLE,
@@ -135,10 +135,10 @@ kgx_settings_dispose (GObject *object)
 
   g_clear_pointer (&self->font, pango_font_description_free);
   g_clear_pointer (&self->custom_font, pango_font_description_free);
-
-  g_clear_pointer (&self->custom_font, pango_font_description_free);
   g_clear_pointer (&self->livery, kgx_livery_unref);
-  g_clear_pointer (&self->process_chrome_colors, g_hash_table_unref);
+  g_clear_pointer (&self->process_glass_colors, g_hash_table_unref);
+  g_clear_pointer (&self->glass_color, g_free);
+  g_clear_pointer (&self->accent_color, g_free);
   g_clear_pointer (&self->edge_overscroll_color, g_free);
   g_clear_pointer (&self->edge_privilege_color, g_free);
 
@@ -242,22 +242,22 @@ kgx_settings_set_property (GObject      *object,
         }
       }
       break;
-    case PROP_CHROME_OPACITY:
+    case PROP_GLASS_OPACITY:
       {
         double new_value = CLAMP (g_value_get_double (value), 0.0, 1.0);
 
-        if (!G_APPROX_VALUE (self->chrome_opacity, new_value, DBL_EPSILON)) {
-          self->chrome_opacity = new_value;
+        if (!G_APPROX_VALUE (self->glass_opacity, new_value, DBL_EPSILON)) {
+          self->glass_opacity = new_value;
           g_object_notify_by_pspec (object, pspec);
         }
       }
       break;
-    case PROP_USE_CHROME_BG:
-      kgx_set_boolean_prop (object, pspec, &self->use_chrome_bg, value);
+    case PROP_USE_GLASS_BG:
+      kgx_set_boolean_prop (object, pspec, &self->use_glass_bg, value);
       break;
-    case PROP_CHROME_COLOR:
-      g_free (self->chrome_color);
-      self->chrome_color = g_value_dup_string (value);
+    case PROP_GLASS_COLOR:
+      g_free (self->glass_color);
+      self->glass_color = g_value_dup_string (value);
       g_object_notify_by_pspec (object, pspec);
       break;
     case PROP_ACCENT_COLOR:
@@ -265,9 +265,9 @@ kgx_settings_set_property (GObject      *object,
       self->accent_color = g_value_dup_string (value);
       g_object_notify_by_pspec (object, pspec);
       break;
-    case PROP_PROCESS_CHROME_COLORS:
-      g_clear_pointer (&self->process_chrome_colors, g_hash_table_unref);
-      self->process_chrome_colors = g_value_dup_boxed (value);
+    case PROP_PROCESS_GLASS_COLORS:
+      g_clear_pointer (&self->process_glass_colors, g_hash_table_unref);
+      self->process_glass_colors = g_value_dup_boxed (value);
       g_object_notify_by_pspec (object, pspec);
       break;
     case PROP_EDGE_OVERSCROLL:
@@ -429,20 +429,20 @@ kgx_settings_get_property (GObject    *object,
     case PROP_TRANSPARENCY_LEVEL:
       g_value_set_double (value, self->transparency_level);
       break;
-    case PROP_CHROME_OPACITY:
-      g_value_set_double (value, self->chrome_opacity);
+    case PROP_GLASS_OPACITY:
+      g_value_set_double (value, self->glass_opacity);
       break;
-    case PROP_USE_CHROME_BG:
-      g_value_set_boolean (value, self->use_chrome_bg);
+    case PROP_USE_GLASS_BG:
+      g_value_set_boolean (value, self->use_glass_bg);
       break;
-    case PROP_CHROME_COLOR:
-      g_value_set_string (value, self->chrome_color ? self->chrome_color : "#000000");
+    case PROP_GLASS_COLOR:
+      g_value_set_string (value, self->glass_color ? self->glass_color : "#000000");
       break;
     case PROP_ACCENT_COLOR:
       g_value_set_string (value, self->accent_color ? self->accent_color : "");
       break;
-    case PROP_PROCESS_CHROME_COLORS:
-      g_value_set_boxed (value, self->process_chrome_colors);
+    case PROP_PROCESS_GLASS_COLORS:
+      g_value_set_boxed (value, self->process_glass_colors);
       break;
     case PROP_EDGE_OVERSCROLL:
       g_value_set_boolean (value, self->edge_overscroll);
@@ -611,18 +611,18 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                          0.0, 1.0, 0.2,
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_CHROME_OPACITY] =
-    g_param_spec_double ("chrome-opacity", NULL, NULL,
+  pspecs[PROP_GLASS_OPACITY] =
+    g_param_spec_double ("glass-opacity", NULL, NULL,
                          0.0, 1.0, 0.8,
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_USE_CHROME_BG] =
-    g_param_spec_boolean ("use-chrome-bg", NULL, NULL,
+  pspecs[PROP_USE_GLASS_BG] =
+    g_param_spec_boolean ("use-glass-bg", NULL, NULL,
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_CHROME_COLOR] =
-    g_param_spec_string ("chrome-color", NULL, NULL,
+  pspecs[PROP_GLASS_COLOR] =
+    g_param_spec_string ("glass-color", NULL, NULL,
                          "#000000",
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
@@ -631,8 +631,8 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                          "",
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_PROCESS_CHROME_COLORS] =
-    g_param_spec_boxed ("process-chrome-colors", NULL, NULL,
+  pspecs[PROP_PROCESS_GLASS_COLORS] =
+    g_param_spec_boxed ("process-glass-colors", NULL, NULL,
                         G_TYPE_HASH_TABLE,
                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
@@ -915,20 +915,20 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "transparency-level",
                    self, "transparency-level",
                    G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "chrome-opacity",
-                   self, "chrome-opacity",
+  g_settings_bind (self->settings, "glass-opacity",
+                   self, "glass-opacity",
                    G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "use-chrome-bg",
-                   self, "use-chrome-bg",
+  g_settings_bind (self->settings, "use-glass-bg",
+                   self, "use-glass-bg",
                    G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "chrome-color",
-                   self, "chrome-color",
+  g_settings_bind (self->settings, "glass-color",
+                   self, "glass-color",
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "accent-color",
                    self, "accent-color",
                    G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind_with_mapping (self->settings, "process-chrome-colors",
-                                self, "process-chrome-colors",
+  g_settings_bind_with_mapping (self->settings, "process-glass-colors",
+                                self, "process-glass-colors",
                                 G_SETTINGS_BIND_DEFAULT,
                                 process_colors_from_variant,
                                 process_colors_to_variant,
@@ -1218,10 +1218,10 @@ kgx_settings_lookup_process_color (KgxSettings *self,
 {
   g_return_val_if_fail (KGX_IS_SETTINGS (self), NULL);
 
-  if (!self->process_chrome_colors || !process_name)
+  if (!self->process_glass_colors || !process_name)
     return NULL;
 
-  return g_hash_table_lookup (self->process_chrome_colors, process_name);
+  return g_hash_table_lookup (self->process_glass_colors, process_name);
 }
 
 

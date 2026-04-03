@@ -164,6 +164,10 @@ kgx_livery_deserialise (GVariant *variant)
   }
 
   night = kgx_palette_deserialise (night_variant);
+  if (G_UNLIKELY (!night)) {
+    g_warning ("livery: (%p) failed to deserialise night palette", variant);
+    return NULL;
+  }
 
   if (g_variant_dict_lookup (&dict, "day", "@*", &day_variant)) {
     day = kgx_palette_deserialise (day_variant);

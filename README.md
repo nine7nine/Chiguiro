@@ -4,8 +4,8 @@ A fast, transparent, and customizable terminal emulator for Linux, forked from [
 
 ## Features
 
-- **Glass-sheet transparency** — window and chrome opacity, seamless terminal-to-chrome blending
-- **Custom chrome and accent colors** — live-updating, no restart required
+- **Glass-sheet transparency** — window and glass opacity, seamless terminal-to-glass blending
+- **Custom glass and accent colors** — live-updating, no restart required
 - **Dynamic tab titles** — running process name with braille activity indicator (`bash: htop ⠲`)
 - **No menus** — single-pane settings overlay with keyboard shortcuts side-by-side
 - **Headless server mode** — systemd user service for instant window startup via D-Bus

@@ -159,22 +159,22 @@ kgx_terminal_apply_palette (KgxTerminal *self)
                            &n_colours,
                            &colours);
 
-  /* Override terminal background with chrome color if enabled */
+  /* Override terminal background with glass color if enabled */
   if (self->settings) {
-    gboolean use_chrome_bg = FALSE;
-    g_object_get (self->settings, "use-chrome-bg", &use_chrome_bg, NULL);
-    if (use_chrome_bg) {
-      g_autofree char *chrome_color = NULL;
-      double chrome_opacity = 1.0;
+    gboolean use_glass_bg = FALSE;
+    g_object_get (self->settings, "use-glass-bg", &use_glass_bg, NULL);
+    if (use_glass_bg) {
+      g_autofree char *glass_color = NULL;
+      double glass_opacity = 1.0;
       g_object_get (self->settings,
-                    "chrome-color", &chrome_color,
-                    "chrome-opacity", &chrome_opacity,
+                    "glass-color", &glass_color,
+                    "glass-opacity", &glass_opacity,
                     NULL);
-      if (chrome_color) {
-        gdk_rgba_parse (&background, chrome_color);
+      if (glass_color) {
+        gdk_rgba_parse (&background, glass_color);
         /* Use alpha 1.0 here — the scrolled window's widget opacity
          * (from transparency-level) already provides transparency.
-         * Using chrome_opacity would double-apply alpha. */
+         * Using glass_opacity would double-apply alpha. */
         background.alpha = 1.0f;
       }
     }
@@ -194,7 +194,6 @@ kgx_terminal_apply_palette (KgxTerminal *self)
   /* Don't overwrite bg_current if a process override is actively displayed. */
   if (!self->process_bg_override || !self->process_bg_override[0])
     self->bg_current = background;
-  gtk_widget_queue_draw (GTK_WIDGET (self));
 }
 
 
@@ -247,14 +246,14 @@ kgx_terminal_set_process_bg (KgxTerminal *self,
   if (color_hex && color_hex[0] && gdk_rgba_parse (&target, color_hex)) {
     self->bg_to = target;
   } else if (self->palette) {
-    /* Revert to palette/chrome bg. */
+    /* Revert to palette/glass bg. */
     { GdkRGBA _fg; size_t _n; const GdkRGBA *_c; kgx_palette_get_colours (self->palette, &_fg, &self->bg_to, &_n, &_c); }
     if (self->settings) {
-      gboolean use_chrome = FALSE;
-      g_object_get (self->settings, "use-chrome-bg", &use_chrome, NULL);
-      if (use_chrome) {
+      gboolean use_glass = FALSE;
+      g_object_get (self->settings, "use-glass-bg", &use_glass, NULL);
+      if (use_glass) {
         g_autofree char *cc = NULL;
-        g_object_get (self->settings, "chrome-color", &cc, NULL);
+        g_object_get (self->settings, "glass-color", &cc, NULL);
         if (cc) gdk_rgba_parse (&self->bg_to, cc);
         self->bg_to.alpha = 1.0f;
       }
@@ -369,17 +368,17 @@ kgx_terminal_set_property (GObject      *object,
       if (g_set_object (&self->settings, g_value_get_object (value)) &&
           self->settings) {
         g_signal_connect_object (self->settings,
-                                 "notify::use-chrome-bg",
+                                 "notify::use-glass-bg",
                                  G_CALLBACK (kgx_terminal_apply_palette),
                                  self,
                                  G_CONNECT_SWAPPED);
         g_signal_connect_object (self->settings,
-                                 "notify::chrome-color",
+                                 "notify::glass-color",
                                  G_CALLBACK (kgx_terminal_apply_palette),
                                  self,
                                  G_CONNECT_SWAPPED);
         g_signal_connect_object (self->settings,
-                                 "notify::chrome-opacity",
+                                 "notify::glass-opacity",
                                  G_CALLBACK (kgx_terminal_apply_palette),
                                  self,
                                  G_CONNECT_SWAPPED);

@@ -216,7 +216,7 @@
                               </object>
                             </child>
                             <child>
-                              <object class="AdwSpinRow" id="chrome_opacity">
+                              <object class="AdwSpinRow" id="glass_opacity">
                                 <property name="title" translatable="yes">Glass _Opacity</property>
                                 <property name="use-underline">True</property>
                                 <property name="numeric">True</property>
@@ -232,7 +232,7 @@
                               </object>
                             </child>
                             <child>
-                              <object class="AdwSwitchRow" id="use_chrome_bg">
+                              <object class="AdwSwitchRow" id="use_glass_bg">
                                 <property name="title" translatable="yes">Use Glass Color for Terminal</property>
                                 <property name="use-underline">True</property>
                               </object>
@@ -241,9 +241,9 @@
                               <object class="AdwActionRow">
                                 <property name="title" translatable="yes">Glass _Color</property>
                                 <property name="use-underline">True</property>
-                                <property name="activatable-widget">chrome_color</property>
+                                <property name="activatable-widget">glass_color</property>
                                 <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="chrome_color">
+                                  <object class="GtkColorDialogButton" id="glass_color">
                                     <property name="valign">center</property>
                                     <property name="margin-top">8</property>
                                     <property name="margin-bottom">8</property>

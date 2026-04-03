@@ -43,9 +43,9 @@ struct _KgxSettingsPage {
   GtkWidget            *custom_font;
   GtkWidget            *text_scale;
   GtkWidget            *transparency_level;
-  GtkWidget            *chrome_color;
-  GtkWidget            *chrome_opacity;
-  GtkWidget            *use_chrome_bg;
+  GtkWidget            *glass_color;
+  GtkWidget            *glass_opacity;
+  GtkWidget            *use_glass_bg;
   GtkWidget            *accent_color;
   GtkWidget            *unlimited_scrollback;
   GtkWidget            *scrollback;
@@ -61,6 +61,7 @@ struct _KgxSettingsPage {
   GtkWidget            *edge_burst_count;
   GtkWidget            *edge_burst_spread;
   gboolean              app_glass_inhibit_save;
+  guint                 app_glass_save_timeout;
   GtkWidget            *app_glass_0, *app_glass_1, *app_glass_2, *app_glass_3;
   GtkWidget            *app_glass_4, *app_glass_5, *app_glass_6, *app_glass_7;
   GtkWidget            *app_glass_color_0, *app_glass_color_1, *app_glass_color_2, *app_glass_color_3;
@@ -102,9 +103,12 @@ kgx_settings_page_dispose (GObject *object)
     self->font_watch = NULL;
   }
 
+  g_clear_handle_id (&self->app_glass_save_timeout, g_source_remove);
+
   if (self->settings_binds) {
     g_binding_group_set_source (self->settings_binds, NULL);
   }
+  g_clear_object (&self->settings_binds);
 
   g_clear_object (&self->settings);
 
@@ -331,9 +335,9 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, custom_font);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, text_scale);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, transparency_level);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, chrome_color);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, chrome_opacity);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, use_chrome_bg);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, glass_color);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, glass_opacity);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, use_glass_bg);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
@@ -467,7 +471,7 @@ app_glass_save (KgxSettingsPage *self)
   }
 
   if (self->settings)
-    g_object_set (self->settings, "process-chrome-colors", ht, NULL);
+    g_object_set (self->settings, "process-glass-colors", ht, NULL);
 }
 
 
@@ -494,7 +498,7 @@ app_glass_load (KgxSettingsPage *self)
 
   self->app_glass_inhibit_save = TRUE;
 
-  g_object_get (self->settings, "process-chrome-colors", &ht, NULL);
+  g_object_get (self->settings, "process-glass-colors", &ht, NULL);
 
   /* Clear all slots first. */
   for (int j = 0; j < APP_GLASS_SLOTS; j++)
@@ -514,7 +518,8 @@ app_glass_load (KgxSettingsPage *self)
     g_hash_table_unref (ht);
   }
 
-  g_timeout_add (500, app_glass_enable_save, self);
+  g_clear_handle_id (&self->app_glass_save_timeout, g_source_remove);
+  self->app_glass_save_timeout = g_timeout_add (500, app_glass_enable_save, self);
 }
 
 
@@ -655,21 +660,21 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              value_to_opacity_percent,
                              opacity_percent_to_value,
                              NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "chrome-color",
-                             self->chrome_color, "rgba",
+  g_binding_group_bind_full (self->settings_binds, "glass-color",
+                             self->glass_color, "rgba",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              string_to_rgba,
                              rgba_to_string,
                              NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "chrome-opacity",
-                             self->chrome_opacity, "value",
+  g_binding_group_bind_full (self->settings_binds, "glass-opacity",
+                             self->glass_opacity, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent,
                              percent_to_value,
                              NULL, NULL);
 
-  g_binding_group_bind (self->settings_binds, "use-chrome-bg",
-                        self->use_chrome_bg, "active",
+  g_binding_group_bind (self->settings_binds, "use-glass-bg",
+                        self->use_glass_bg, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 
   g_binding_group_bind_full (self->settings_binds, "accent-color",

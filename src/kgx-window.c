@@ -66,17 +66,21 @@ struct _KgxWindowPrivate {
   GtkWidget            *content_stack;
   GtkWidget            *settings_page;
   KgxEdge              *edge;
-  char                 *process_chrome_override;
+  char                 *process_glass_override;
   guint                 process_check_timer;
   GtkCssProvider       *override_css;
   char                 *window_css_class;
+  char                 *override_css_selectors; /* pre-built CSS selector list */
+  int                   override_last_r;       /* last applied RGB to skip no-ops */
+  int                   override_last_g;
+  int                   override_last_b;
 
-  /* Unified chrome transition — drives both VTE bg and CSS chrome together. */
-  AdwAnimation         *chrome_transition;
-  GdkRGBA               chrome_from;
-  GdkRGBA               chrome_to;
-  GdkRGBA               chrome_current;
-  gboolean              chrome_has_current;
+  /* Unified glass transition — drives both VTE bg and CSS glass together. */
+  AdwAnimation         *glass_transition;
+  GdkRGBA               glass_from;
+  GdkRGBA               glass_to;
+  GdkRGBA               glass_current;
+  gboolean              glass_has_current;
 
   GSignalGroup         *tab_signals;
 
@@ -86,8 +90,8 @@ struct _KgxWindowPrivate {
 
 G_DEFINE_TYPE_WITH_PRIVATE (KgxWindow, kgx_window, ADW_TYPE_APPLICATION_WINDOW)
 
-/* Shared CSS provider for chrome styling — lives for the process lifetime */
-static GtkCssProvider *chrome_css = NULL;
+/* Shared CSS provider for glass styling — lives for the process lifetime */
+static GtkCssProvider *glass_css = NULL;
 
 
 enum {
@@ -103,8 +107,8 @@ static GParamSpec *pspecs[LAST_PROP] = { NULL, };
 
 
 static void kgx_window_update_opaque_region (KgxWindow *self);
-static void kgx_window_update_chrome_opacity (KgxWindow *self);
-static void chrome_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
+static void kgx_window_update_glass_opacity (KgxWindow *self);
+static void glass_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
 
 
 static void
@@ -128,7 +132,7 @@ kgx_window_dispose (GObject *object)
     priv->process_check_timer = 0;
   }
 
-  /* chrome_css is a process-lifetime singleton — don't clear it */
+  /* glass_css is a process-lifetime singleton — don't clear it */
   if (priv->override_css) {
     gtk_style_context_remove_provider_for_display (
       gdk_display_get_default (),
@@ -136,13 +140,16 @@ kgx_window_dispose (GObject *object)
     g_clear_object (&priv->override_css);
   }
   g_clear_pointer (&priv->window_css_class, g_free);
-  g_clear_pointer (&priv->process_chrome_override, g_free);
+  g_clear_pointer (&priv->override_css_selectors, g_free);
+  g_clear_pointer (&priv->process_glass_override, g_free);
 
-  if (priv->chrome_transition) {
-    adw_animation_reset (priv->chrome_transition);
-    g_clear_object (&priv->chrome_transition);
+  if (priv->glass_transition) {
+    adw_animation_reset (priv->glass_transition);
+    g_clear_object (&priv->glass_transition);
   }
 
+  g_clear_object (&priv->settings_binds);
+  g_clear_object (&priv->surface_binds);
   g_clear_object (&priv->tab_signals);
   g_clear_object (&priv->settings);
 
@@ -164,21 +171,21 @@ kgx_window_set_property (GObject      *object,
       if (g_set_object (&priv->settings, g_value_get_object (value)) &&
           priv->settings) {
         g_signal_connect_object (priv->settings,
-                                 "notify::chrome-opacity",
-                                 G_CALLBACK (chrome_opacity_changed),
+                                 "notify::glass-opacity",
+                                 G_CALLBACK (glass_opacity_changed),
                                  self,
                                  G_CONNECT_DEFAULT);
         g_signal_connect_object (priv->settings,
-                                 "notify::chrome-color",
-                                 G_CALLBACK (chrome_opacity_changed),
+                                 "notify::glass-color",
+                                 G_CALLBACK (glass_opacity_changed),
                                  self,
                                  G_CONNECT_DEFAULT);
         g_signal_connect_object (priv->settings,
                                  "notify::accent-color",
-                                 G_CALLBACK (chrome_opacity_changed),
+                                 G_CALLBACK (glass_opacity_changed),
                                  self,
                                  G_CONNECT_DEFAULT);
-        kgx_window_update_chrome_opacity (self);
+        kgx_window_update_glass_opacity (self);
       }
       break;
     case PROP_SEARCH_MODE_ENABLED:
@@ -252,7 +259,6 @@ kgx_window_get_property (GObject    *object,
 static void
 kgx_window_update_opaque_region (KgxWindow *self)
 {
-  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
   GdkSurface *surface;
 
   if (!gtk_widget_get_realized (GTK_WIDGET (self))) {
@@ -381,29 +387,41 @@ fullscreened_changed (KgxWindow *self)
 
 
 static void
-kgx_window_update_chrome_opacity (KgxWindow *self)
+kgx_window_update_glass_opacity (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
-  double chrome_opacity = 1.0;
-  g_autofree char *chrome_color = NULL;
-  g_autofree char *accent_color = NULL;
+  double glass_opacity = 1.0;
+  g_autofree char *glass_color = NULL;
+  g_autofree char *accent_color_raw = NULL;
   g_autofree char *css = NULL;
   GdkRGBA rgba;
+  GdkRGBA accent_rgba = { 53 / 255.0, 132 / 255.0, 228 / 255.0, 1.0 }; /* #3584e4 */
+  char accent_safe[64];
 
-  if (!priv->settings || !chrome_css) {
+  if (!priv->settings || !glass_css) {
     return;
   }
 
   g_object_get (priv->settings,
-                "chrome-opacity", &chrome_opacity,
-                "chrome-color", &chrome_color,
-                "accent-color", &accent_color,
+                "glass-opacity", &glass_opacity,
+                "glass-color", &glass_color,
+                "accent-color", &accent_color_raw,
                 NULL);
 
   /* Parse the hex color, default to black if invalid */
-  if (!chrome_color || !gdk_rgba_parse (&rgba, chrome_color)) {
+  if (!glass_color || !gdk_rgba_parse (&rgba, glass_color)) {
     rgba = (GdkRGBA) { 0.0, 0.0, 0.0, 1.0 };
   }
+
+  /* Parse accent color into safe rgb() string to prevent CSS injection */
+  if (accent_color_raw && accent_color_raw[0] &&
+      gdk_rgba_parse (&accent_rgba, accent_color_raw)) {
+    /* parsed successfully */
+  }
+  snprintf (accent_safe, sizeof (accent_safe), "rgb(%d,%d,%d)",
+            (int)(accent_rgba.red * 255),
+            (int)(accent_rgba.green * 255),
+            (int)(accent_rgba.blue * 255));
 
   /* Use CSS background-color with alpha instead of widget opacity —
    * this keeps labels, buttons, and icons at full opacity. */
@@ -411,12 +429,12 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
     int r = (int)(rgba.red * 255);
     int g = (int)(rgba.green * 255);
     int b = (int)(rgba.blue * 255);
-    double a = chrome_opacity;
+    double a = glass_opacity;
 
     css = g_strdup_printf (
-      /* Only the headerbar, settings-page, and scrollbar get the chrome
+      /* Only the headerbar, settings-page, and scrollbar get the glass
        * color — everything nested inside must be transparent so alpha
-       * doesn't compound across layers when chrome_opacity < 1.0. */
+       * doesn't compound across layers when glass_opacity < 1.0. */
       ".terminal-window headerbar,"
       ".terminal-window tabbar,"
       ".terminal-window settings-page,"
@@ -526,45 +544,33 @@ kgx_window_update_chrome_opacity (KgxWindow *self)
       "}",
       r, g, b, a,
       CLAMP (r + 100, 0, 255), CLAMP (g + 100, 0, 255), CLAMP (b + 100, 0, 255), 0.5,
-      accent_color && accent_color[0] ? accent_color : "#3584e4",
-      accent_color && accent_color[0] ? accent_color : "#3584e4",
-      accent_color && accent_color[0] ? accent_color : "#3584e4",
-      accent_color && accent_color[0] ? accent_color : "#3584e4",
-      accent_color && accent_color[0] ? accent_color : "#3584e4",
-      accent_color && accent_color[0] ? accent_color : "#3584e4",
-      accent_color && accent_color[0] ? accent_color : "#3584e4");
+      accent_safe, accent_safe, accent_safe, accent_safe,
+      accent_safe, accent_safe, accent_safe);
   }
 
-  /* Apply accent color override */
-  if (accent_color && accent_color[0] != '\0') {
-    GdkRGBA accent_rgba;
-    if (gdk_rgba_parse (&accent_rgba, accent_color)) {
-      g_autofree char *accent_css = g_strdup_printf (
-        "@define-color accent_bg_color %s;"
-        "@define-color accent_color %s;"
-        "@define-color accent_fg_color white;"
-        ".terminal-window, .terminal-window * {"
-        "  --accent-bg-color: %s;"
-        "  --accent-color: %s;"
-        "  --accent-fg-color: white;"
-        "}", accent_color, accent_color, accent_color, accent_color);
-      g_autofree char *combined = g_strconcat (css, accent_css, NULL);
-      gtk_css_provider_load_from_string (chrome_css, combined);
-    } else {
-      gtk_css_provider_load_from_string (chrome_css, css);
-    }
-  } else {
-    gtk_css_provider_load_from_string (chrome_css, css);
+  /* Apply accent color as CSS custom properties */
+  {
+    g_autofree char *accent_css = g_strdup_printf (
+      "@define-color accent_bg_color %s;"
+      "@define-color accent_color %s;"
+      "@define-color accent_fg_color white;"
+      ".terminal-window, .terminal-window * {"
+      "  --accent-bg-color: %s;"
+      "  --accent-color: %s;"
+      "  --accent-fg-color: white;"
+      "}", accent_safe, accent_safe, accent_safe, accent_safe);
+    g_autofree char *combined = g_strconcat (css, accent_css, NULL);
+    gtk_css_provider_load_from_string (glass_css, combined);
   }
 }
 
 
 static void
-chrome_opacity_changed (G_GNUC_UNUSED GObject    *object,
+glass_opacity_changed (G_GNUC_UNUSED GObject    *object,
                         G_GNUC_UNUSED GParamSpec *pspec,
                         KgxWindow                *self)
 {
-  kgx_window_update_chrome_opacity (self);
+  kgx_window_update_glass_opacity (self);
 }
 
 
@@ -623,11 +629,11 @@ maybe_close_window (KgxWindow *self)
 }
 
 
-static gboolean update_process_chrome (KgxWindow *self);
+static gboolean update_process_glass (KgxWindow *self);
 
 
 static void
-apply_chrome_color (KgxWindow     *self,
+apply_glass_color (KgxWindow     *self,
                     const GdkRGBA *color)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
@@ -635,21 +641,19 @@ apply_chrome_color (KgxWindow     *self,
   int g = (int)(color->green * 255);
   int b = (int)(color->blue * 255);
 
-  /* Update CSS chrome — no CSS transition, we drive every frame. */
-  if (priv->override_css) {
-    g_autofree char *css = g_strdup_printf (
-      ".%s headerbar,"
-      ".%s tabbar,"
-      ".%s settings-page,"
-      ".%s scrollbar,"
-      ".%s scrollbar trough {"
-      "  background-color: rgba(%d, %d, %d, 0.94);"
-      "}",
-      priv->window_css_class, priv->window_css_class,
-      priv->window_css_class, priv->window_css_class,
-      priv->window_css_class,
-      r, g, b);
-    gtk_css_provider_load_from_string (priv->override_css, css);
+  /* Update CSS glass — skip if RGB unchanged since last frame. */
+  if (priv->override_css && priv->override_css_selectors &&
+      (r != priv->override_last_r ||
+       g != priv->override_last_g ||
+       b != priv->override_last_b)) {
+    char buf[512];
+    snprintf (buf, sizeof (buf),
+              "%s { background-color: rgba(%d, %d, %d, 0.94); }",
+              priv->override_css_selectors, r, g, b);
+    gtk_css_provider_load_from_string (priv->override_css, buf);
+    priv->override_last_r = r;
+    priv->override_last_g = g;
+    priv->override_last_b = b;
   }
 
   /* Update VTE terminal background — set directly, no separate animation. */
@@ -667,7 +671,7 @@ apply_chrome_color (KgxWindow     *self,
 
 
 static void
-chrome_lerp_cb (double    value,
+glass_lerp_cb (double    value,
                 KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
@@ -677,57 +681,57 @@ chrome_lerp_cb (double    value,
   if (!priv->pages)
     return;
 
-  c.red   = priv->chrome_from.red   + (priv->chrome_to.red   - priv->chrome_from.red)   * value;
-  c.green = priv->chrome_from.green + (priv->chrome_to.green - priv->chrome_from.green) * value;
-  c.blue  = priv->chrome_from.blue  + (priv->chrome_to.blue  - priv->chrome_from.blue)  * value;
+  c.red   = priv->glass_from.red   + (priv->glass_to.red   - priv->glass_from.red)   * value;
+  c.green = priv->glass_from.green + (priv->glass_to.green - priv->glass_from.green) * value;
+  c.blue  = priv->glass_from.blue  + (priv->glass_to.blue  - priv->glass_from.blue)  * value;
   c.alpha = 1.0f;
 
-  priv->chrome_current = c;
+  priv->glass_current = c;
 
-  apply_chrome_color (self, &c);
+  apply_glass_color (self, &c);
 }
 
 
 static void
-start_chrome_transition (KgxWindow     *self,
+start_glass_transition (KgxWindow     *self,
                          const GdkRGBA *target)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
-  priv->chrome_from = priv->chrome_current;
-  priv->chrome_to = *target;
+  priv->glass_from = priv->glass_current;
+  priv->glass_to = *target;
 
-  if (!priv->chrome_transition) {
+  if (!priv->glass_transition) {
     AdwAnimationTarget *t = adw_callback_animation_target_new (
-        (AdwAnimationTargetFunc) chrome_lerp_cb, self, NULL);
-    priv->chrome_transition = adw_timed_animation_new (GTK_WIDGET (self),
+        (AdwAnimationTargetFunc) glass_lerp_cb, self, NULL);
+    priv->glass_transition = adw_timed_animation_new (GTK_WIDGET (self),
                                                         0.0, 1.0, 400, t);
-    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (priv->chrome_transition),
+    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (priv->glass_transition),
                                     ADW_EASE_IN_OUT_CUBIC);
   }
 
-  adw_animation_reset (priv->chrome_transition);
-  adw_animation_play (priv->chrome_transition);
+  adw_animation_reset (priv->glass_transition);
+  adw_animation_play (priv->glass_transition);
 }
 
 
 static gboolean
 process_check_tick (gpointer data)
 {
-  update_process_chrome (KGX_WINDOW (data));
+  update_process_glass (KGX_WINDOW (data));
   return G_SOURCE_CONTINUE;
 }
 
 
 static GdkRGBA
-get_default_chrome_color (KgxWindow *self)
+get_default_glass_color (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
   GdkRGBA def = { 0.106f, 0.106f, 0.122f, 1.0f }; /* fallback #1b1b1f */
   g_autofree char *hex = NULL;
 
   if (priv->settings) {
-    g_object_get (priv->settings, "chrome-color", &hex, NULL);
+    g_object_get (priv->settings, "glass-color", &hex, NULL);
     if (hex)
       gdk_rgba_parse (&def, hex);
   }
@@ -738,7 +742,7 @@ get_default_chrome_color (KgxWindow *self)
 
 
 static gboolean
-update_process_chrome (KgxWindow *self)
+update_process_glass (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
   g_autoptr (KgxTab) active = NULL;
@@ -773,23 +777,23 @@ update_process_chrome (KgxWindow *self)
   if (match && gdk_rgba_parse (&target, match)) {
     target.alpha = 1.0f;
   } else {
-    target = get_default_chrome_color (self);
+    target = get_default_glass_color (self);
     match = NULL;
   }
 
-  g_free (priv->process_chrome_override);
-  priv->process_chrome_override = match ? g_strdup (match) : NULL;
+  g_free (priv->process_glass_override);
+  priv->process_glass_override = match ? g_strdup (match) : NULL;
 
-  /* Seed chrome_current on first call so transitions have a start point. */
-  if (!priv->chrome_has_current) {
-    priv->chrome_current = get_default_chrome_color (self);
-    priv->chrome_has_current = TRUE;
+  /* Seed glass_current on first call so transitions have a start point. */
+  if (!priv->glass_has_current) {
+    priv->glass_current = get_default_glass_color (self);
+    priv->glass_has_current = TRUE;
   }
 
   /* Skip if already at target. */
-  if (priv->chrome_current.red   == target.red   &&
-      priv->chrome_current.green == target.green &&
-      priv->chrome_current.blue  == target.blue) {
+  if (priv->glass_current.red   == target.red   &&
+      priv->glass_current.green == target.green &&
+      priv->glass_current.blue  == target.blue) {
     /* Keep the terminal's override string consistent. */
     if (active) {
       g_autoptr (KgxTerminal) terminal = NULL;
@@ -808,8 +812,8 @@ update_process_chrome (KgxWindow *self)
       kgx_terminal_set_process_override (terminal, match);
   }
 
-  /* Animate both VTE and CSS chrome together. */
-  start_chrome_transition (self, &target);
+  /* Animate both VTE and CSS glass together. */
+  start_glass_transition (self, &target);
 
   return G_SOURCE_REMOVE;
 }
@@ -820,11 +824,11 @@ tab_train_changed (GObject *object, GParamSpec *pspec, gpointer data)
 {
   KgxWindow *self = KGX_WINDOW (data);
 
-  /* Children changed on the active tab's train — re-check process chrome.
-   * This catches name-based chrome matches (e.g. pwsh, htop) that don't
+  /* Children changed on the active tab's train — re-check process glass.
+   * This catches name-based glass matches (e.g. pwsh, htop) that don't
    * affect status flags and would otherwise only update on the timer. */
   g_idle_add_full (G_PRIORITY_HIGH_IDLE,
-                   (GSourceFunc) update_process_chrome,
+                   (GSourceFunc) update_process_glass,
                    g_object_ref (self),
                    g_object_unref);
 }
@@ -868,7 +872,7 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
 
   /* Immediate check + deferred for late-arriving children. */
   g_idle_add_full (G_PRIORITY_HIGH_IDLE,
-                   (GSourceFunc) update_process_chrome,
+                   (GSourceFunc) update_process_glass,
                    g_object_ref (self),
                    g_object_unref);
 }
@@ -1225,20 +1229,32 @@ kgx_window_init (KgxWindow *self)
   priv->translucent = TRUE;
   gtk_widget_add_css_class (GTK_WIDGET (self), "translucent");
 
-  /* Shared CSS provider for chrome styling — create once */
-  if (!chrome_css) {
-    chrome_css = gtk_css_provider_new ();
+  /* Shared CSS provider for glass styling — create once */
+  if (!glass_css) {
+    glass_css = gtk_css_provider_new ();
     gtk_style_context_add_provider_for_display (
       gdk_display_get_default (),
-      GTK_STYLE_PROVIDER (chrome_css),
+      GTK_STYLE_PROVIDER (glass_css),
       GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
   }
 
-  /* Per-window CSS provider for process-specific chrome override. */
+  /* Per-window CSS provider for process-specific glass override. */
   {
     static int win_id = 0;
     priv->window_css_class = g_strdup_printf ("kgx-win-%d", win_id++);
     gtk_widget_add_css_class (GTK_WIDGET (self), priv->window_css_class);
+    priv->override_css_selectors = g_strdup_printf (
+      ".%s headerbar,"
+      ".%s tabbar,"
+      ".%s settings-page,"
+      ".%s scrollbar,"
+      ".%s scrollbar trough",
+      priv->window_css_class, priv->window_css_class,
+      priv->window_css_class, priv->window_css_class,
+      priv->window_css_class);
+    priv->override_last_r = -1;
+    priv->override_last_g = -1;
+    priv->override_last_b = -1;
     priv->override_css = gtk_css_provider_new ();
     gtk_style_context_add_provider_for_display (
       gdk_display_get_default (),
@@ -1246,14 +1262,14 @@ kgx_window_init (KgxWindow *self)
       GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 2);
   }
 
-  /* Track the active tab to react to child process changes for chrome. */
+  /* Track the active tab to react to child process changes for glass. */
   priv->tab_signals = g_signal_group_new (KGX_TYPE_TAB);
   g_signal_group_connect (priv->tab_signals,
                           "notify::train",
                           G_CALLBACK (tab_train_changed),
                           self);
 
-  /* Safety-net timer for process chrome — catches edge cases where
+  /* Safety-net timer for process glass — catches edge cases where
    * signal-driven updates miss (e.g. tab switch timing). */
   priv->process_check_timer = g_timeout_add_seconds (5, process_check_tick, self);
 

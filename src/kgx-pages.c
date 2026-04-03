@@ -119,6 +119,10 @@ kgx_pages_dispose (GObject *object)
     g_signal_group_set_target (priv->style_manager_signals, NULL);
   }
 
+  g_clear_object (&priv->active_page_signals);
+  g_clear_object (&priv->active_page_binds);
+  g_clear_object (&priv->settings_signals);
+  g_clear_object (&priv->style_manager_signals);
 
   g_clear_object (&priv->settings);
 

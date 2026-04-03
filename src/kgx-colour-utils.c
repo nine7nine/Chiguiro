@@ -26,17 +26,20 @@
 G_DEFINE_QUARK (kgx-colour-parse-error-quark, kgx_colour_parse_error)
 
 
-static inline double
-read_component (const char **const ptr)
+static inline gboolean
+read_component (const char **const ptr, float *out)
 {
   int first = g_unichar_xdigit_value (g_utf8_get_char (*ptr));
-  int second = 0;
 
   *ptr = g_utf8_next_char (*ptr);
-  second = g_unichar_xdigit_value (g_utf8_get_char (*ptr));
+  int second = g_unichar_xdigit_value (g_utf8_get_char (*ptr));
   *ptr = g_utf8_next_char (*ptr);
 
-  return ((first << 4) + second) / 255.0;
+  if (first < 0 || second < 0)
+    return FALSE;
+
+  *out = (float)((first << 4) + second) / 255.0f;
+  return TRUE;
 }
 
 
@@ -59,8 +62,14 @@ kgx_colour_from_string (const char *const   string,
     return;
   }
 
-  colour->red = read_component (&ptr);
-  colour->green = read_component (&ptr);
-  colour->blue = read_component (&ptr);
+  if (!read_component (&ptr, &colour->red) ||
+      !read_component (&ptr, &colour->green) ||
+      !read_component (&ptr, &colour->blue)) {
+    g_set_error_literal (error,
+                         KGX_COLOUR_PARSE_ERROR,
+                         KGX_COLOUR_PARSE_ERROR_WRONG_LENGTH,
+                         _("Color string contains invalid hex digits"));
+    return;
+  }
   colour->alpha = 0.0;
 }
