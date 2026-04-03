@@ -891,12 +891,17 @@ on_child_removed (KgxTrain   *train,
 
   g_object_notify (G_OBJECT (self), "train");
 
-  /* Stop animation when no children remain */
+  /* Stop animation and clear stale VTE title when no children remain */
   {
     g_autoptr(GPtrArray) children = kgx_train_get_children (train);
 
     if (!children || children->len == 0) {
       g_clear_handle_id (&priv->activity_timer, g_source_remove);
+
+      /* VTE retains window-title from the exited child process.
+       * Clear tab-title so the fallback title (shell name) is used. */
+      g_clear_pointer (&priv->title, g_free);
+      g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_TAB_TITLE]);
     }
   }
 }
