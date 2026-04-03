@@ -155,6 +155,13 @@ kgx_window_dispose (GObject *object)
   g_clear_object (&priv->tab_signals);
   g_clear_object (&priv->settings);
 
+  /* Stop all edge animations before parent disposes the widget tree. */
+  if (priv->edge) {
+    kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL, FALSE);
+    kgx_edge_set_privileged (priv->edge, FALSE);
+    kgx_edge_set_ambient (priv->edge, FALSE);
+  }
+
   G_OBJECT_CLASS (kgx_window_parent_class)->dispose (object);
 }
 
@@ -775,12 +782,32 @@ update_process_glass (KgxWindow *self)
     }
   }
 
-  /* Determine target color. */
-  if (match && gdk_rgba_parse (&target, match)) {
-    target.alpha = 1.0f;
-  } else {
-    target = get_default_glass_color (self);
-    match = NULL;
+  /* Parse extended config: "glasscolor;preset;reverse;particlecolor" */
+  {
+    g_autofree char *glass_hex = NULL;
+    KgxParticlePreset preset = KGX_PARTICLE_NONE;
+    gboolean reverse = FALSE;
+    GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
+
+    if (match) {
+      kgx_parse_process_config (match, &glass_hex, &preset, &reverse, &particle_color);
+    }
+
+    /* Determine target glass color. */
+    if (glass_hex && gdk_rgba_parse (&target, glass_hex)) {
+      target.alpha = 1.0f;
+    } else {
+      target = get_default_glass_color (self);
+      match = NULL;
+    }
+
+    /* Activate or deactivate process particle on the edge widget. */
+    if (match && preset != KGX_PARTICLE_NONE) {
+      particle_color.alpha = 1.0f;
+      kgx_edge_set_process_particle (priv->edge, preset, &particle_color, reverse);
+    } else {
+      kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL, FALSE);
+    }
   }
 
   g_free (priv->process_glass_override);

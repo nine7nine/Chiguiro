@@ -22,6 +22,7 @@
 
 #include "kgx-about.h"
 #include "kgx-application.h"
+#include "kgx-edge.h"
 #include "kgx-settings.h"
 #include "kgx-sprite.h"
 #include "kgx-utils.h"
@@ -70,6 +71,18 @@ struct _KgxSettingsPage {
   GtkWidget            *app_glass_color_4, *app_glass_color_5, *app_glass_color_6, *app_glass_color_7;
   GtkWidget            *app_glass_color_8, *app_glass_color_9, *app_glass_color_10, *app_glass_color_11;
   GtkWidget            *app_glass_color_12, *app_glass_color_13, *app_glass_color_14;
+  GtkWidget            *app_glass_preset_0, *app_glass_preset_1, *app_glass_preset_2, *app_glass_preset_3;
+  GtkWidget            *app_glass_preset_4, *app_glass_preset_5, *app_glass_preset_6, *app_glass_preset_7;
+  GtkWidget            *app_glass_preset_8, *app_glass_preset_9, *app_glass_preset_10, *app_glass_preset_11;
+  GtkWidget            *app_glass_preset_12, *app_glass_preset_13, *app_glass_preset_14;
+  GtkWidget            *app_glass_reverse_0, *app_glass_reverse_1, *app_glass_reverse_2, *app_glass_reverse_3;
+  GtkWidget            *app_glass_reverse_4, *app_glass_reverse_5, *app_glass_reverse_6, *app_glass_reverse_7;
+  GtkWidget            *app_glass_reverse_8, *app_glass_reverse_9, *app_glass_reverse_10, *app_glass_reverse_11;
+  GtkWidget            *app_glass_reverse_12, *app_glass_reverse_13, *app_glass_reverse_14;
+  GtkWidget            *app_glass_pcolor_0, *app_glass_pcolor_1, *app_glass_pcolor_2, *app_glass_pcolor_3;
+  GtkWidget            *app_glass_pcolor_4, *app_glass_pcolor_5, *app_glass_pcolor_6, *app_glass_pcolor_7;
+  GtkWidget            *app_glass_pcolor_8, *app_glass_pcolor_9, *app_glass_pcolor_10, *app_glass_pcolor_11;
+  GtkWidget            *app_glass_pcolor_12, *app_glass_pcolor_13, *app_glass_pcolor_14;
   GtkWidget            *logo_picture;
   GtkWidget            *page_title;
   AdwCarousel          *carousel;
@@ -81,7 +94,13 @@ struct _KgxSettingsPage {
 
 G_DEFINE_TYPE (KgxSettingsPage, kgx_settings_page, ADW_TYPE_BIN)
 
+#define APP_GLASS_SLOTS 15
 static void app_glass_load (KgxSettingsPage *self);
+static inline GtkWidget **app_glass_entries (KgxSettingsPage *self);
+static inline GtkWidget **app_glass_colors (KgxSettingsPage *self);
+static inline GtkWidget **app_glass_presets (KgxSettingsPage *self);
+static inline GtkWidget **app_glass_reverses (KgxSettingsPage *self);
+static inline GtkWidget **app_glass_pcolors (KgxSettingsPage *self);
 
 
 enum {
@@ -108,6 +127,23 @@ kgx_settings_page_dispose (GObject *object)
   }
 
   g_clear_handle_id (&self->app_glass_save_timeout, g_source_remove);
+
+  /* Disconnect all signal handlers from App Glass template children before
+   * disposal — signals can fire during teardown and access freed state. */
+  {
+    GtkWidget **entries  = app_glass_entries (self);
+    GtkWidget **colors   = app_glass_colors (self);
+    GtkWidget **presets  = app_glass_presets (self);
+    GtkWidget **reverses = app_glass_reverses (self);
+    GtkWidget **pcolors  = app_glass_pcolors (self);
+    for (int i = 0; i < APP_GLASS_SLOTS; i++) {
+      if (entries[i])  g_signal_handlers_disconnect_by_data (entries[i], self);
+      if (colors[i])   g_signal_handlers_disconnect_by_data (colors[i], self);
+      if (presets[i])  g_signal_handlers_disconnect_by_data (presets[i], self);
+      if (reverses[i]) g_signal_handlers_disconnect_by_data (reverses[i], self);
+      if (pcolors[i])  g_signal_handlers_disconnect_by_data (pcolors[i], self);
+    }
+  }
 
   /* settings_binds is a template child — disconnect but do NOT free */
   if (self->settings_binds) {
@@ -386,6 +422,51 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_12);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_13);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_14);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_0);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_1);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_2);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_3);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_4);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_5);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_6);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_7);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_8);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_9);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_10);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_11);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_12);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_13);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_14);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_0);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_1);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_2);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_3);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_4);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_5);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_6);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_7);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_8);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_9);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_10);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_11);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_12);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_13);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_14);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_0);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_1);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_2);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_3);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_4);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_5);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_6);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_7);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_8);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_9);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_10);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_11);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_12);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_13);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
@@ -440,9 +521,6 @@ notify_use_system (gpointer user_data)
 }
 
 
-#define APP_GLASS_SLOTS 15
-
-
 static inline GtkWidget **
 app_glass_entries (KgxSettingsPage *self)
 {
@@ -475,6 +553,54 @@ app_glass_colors (KgxSettingsPage *self)
 }
 
 
+static inline GtkWidget **
+app_glass_presets (KgxSettingsPage *self)
+{
+  static GtkWidget *arr[APP_GLASS_SLOTS];
+  arr[0] = self->app_glass_preset_0;   arr[1] = self->app_glass_preset_1;
+  arr[2] = self->app_glass_preset_2;   arr[3] = self->app_glass_preset_3;
+  arr[4] = self->app_glass_preset_4;   arr[5] = self->app_glass_preset_5;
+  arr[6] = self->app_glass_preset_6;   arr[7] = self->app_glass_preset_7;
+  arr[8] = self->app_glass_preset_8;   arr[9] = self->app_glass_preset_9;
+  arr[10] = self->app_glass_preset_10; arr[11] = self->app_glass_preset_11;
+  arr[12] = self->app_glass_preset_12; arr[13] = self->app_glass_preset_13;
+  arr[14] = self->app_glass_preset_14;
+  return arr;
+}
+
+
+static inline GtkWidget **
+app_glass_reverses (KgxSettingsPage *self)
+{
+  static GtkWidget *arr[APP_GLASS_SLOTS];
+  arr[0] = self->app_glass_reverse_0;   arr[1] = self->app_glass_reverse_1;
+  arr[2] = self->app_glass_reverse_2;   arr[3] = self->app_glass_reverse_3;
+  arr[4] = self->app_glass_reverse_4;   arr[5] = self->app_glass_reverse_5;
+  arr[6] = self->app_glass_reverse_6;   arr[7] = self->app_glass_reverse_7;
+  arr[8] = self->app_glass_reverse_8;   arr[9] = self->app_glass_reverse_9;
+  arr[10] = self->app_glass_reverse_10; arr[11] = self->app_glass_reverse_11;
+  arr[12] = self->app_glass_reverse_12; arr[13] = self->app_glass_reverse_13;
+  arr[14] = self->app_glass_reverse_14;
+  return arr;
+}
+
+
+static inline GtkWidget **
+app_glass_pcolors (KgxSettingsPage *self)
+{
+  static GtkWidget *arr[APP_GLASS_SLOTS];
+  arr[0] = self->app_glass_pcolor_0;   arr[1] = self->app_glass_pcolor_1;
+  arr[2] = self->app_glass_pcolor_2;   arr[3] = self->app_glass_pcolor_3;
+  arr[4] = self->app_glass_pcolor_4;   arr[5] = self->app_glass_pcolor_5;
+  arr[6] = self->app_glass_pcolor_6;   arr[7] = self->app_glass_pcolor_7;
+  arr[8] = self->app_glass_pcolor_8;   arr[9] = self->app_glass_pcolor_9;
+  arr[10] = self->app_glass_pcolor_10; arr[11] = self->app_glass_pcolor_11;
+  arr[12] = self->app_glass_pcolor_12; arr[13] = self->app_glass_pcolor_13;
+  arr[14] = self->app_glass_pcolor_14;
+  return arr;
+}
+
+
 /* Muted dark defaults for empty slots — slight color tints on near-black */
 static const GdkRGBA glass_default_colors[APP_GLASS_SLOTS] = {
   { 0.11f, 0.11f, 0.14f, 1.0f },  /* blue-grey */
@@ -500,8 +626,11 @@ app_glass_save (KgxSettingsPage *self)
 {
   if (self->app_glass_inhibit_save)
     return;
-  GtkWidget **entries = app_glass_entries (self);
-  GtkWidget **colors  = app_glass_colors (self);
+  GtkWidget **entries  = app_glass_entries (self);
+  GtkWidget **colors   = app_glass_colors (self);
+  GtkWidget **presets  = app_glass_presets (self);
+  GtkWidget **reverses = app_glass_reverses (self);
+  GtkWidget **pcolors  = app_glass_pcolors (self);
   g_autoptr (GHashTable) ht = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                       g_free, g_free);
 
@@ -510,9 +639,20 @@ app_glass_save (KgxSettingsPage *self)
     if (name && name[0] != '\0') {
       const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (
                                GTK_COLOR_DIALOG_BUTTON (colors[i]));
-      char *color = g_strdup_printf ("#%02x%02x%02x",
-        (int)(rgba->red * 255), (int)(rgba->green * 255), (int)(rgba->blue * 255));
-      g_hash_table_insert (ht, g_strdup (name), color);
+      guint preset_idx = gtk_drop_down_get_selected (GTK_DROP_DOWN (presets[i]));
+      gboolean rev = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (reverses[i]));
+      const GdkRGBA *pc = gtk_color_dialog_button_get_rgba (
+                             GTK_COLOR_DIALOG_BUTTON (pcolors[i]));
+
+      const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate" };
+      const char *preset_str = (preset_idx < G_N_ELEMENTS (preset_names))
+                                 ? preset_names[preset_idx] : "none";
+
+      char *value = g_strdup_printf ("#%02x%02x%02x;%s;%d;#%02x%02x%02x",
+        (int)(rgba->red * 255), (int)(rgba->green * 255), (int)(rgba->blue * 255),
+        preset_str, rev ? 1 : 0,
+        (int)(pc->red * 255), (int)(pc->green * 255), (int)(pc->blue * 255));
+      g_hash_table_insert (ht, g_strdup (name), value);
     }
   }
 
@@ -529,11 +669,26 @@ app_glass_enable_save (gpointer data)
 }
 
 
+static guint
+preset_string_to_index (const char *s)
+{
+  if (!s) return 0;
+  if (g_str_equal (s, "fireworks"))  return 1;
+  if (g_str_equal (s, "corners"))    return 2;
+  if (g_str_equal (s, "pulse-out"))  return 3;
+  if (g_str_equal (s, "rotate"))     return 4;
+  return 0;
+}
+
+
 static void
 app_glass_load (KgxSettingsPage *self)
 {
-  GtkWidget **entries = app_glass_entries (self);
-  GtkWidget **colors  = app_glass_colors (self);
+  GtkWidget **entries  = app_glass_entries (self);
+  GtkWidget **colors   = app_glass_colors (self);
+  GtkWidget **presets  = app_glass_presets (self);
+  GtkWidget **reverses = app_glass_reverses (self);
+  GtkWidget **pcolors  = app_glass_pcolors (self);
   GHashTable *ht = NULL;
   GHashTableIter iter;
   gpointer key, val;
@@ -551,17 +706,36 @@ app_glass_load (KgxSettingsPage *self)
     gtk_editable_set_text (GTK_EDITABLE (entries[j]), "");
     gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[j]),
                                       &glass_default_colors[j]);
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (presets[j]), 0);
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (reverses[j]), FALSE);
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (pcolors[j]),
+                                      &glass_default_colors[j]);
   }
 
   if (ht) {
     g_hash_table_iter_init (&iter, ht);
     while (g_hash_table_iter_next (&iter, &key, &val) && i < APP_GLASS_SLOTS) {
-      GdkRGBA rgba = { 0, 0, 0, 1 };
+      g_autofree char *glass_hex = NULL;
+      KgxParticlePreset preset = KGX_PARTICLE_NONE;
+      gboolean reverse = FALSE;
+      GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
 
       gtk_editable_set_text (GTK_EDITABLE (entries[i]), (const char *) key);
-      gdk_rgba_parse (&rgba, (const char *) val);
-      rgba.alpha = 1.0f;
-      gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[i]), &rgba);
+      kgx_parse_process_config ((const char *) val,
+                                 &glass_hex, &preset, &reverse, &particle_color);
+
+      if (glass_hex) {
+        GdkRGBA rgba = { 0, 0, 0, 1 };
+        gdk_rgba_parse (&rgba, glass_hex);
+        rgba.alpha = 1.0f;
+        gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[i]), &rgba);
+      }
+
+      gtk_drop_down_set_selected (GTK_DROP_DOWN (presets[i]),
+                                   preset_string_to_index (kgx_particle_preset_to_string (preset)));
+      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (reverses[i]), reverse);
+      particle_color.alpha = 1.0f;
+      gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (pcolors[i]), &particle_color);
       i++;
     }
     g_hash_table_unref (ht);
@@ -657,12 +831,30 @@ kgx_settings_page_init (KgxSettingsPage *self)
 
   /* App Glass — connect change signals and load initial data. */
   {
-    GtkWidget **entries = app_glass_entries (self);
-    GtkWidget **colors  = app_glass_colors (self);
+    GtkWidget **entries  = app_glass_entries (self);
+    GtkWidget **colors   = app_glass_colors (self);
+    GtkWidget **presets  = app_glass_presets (self);
+    GtkWidget **reverses = app_glass_reverses (self);
+    GtkWidget **pcolors  = app_glass_pcolors (self);
+
+    /* Each dropdown gets its own model to avoid double-free on dispose. */
+    const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", NULL };
+    for (int i = 0; i < APP_GLASS_SLOTS; i++) {
+      GtkStringList *model = gtk_string_list_new (preset_names);
+      gtk_drop_down_set_model (GTK_DROP_DOWN (presets[i]), G_LIST_MODEL (model));
+      g_object_unref (model);
+    }
+
     for (int i = 0; i < APP_GLASS_SLOTS; i++) {
       g_signal_connect (entries[i], "changed",
                         G_CALLBACK (app_glass_changed), self);
       g_signal_connect (colors[i], "notify::rgba",
+                        G_CALLBACK (app_glass_color_changed), self);
+      g_signal_connect (presets[i], "notify::selected",
+                        G_CALLBACK (app_glass_color_changed), self);
+      g_signal_connect (reverses[i], "toggled",
+                        G_CALLBACK (app_glass_color_changed), self);
+      g_signal_connect (pcolors[i], "notify::rgba",
                         G_CALLBACK (app_glass_color_changed), self);
     }
   }

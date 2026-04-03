@@ -243,7 +243,7 @@
                                 <property name="use-underline">True</property>
                                 <property name="activatable-widget">glass_color</property>
                                 <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="glass_color">
+                                  <object class="GtkColorDialogButton" id="glass_color"><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
                                     <property name="valign">center</property>
                                     <property name="margin-top">8</property>
                                     <property name="margin-bottom">8</property>
@@ -262,7 +262,7 @@
                                 <property name="use-underline">True</property>
                                 <property name="activatable-widget">accent_color</property>
                                 <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="accent_color">
+                                  <object class="GtkColorDialogButton" id="accent_color"><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
                                     <property name="valign">center</property>
                                     <property name="margin-top">8</property>
                                     <property name="margin-bottom">8</property>
@@ -363,7 +363,7 @@
                                 <property name="use-underline">True</property>
                                 <property name="activatable-widget">edge_overscroll_color</property>
                                 <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="edge_overscroll_color">
+                                  <object class="GtkColorDialogButton" id="edge_overscroll_color"><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
                                     <property name="valign">center</property>
                                     <property name="dialog">
                                       <object class="GtkColorDialog">
@@ -386,7 +386,7 @@
                                 <property name="use-underline">True</property>
                                 <property name="activatable-widget">edge_privilege_color</property>
                                 <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="edge_privilege_color">
+                                  <object class="GtkColorDialogButton" id="edge_privilege_color"><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
                                     <property name="valign">center</property>
                                     <property name="dialog">
                                       <object class="GtkColorDialog">
@@ -517,7 +517,7 @@
                     <child>
                       <object class="GtkBox">
                         <property name="orientation">vertical</property>
-                        <property name="spacing">6</property>
+                        <property name="spacing">4</property>
                         <child>
                           <object class="GtkLabel">
                             <property name="label" translatable="yes">App Glass</property>
@@ -527,107 +527,152 @@
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_0">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_0"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_0"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_0"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_0"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_0"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_1">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_1"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_1"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_1"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_1"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_1"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_2">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_2"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_2"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_2"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_2"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_2"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_3">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_3"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_3"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_3"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_3"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_3"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_4">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_4"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_4"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_4"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_4"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_4"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_5">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_5"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_5"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_5"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_5"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_5"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_6">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_6"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_6"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_6"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_6"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_6"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_7">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_7"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_7"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_7"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_7"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_7"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_8">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_8"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_8"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_8"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_8"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_8"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_9">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_9"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_9"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_9"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_9"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_9"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_10">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_10"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_10"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_10"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_10"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_10"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_11">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_11"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_11"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_11"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_11"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_11"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_12">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_12"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_12"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_12"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_12"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_12"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_13">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_13"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_13"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_13"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_13"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_13"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                         <child>
                           <object class="GtkBox" id="app_glass_row_14">
-                            <property name="spacing">6</property>
+                            <property name="spacing">4</property>
                             <child><object class="GtkEntry" id="app_glass_14"><property name="hexpand">True</property><property name="placeholder-text" translatable="yes">process name</property><style><class name="glass-entry"/></style></object></child>
                             <child><object class="GtkColorDialogButton" id="app_glass_color_14"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
+                            <child><object class="GtkDropDown" id="app_glass_preset_14"><property name="valign">center</property><style><class name="glass-preset"/></style></object></child>
+                            <child><object class="GtkToggleButton" id="app_glass_reverse_14"><property name="valign">center</property><property name="icon-name">object-flip-horizontal-symbolic</property><property name="tooltip-text" translatable="yes">Reverse</property><style><class name="glass-reverse"/><class name="flat"/></style></object></child>
+                            <child><object class="GtkColorDialogButton" id="app_glass_pcolor_14"><property name="valign">center</property><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property></object></child>
                           </object>
                         </child>
                       </object>

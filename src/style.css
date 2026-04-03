@@ -230,6 +230,29 @@ settings-page preferencesgroup > box > label {
   caret-color: currentColor;
 }
 
+.glass-preset {
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  min-height: 28px;
+  padding: 0 4px;
+}
+
+.glass-reverse {
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.glass-reverse:checked {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 /* ── Font picker ───────────────────────────────────────── */
 
 .font-picker {

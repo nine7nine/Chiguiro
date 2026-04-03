@@ -54,20 +54,28 @@ struct _KgxEdge {
   double          overscroll_progress;   /* –1 = idle */
   GtkPositionType overscroll_edge;
 
-  /* ── ambient / privilege mode ───────────────────────────── */
+  /* ── firework / privilege mode ───────────────────────────── */
   gboolean        privileged;
-  gboolean        ambient_settings;   /* settings page triggered */
-  gboolean        ambient_privilege;  /* privilege triggered */
+  gboolean        firework_settings;   /* settings page triggered */
+  gboolean        firework_privilege;  /* privilege triggered */
 #define MAX_BURSTS 8
-#define ambient_active(s) ((s)->ambient_settings || (s)->ambient_privilege)
+#define firework_active(s) ((s)->firework_settings || (s)->firework_privilege || \
+                            (s)->process_preset == KGX_PARTICLE_FIREWORKS)
 
-  guint           ambient_timeout;
+  guint           firework_timeout;
   AdwAnimation   *burst_anim[MAX_BURSTS];
   double          burst_progress[MAX_BURSTS];
   double          burst_head[MAX_BURSTS];
   GdkRGBA         burst_color[MAX_BURSTS];
   guint           burst_timeout[MAX_BURSTS];
   BurstData       burst_data[MAX_BURSTS];
+
+  /* ── process-specific particle ─────────────────────────── */
+  KgxParticlePreset process_preset;
+  GdkRGBA           process_color;
+  gboolean          process_reverse;
+  AdwAnimation     *process_anim;
+  double            process_progress;   /* -1 = idle, 0..1 = active */
 };
 
 
@@ -266,7 +274,7 @@ draw_overscroll (GtkSnapshot     *snapshot,
 
 /* ── privilege snake drawing ─────────────────────────────── */
 
-/* ── ambient mode ────────────────────────────────────────── */
+/* ── firework mode ───────────────────────────────────────── */
 
 /* ── burst helpers (array-based for MAX_BURSTS) ────────────── */
 
@@ -291,7 +299,7 @@ burst_value_cb (double value, BurstData *bd)
 }
 
 
-static void ambient_schedule (KgxEdge *self);
+static void firework_schedule (KgxEdge *self);
 
 
 static void
@@ -313,7 +321,7 @@ burst_fire (gpointer data)
 
   self->burst_timeout[i] = 0;
 
-  if (!ambient_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
+  if (!firework_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
     return G_SOURCE_REMOVE;
 
   width  = gtk_widget_get_width (GTK_WIDGET (self));
@@ -322,9 +330,9 @@ burst_fire (gpointer data)
 
   self->burst_head[i] = g_random_double () * perim;
 
-  /* Settings ambient uses random colors (higher priority).
+  /* Settings firework uses random colors (higher priority).
    * Privilege uses privilege color only when settings is inactive. */
-  if (self->ambient_settings)
+  if (self->firework_settings)
     self->burst_color[i] = random_muted_color ();
   else if (self->privileged && self->privilege_enabled)
     self->burst_color[i] = resolve_color (self, self->privilege_color);
@@ -340,13 +348,13 @@ burst_fire (gpointer data)
 
 
 static gboolean
-ambient_fire (gpointer data)
+firework_fire (gpointer data)
 {
   KgxEdge *self = KGX_EDGE (data);
 
-  self->ambient_timeout = 0;
+  self->firework_timeout = 0;
 
-  if (!ambient_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
+  if (!firework_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
     return G_SOURCE_REMOVE;
 
   /* Fire first burst immediately, stagger the rest. */
@@ -367,16 +375,16 @@ ambient_fire (gpointer data)
   }
 
   /* Schedule next cycle immediately — overlap with current. */
-  ambient_schedule (self);
+  firework_schedule (self);
 
   return G_SOURCE_REMOVE;
 }
 
 
 static void
-ambient_schedule (KgxEdge *self)
+firework_schedule (KgxEdge *self)
 {
-  if (self->ambient_timeout)
+  if (self->firework_timeout)
     return;
 
   /* burst_spread controls cycle interval:
@@ -390,7 +398,7 @@ ambient_schedule (KgxEdge *self)
               ? 200
               : g_random_int_range (MAX (lo, 200), MAX (hi, 400));
 
-  self->ambient_timeout = g_timeout_add (delay, ambient_fire, self);
+  self->firework_timeout = g_timeout_add (delay, firework_fire, self);
 }
 
 
@@ -414,7 +422,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
                      self->pulse_speed, self->pulse_depth);
   }
 
-  /* Ambient / privilege decoration — staggered center-bursts */
+  /* Firework / privilege decoration — staggered center-bursts */
   for (int i = 0; i < MAX_BURSTS; i++) {
     if (self->burst_progress[i] >= 0.0) {
       double perim = 2.0 * (width + height);
@@ -434,6 +442,80 @@ kgx_edge_snapshot (GtkWidget   *widget,
                     width, height, &self->burst_color[i],
                     -1, self->thickness, p,
                     self->pulse_speed, self->pulse_depth);
+    }
+  }
+
+  /* Process-specific particle — one-shot with long fade like overscroll */
+  if (self->process_progress >= 0.0 &&
+      self->process_preset != KGX_PARTICLE_NONE) {
+    double perim = 2.0 * (width + height);
+    double p     = self->process_progress;
+    double fade  = p > 0.6 ? (1.0 - p) / 0.4 : 1.0;
+    float  a     = (float)(fade * 0.8);
+    double seg   = BASE_OVERSCROLL_SEG * self->tail_length * 2.0;
+
+    switch (self->process_preset) {
+    case KGX_PARTICLE_CORNERS: {
+      /* Burst from a corner along two adjacent edges — travel full edge length. */
+      double corner = self->process_reverse
+                        ? (double)(width + height)   /* bottom-right */
+                        : 0.0;                       /* top-left */
+      double h_head, v_head;
+      int h_trail, v_trail;
+
+      if (self->process_reverse) {
+        h_head  = fmod (corner + width * p, perim);           /* CW along bottom */
+        v_head  = fmod (corner - height * p + perim, perim);  /* CCW up right */
+        h_trail = -1; v_trail = +1;
+      } else {
+        h_head  = fmod (width * p, perim);                    /* CW along top */
+        v_head  = fmod (perim - height * p + perim, perim);   /* CCW up left */
+        h_trail = -1; v_trail = +1;
+      }
+
+      draw_segment (snapshot, h_head, seg, a,
+                    width, height, &self->process_color,
+                    h_trail, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      draw_segment (snapshot, v_head, seg, a,
+                    width, height, &self->process_color,
+                    v_trail, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      break;
+    }
+    case KGX_PARTICLE_PULSE_OUT: {
+      /* Two particles from center of edge, splitting outward — travel half perimeter. */
+      double center = self->process_reverse
+                        ? (double)width + height + width / 2.0  /* bottom center */
+                        : width / 2.0;                          /* top center */
+      double spread = (perim / 4.0) * p;
+      double left_head  = fmod (center - spread + perim, perim);
+      double right_head = fmod (center + spread, perim);
+
+      draw_segment (snapshot, left_head, seg, a,
+                    width, height, &self->process_color,
+                    +1, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      draw_segment (snapshot, right_head, seg, a,
+                    width, height, &self->process_color,
+                    -1, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      break;
+    }
+    case KGX_PARTICLE_ROTATE: {
+      /* Single segment travelling the full perimeter. */
+      int dir = self->process_reverse ? -1 : +1;
+      double head = fmod (dir * perim * p + perim, perim);
+      int trail = self->process_reverse ? +1 : -1;
+
+      draw_segment (snapshot, head, seg * 2.0, a,
+                    width, height, &self->process_color,
+                    trail, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      break;
+    }
+    default:
+      break;
     }
   }
 }
@@ -474,7 +556,7 @@ overscroll_done_cb (KgxEdge *self)
 }
 
 
-/* ── map: resume ambient if needed ────────────────────────── */
+/* ── map: resume firework if needed ───────────────────────── */
 
 static void
 kgx_edge_map (GtkWidget *widget)
@@ -483,8 +565,8 @@ kgx_edge_map (GtkWidget *widget)
 
   GTK_WIDGET_CLASS (kgx_edge_parent_class)->map (widget);
 
-  if (ambient_active (self) && self->burst_progress[0] < 0.0)
-    ambient_schedule (self);
+  if (firework_active (self) && self->burst_progress[0] < 0.0)
+    firework_schedule (self);
 }
 
 
@@ -628,14 +710,20 @@ kgx_edge_dispose (GObject *object)
   KgxEdge *self = KGX_EDGE (object);
 
   g_clear_object (&self->overscroll_anim);
+  self->process_preset = KGX_PARTICLE_NONE;
+  self->process_progress = -1.0;
+  if (self->process_anim) {
+    adw_animation_reset (self->process_anim);
+    g_clear_object (&self->process_anim);
+  }
   for (int i = 0; i < MAX_BURSTS; i++)
     g_clear_object (&self->burst_anim[i]);
   g_clear_pointer (&self->overscroll_color, g_free);
   g_clear_pointer (&self->privilege_color, g_free);
 
-  if (self->ambient_timeout) {
-    g_source_remove (self->ambient_timeout);
-    self->ambient_timeout = 0;
+  if (self->firework_timeout) {
+    g_source_remove (self->firework_timeout);
+    self->firework_timeout = 0;
   }
   for (int i = 0; i < MAX_BURSTS; i++) {
     if (self->burst_timeout[i]) {
@@ -738,6 +826,8 @@ kgx_edge_init (KgxEdge *self)
   self->burst_spread        = 3.1;
   self->burst_count         = 8;
   self->overscroll_progress = -1.0;
+  self->process_progress    = -1.0;
+  self->process_preset      = KGX_PARTICLE_NONE;
 
   gtk_widget_set_can_target (GTK_WIDGET (self), FALSE);
   gtk_widget_set_can_focus (GTK_WIDGET (self), FALSE);
@@ -755,7 +845,7 @@ kgx_edge_init (KgxEdge *self)
   g_signal_connect_swapped (self->overscroll_anim, "done",
                             G_CALLBACK (overscroll_done_cb), self);
 
-  /* Burst animations for ambient/privilege effect. */
+  /* Burst animations for firework/privilege effect. */
   for (int i = 0; i < MAX_BURSTS; i++) {
     BurstData *bd = &self->burst_data[i];
     bd->index = i;
@@ -816,16 +906,16 @@ kgx_edge_set_privileged (KgxEdge  *self,
   if (!self->privilege_enabled)
     return;
 
-  self->ambient_privilege = privileged;
+  self->firework_privilege = privileged;
 
-  if (privileged && !self->ambient_settings) {
+  if (privileged && !self->firework_settings) {
     /* Fire immediately on privilege activation. */
-    if (!self->ambient_timeout)
-      self->ambient_timeout = g_timeout_add (50, ambient_fire, self);
-  } else if (!privileged && !self->ambient_settings) {
-    if (self->ambient_timeout) {
-      g_source_remove (self->ambient_timeout);
-      self->ambient_timeout = 0;
+    if (!self->firework_timeout)
+      self->firework_timeout = g_timeout_add (50, firework_fire, self);
+  } else if (!privileged && !self->firework_settings) {
+    if (self->firework_timeout) {
+      g_source_remove (self->firework_timeout);
+      self->firework_timeout = 0;
     }
     for (int i = 0; i < MAX_BURSTS; i++) {
       if (self->burst_timeout[i]) {
@@ -843,18 +933,18 @@ kgx_edge_set_ambient (KgxEdge  *self,
 {
   g_return_if_fail (KGX_IS_EDGE (self));
 
-  if (self->ambient_settings == ambient)
+  if (self->firework_settings == ambient)
     return;
 
-  self->ambient_settings = ambient;
+  self->firework_settings = ambient;
 
   if (ambient) {
-    if (!self->ambient_timeout)
-      self->ambient_timeout = g_timeout_add (50, ambient_fire, self);
-  } else if (!self->ambient_privilege) {
-    if (self->ambient_timeout) {
-      g_source_remove (self->ambient_timeout);
-      self->ambient_timeout = 0;
+    if (!self->firework_timeout)
+      self->firework_timeout = g_timeout_add (50, firework_fire, self);
+  } else if (!self->firework_privilege) {
+    if (self->firework_timeout) {
+      g_source_remove (self->firework_timeout);
+      self->firework_timeout = 0;
     }
     for (int i = 0; i < MAX_BURSTS; i++) {
       if (self->burst_timeout[i]) {
@@ -863,4 +953,139 @@ kgx_edge_set_ambient (KgxEdge  *self,
       }
     }
   }
+}
+
+
+/* ── process config parser ───────────────────────────────── */
+
+static KgxParticlePreset
+preset_from_string (const char *s)
+{
+  if (!s || !s[0])            return KGX_PARTICLE_NONE;
+  if (g_str_equal (s, "fireworks"))  return KGX_PARTICLE_FIREWORKS;
+  if (g_str_equal (s, "corners"))    return KGX_PARTICLE_CORNERS;
+  if (g_str_equal (s, "pulse-out"))  return KGX_PARTICLE_PULSE_OUT;
+  if (g_str_equal (s, "rotate"))     return KGX_PARTICLE_ROTATE;
+  if (g_str_equal (s, "none"))       return KGX_PARTICLE_NONE;
+  return KGX_PARTICLE_NONE;
+}
+
+
+const char *
+kgx_particle_preset_to_string (KgxParticlePreset p)
+{
+  switch (p) {
+  case KGX_PARTICLE_FIREWORKS: return "fireworks";
+  case KGX_PARTICLE_CORNERS:   return "corners";
+  case KGX_PARTICLE_PULSE_OUT: return "pulse-out";
+  case KGX_PARTICLE_ROTATE:    return "rotate";
+  default:                     return "none";
+  }
+}
+
+
+void
+kgx_parse_process_config (const char        *value,
+                           char             **glass_color,
+                           KgxParticlePreset *preset,
+                           gboolean          *reverse,
+                           GdkRGBA           *particle_color)
+{
+  g_auto (GStrv) parts = NULL;
+
+  if (glass_color)    *glass_color = NULL;
+  if (preset)         *preset = KGX_PARTICLE_NONE;
+  if (reverse)        *reverse = FALSE;
+  if (particle_color) *particle_color = (GdkRGBA) { 0.5f, 0.5f, 0.5f, 1.0f };
+
+  if (!value || !value[0])
+    return;
+
+  parts = g_strsplit (value, ";", 4);
+  int n = g_strv_length (parts);
+
+  if (n >= 1 && glass_color)
+    *glass_color = g_strdup (parts[0]);
+
+  if (n >= 2 && preset)
+    *preset = preset_from_string (parts[1]);
+
+  if (n >= 3 && reverse)
+    *reverse = g_str_equal (parts[2], "1");
+
+  if (n >= 4 && particle_color)
+    gdk_rgba_parse (particle_color, parts[3]);
+}
+
+
+/* ── process particle callbacks ──────────────────────────── */
+
+static void
+process_particle_value_cb (double value, KgxEdge *self)
+{
+  self->process_progress = value;
+  gtk_widget_queue_draw (GTK_WIDGET (self));
+}
+
+
+static void
+process_particle_done_cb (KgxEdge *self)
+{
+  self->process_progress = -1.0;
+  gtk_widget_queue_draw (GTK_WIDGET (self));
+}
+
+
+void
+kgx_edge_set_process_particle (KgxEdge          *self,
+                               KgxParticlePreset  preset,
+                               const GdkRGBA     *color,
+                               gboolean           reverse)
+{
+  g_return_if_fail (KGX_IS_EDGE (self));
+
+  self->process_preset = preset;
+  self->process_reverse = reverse;
+
+  if (color)
+    self->process_color = *color;
+
+  if (preset == KGX_PARTICLE_NONE) {
+    self->process_progress = -1.0;
+    if (self->process_anim)
+      adw_animation_reset (self->process_anim);
+    gtk_widget_queue_draw (GTK_WIDGET (self));
+    return;
+  }
+
+  /* Create animation on first use */
+  if (!self->process_anim) {
+    AdwAnimationTarget *t = adw_callback_animation_target_new (
+        (AdwAnimationTargetFunc) process_particle_value_cb, self, NULL);
+    self->process_anim = adw_timed_animation_new (GTK_WIDGET (self),
+                                                   0.0, 1.0, 2000, t);
+    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
+                                    ADW_EASE_OUT_CUBIC);
+    g_signal_connect_swapped (self->process_anim, "done",
+                              G_CALLBACK (process_particle_done_cb), self);
+  }
+
+  /* Don't restart if already animating — let the process check re-trigger */
+  if (self->process_progress >= 0.0 &&
+      adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING)
+    return;
+
+  /* Long one-shot durations with ease-out for natural fade */
+  guint duration;
+  switch (preset) {
+  case KGX_PARTICLE_ROTATE:    duration = (guint)(4000.0 / self->speed); break;
+  case KGX_PARTICLE_CORNERS:   duration = (guint)(2500.0 / self->speed); break;
+  case KGX_PARTICLE_PULSE_OUT: duration = (guint)(2500.0 / self->speed); break;
+  default:                     duration = (guint)(3000.0 / self->speed); break;
+  }
+  adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->process_anim),
+                                    duration);
+
+  adw_animation_reset (self->process_anim);
+  adw_animation_play (self->process_anim);
 }
