@@ -453,17 +453,26 @@ kgx_train_push_child (KgxTrain   *self,
     priv->last_child_name = g_strdup (program);
 
     if (G_UNLIKELY (kgx_is_remote (program, argv))) {
-      new_status |= push_type (priv->remote, pid, NULL, KGX_REMOTE);
+      push_type (priv->remote, pid, NULL, KGX_REMOTE);
     }
 
     if (G_UNLIKELY (kgx_is_playbox (program, argv))) {
-      new_status |= push_type (priv->playbox, pid, NULL, KGX_PLAYBOX);
+      push_type (priv->playbox, pid, NULL, KGX_PLAYBOX);
     }
   }
 
   if (G_UNLIKELY (kgx_process_get_is_root (process))) {
-    new_status |= push_type (priv->root, pid, NULL, KGX_PRIVILEGED);
+    push_type (priv->root, pid, NULL, KGX_PRIVILEGED);
   }
+
+  /* Compute status from the ground truth (hash table occupancy),
+   * not just this child's classification. */
+  if (g_hash_table_size (priv->remote) > 0)
+    new_status |= KGX_REMOTE;
+  if (g_hash_table_size (priv->playbox) > 0)
+    new_status |= KGX_PLAYBOX;
+  if (g_hash_table_size (priv->root) > 0)
+    new_status |= KGX_PRIVILEGED;
 
   set_status (self, new_status);
 

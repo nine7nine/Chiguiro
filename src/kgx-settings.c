@@ -73,6 +73,8 @@ struct _KgxSettings {
   double                edge_burst_spread;
   int                   edge_privilege_direction;
 
+  GHashTable           *process_chrome_colors;  /* string→string */
+
   KgxLiveryManager     *livery_manager;
 
   GSettings            *settings;
@@ -105,6 +107,7 @@ enum {
   PROP_CHROME_COLOR,
   PROP_USE_CHROME_BG,
   PROP_ACCENT_COLOR,
+  PROP_PROCESS_CHROME_COLORS,
   PROP_EDGE_OVERSCROLL,
   PROP_EDGE_OVERSCROLL_COLOR,
   PROP_EDGE_OVERSCROLL_STYLE,
@@ -135,6 +138,7 @@ kgx_settings_dispose (GObject *object)
 
   g_clear_pointer (&self->custom_font, pango_font_description_free);
   g_clear_pointer (&self->livery, kgx_livery_unref);
+  g_clear_pointer (&self->process_chrome_colors, g_hash_table_unref);
   g_clear_pointer (&self->edge_overscroll_color, g_free);
   g_clear_pointer (&self->edge_privilege_color, g_free);
 
@@ -259,6 +263,11 @@ kgx_settings_set_property (GObject      *object,
     case PROP_ACCENT_COLOR:
       g_free (self->accent_color);
       self->accent_color = g_value_dup_string (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_PROCESS_CHROME_COLORS:
+      g_clear_pointer (&self->process_chrome_colors, g_hash_table_unref);
+      self->process_chrome_colors = g_value_dup_boxed (value);
       g_object_notify_by_pspec (object, pspec);
       break;
     case PROP_EDGE_OVERSCROLL:
@@ -431,6 +440,9 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_ACCENT_COLOR:
       g_value_set_string (value, self->accent_color ? self->accent_color : "");
+      break;
+    case PROP_PROCESS_CHROME_COLORS:
+      g_value_set_boxed (value, self->process_chrome_colors);
       break;
     case PROP_EDGE_OVERSCROLL:
       g_value_set_boolean (value, self->edge_overscroll);
@@ -619,6 +631,11 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                          "",
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
+  pspecs[PROP_PROCESS_CHROME_COLORS] =
+    g_param_spec_boxed ("process-chrome-colors", NULL, NULL,
+                        G_TYPE_HASH_TABLE,
+                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
   pspecs[PROP_EDGE_OVERSCROLL] =
     g_param_spec_boolean ("edge-overscroll", NULL, NULL,
                           TRUE,
@@ -719,6 +736,44 @@ value_to_variant (const GValue       *value,
                   gpointer            data)
 {
   return g_value_dup_variant (value);
+}
+
+
+static gboolean
+process_colors_from_variant (GValue *value, GVariant *variant, gpointer data)
+{
+  GHashTable *ht = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+  GVariantIter iter;
+  const char *process, *color;
+
+  g_variant_iter_init (&iter, variant);
+  while (g_variant_iter_next (&iter, "{&s&s}", &process, &color))
+    g_hash_table_insert (ht, g_strdup (process), g_strdup (color));
+
+  g_value_take_boxed (value, ht);
+  return TRUE;
+}
+
+
+static GVariant *
+process_colors_to_variant (const GValue       *value,
+                           const GVariantType *variant_ty,
+                           gpointer            data)
+{
+  GHashTable *ht = g_value_get_boxed (value);
+  GVariantBuilder builder;
+  GHashTableIter iter;
+  gpointer key, val;
+
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a{ss}"));
+
+  if (ht) {
+    g_hash_table_iter_init (&iter, ht);
+    while (g_hash_table_iter_next (&iter, &key, &val))
+      g_variant_builder_add (&builder, "{ss}", (const char *) key, (const char *) val);
+  }
+
+  return g_variant_builder_end (&builder);
 }
 
 
@@ -872,6 +927,12 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "accent-color",
                    self, "accent-color",
                    G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind_with_mapping (self->settings, "process-chrome-colors",
+                                self, "process-chrome-colors",
+                                G_SETTINGS_BIND_DEFAULT,
+                                process_colors_from_variant,
+                                process_colors_to_variant,
+                                NULL, NULL);
   g_settings_bind (self->settings, "edge-overscroll",
                    self, "edge-overscroll",
                    G_SETTINGS_BIND_DEFAULT);
@@ -1148,6 +1209,19 @@ kgx_settings_set_livery (KgxSettings *restrict self,
   if (kgx_set_livery (&self->livery, livery)) {
     g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_LIVERY]);
   }
+}
+
+
+const char *
+kgx_settings_lookup_process_color (KgxSettings *self,
+                                   const char  *process_name)
+{
+  g_return_val_if_fail (KGX_IS_SETTINGS (self), NULL);
+
+  if (!self->process_chrome_colors || !process_name)
+    return NULL;
+
+  return g_hash_table_lookup (self->process_chrome_colors, process_name);
 }
 
 

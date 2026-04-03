@@ -217,7 +217,7 @@
                             </child>
                             <child>
                               <object class="AdwSpinRow" id="chrome_opacity">
-                                <property name="title" translatable="yes">Chrome _Opacity</property>
+                                <property name="title" translatable="yes">Glass _Opacity</property>
                                 <property name="use-underline">True</property>
                                 <property name="numeric">True</property>
                                 <property name="digits">0</property>
@@ -233,13 +233,13 @@
                             </child>
                             <child>
                               <object class="AdwSwitchRow" id="use_chrome_bg">
-                                <property name="title" translatable="yes">Use Chrome Color for Terminal</property>
+                                <property name="title" translatable="yes">Use Glass Color for Terminal</property>
                                 <property name="use-underline">True</property>
                               </object>
                             </child>
                             <child>
                               <object class="AdwActionRow">
-                                <property name="title" translatable="yes">Chrome _Color</property>
+                                <property name="title" translatable="yes">Glass _Color</property>
                                 <property name="use-underline">True</property>
                                 <property name="activatable-widget">chrome_color</property>
                                 <child type="suffix">
@@ -500,7 +500,119 @@
               </object>
             </child>
 
-            <!-- ── Page 3: Shortcuts ── -->
+            <!-- ── Page 3: App Glass ── -->
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">600</property>
+                <property name="valign">start</property>
+                <property name="hexpand">True</property>
+                <property name="margin-top">8</property>
+                <property name="margin-bottom">12</property>
+                <property name="margin-start">24</property>
+                <property name="margin-end">24</property>
+                <property name="child">
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">16</property>
+                    <child>
+                      <object class="AdwPreferencesGroup">
+                        <property name="title" translatable="yes">App Glass</property>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_0">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_0">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_1">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_1">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_2">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_2">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_3">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_3">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_4">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_4">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_5">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_5">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_6">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_6">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="app_glass_7">
+                            <property name="title" translatable="yes">Process Name</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="app_glass_color_7">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </property>
+              </object>
+            </child>
+
+            <!-- ── Page 4: Shortcuts ── -->
             <child>
               <object class="AdwClamp">
                 <property name="maximum-size">600</property>

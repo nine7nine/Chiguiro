@@ -79,4 +79,7 @@ gboolean              kgx_settings_get_software_flow_control (KgxSettings      *
 KgxLivery            *kgx_settings_get_livery                (KgxSettings           *self);
 void                  kgx_settings_set_livery                (KgxSettings           *self,
                                                               KgxLivery             *livery);
+const char           *kgx_settings_lookup_process_color     (KgxSettings           *self,
+                                                              const char            *process_name);
+
 G_END_DECLS

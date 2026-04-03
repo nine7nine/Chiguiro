@@ -60,6 +60,11 @@ struct _KgxSettingsPage {
   GtkWidget            *edge_pulse_speed;
   GtkWidget            *edge_burst_count;
   GtkWidget            *edge_burst_spread;
+  gboolean              app_glass_inhibit_save;
+  GtkWidget            *app_glass_0, *app_glass_1, *app_glass_2, *app_glass_3;
+  GtkWidget            *app_glass_4, *app_glass_5, *app_glass_6, *app_glass_7;
+  GtkWidget            *app_glass_color_0, *app_glass_color_1, *app_glass_color_2, *app_glass_color_3;
+  GtkWidget            *app_glass_color_4, *app_glass_color_5, *app_glass_color_6, *app_glass_color_7;
   GtkWidget            *logo_picture;
   GtkWidget            *page_title;
   AdwCarousel          *carousel;
@@ -70,6 +75,8 @@ struct _KgxSettingsPage {
 
 
 G_DEFINE_TYPE (KgxSettingsPage, kgx_settings_page, ADW_TYPE_BIN)
+
+static void app_glass_load (KgxSettingsPage *self);
 
 
 enum {
@@ -117,6 +124,7 @@ kgx_settings_page_set_property (GObject      *object,
     case PROP_SETTINGS:
       if (g_set_object (&self->settings, g_value_get_object (value))) {
         g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_SETTINGS]);
+        app_glass_load (self);
       }
       break;
     default:
@@ -340,6 +348,22 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_count);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_spread);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_0);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_1);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_2);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_3);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_4);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_5);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_6);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_7);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_0);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_1);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_2);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_3);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_4);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_5);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_6);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_7);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
@@ -394,7 +418,126 @@ notify_use_system (gpointer user_data)
 }
 
 
-static const char *page_titles[] = { "· General ·", "· Particles ·", "· Shortcuts ·" };
+#define APP_GLASS_SLOTS 8
+
+
+static inline GtkWidget **
+app_glass_entries (KgxSettingsPage *self)
+{
+  static GtkWidget *arr[APP_GLASS_SLOTS];
+  arr[0] = self->app_glass_0; arr[1] = self->app_glass_1;
+  arr[2] = self->app_glass_2; arr[3] = self->app_glass_3;
+  arr[4] = self->app_glass_4; arr[5] = self->app_glass_5;
+  arr[6] = self->app_glass_6; arr[7] = self->app_glass_7;
+  return arr;
+}
+
+
+static inline GtkWidget **
+app_glass_colors (KgxSettingsPage *self)
+{
+  static GtkWidget *arr[APP_GLASS_SLOTS];
+  arr[0] = self->app_glass_color_0; arr[1] = self->app_glass_color_1;
+  arr[2] = self->app_glass_color_2; arr[3] = self->app_glass_color_3;
+  arr[4] = self->app_glass_color_4; arr[5] = self->app_glass_color_5;
+  arr[6] = self->app_glass_color_6; arr[7] = self->app_glass_color_7;
+  return arr;
+}
+
+
+static void
+app_glass_save (KgxSettingsPage *self)
+{
+  if (self->app_glass_inhibit_save)
+    return;
+  GtkWidget **entries = app_glass_entries (self);
+  GtkWidget **colors  = app_glass_colors (self);
+  g_autoptr (GHashTable) ht = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                      g_free, g_free);
+
+  for (int i = 0; i < APP_GLASS_SLOTS; i++) {
+    const char *name = gtk_editable_get_text (GTK_EDITABLE (entries[i]));
+    if (name && name[0] != '\0') {
+      const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (
+                               GTK_COLOR_DIALOG_BUTTON (colors[i]));
+      char *color = g_strdup_printf ("#%02x%02x%02x",
+        (int)(rgba->red * 255), (int)(rgba->green * 255), (int)(rgba->blue * 255));
+      g_hash_table_insert (ht, g_strdup (name), color);
+    }
+  }
+
+  if (self->settings)
+    g_object_set (self->settings, "process-chrome-colors", ht, NULL);
+}
+
+
+static gboolean
+app_glass_enable_save (gpointer data)
+{
+  KGX_SETTINGS_PAGE (data)->app_glass_inhibit_save = FALSE;
+  return G_SOURCE_REMOVE;
+}
+
+
+static void
+app_glass_load (KgxSettingsPage *self)
+{
+  GtkWidget **entries = app_glass_entries (self);
+  GtkWidget **colors  = app_glass_colors (self);
+  GHashTable *ht = NULL;
+  GHashTableIter iter;
+  gpointer key, val;
+  int i = 0;
+
+  if (!self->settings)
+    return;
+
+  self->app_glass_inhibit_save = TRUE;
+
+  g_object_get (self->settings, "process-chrome-colors", &ht, NULL);
+
+  /* Clear all slots first. */
+  for (int j = 0; j < APP_GLASS_SLOTS; j++)
+    gtk_editable_set_text (GTK_EDITABLE (entries[j]), "");
+
+  if (ht) {
+    g_hash_table_iter_init (&iter, ht);
+    while (g_hash_table_iter_next (&iter, &key, &val) && i < APP_GLASS_SLOTS) {
+      GdkRGBA rgba = { 0, 0, 0, 1 };
+
+      gtk_editable_set_text (GTK_EDITABLE (entries[i]), (const char *) key);
+      gdk_rgba_parse (&rgba, (const char *) val);
+      rgba.alpha = 1.0f;
+      gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[i]), &rgba);
+      i++;
+    }
+    g_hash_table_unref (ht);
+  }
+
+  g_timeout_add (500, app_glass_enable_save, self);
+}
+
+
+static void
+app_glass_changed (GtkEditable      *editable,
+                   KgxSettingsPage  *self)
+{
+  app_glass_save (self);
+}
+
+
+static void
+app_glass_color_changed (GObject          *button,
+                         GParamSpec       *pspec,
+                         KgxSettingsPage  *self)
+{
+  app_glass_save (self);
+}
+
+
+static const char *page_titles[] = {
+  "· General ·", "· Particles ·", "· App Glass ·", "· Shortcuts ·"
+};
 
 
 static gboolean
@@ -442,6 +585,8 @@ kgx_settings_page_init (KgxSettingsPage *self)
   g_autoptr (GtkExpression) expression = NULL;
   g_autoptr (WatchData) data = watch_data_alloc ();
 
+  self->app_glass_inhibit_save = TRUE;
+
   gtk_widget_init_template (GTK_WIDGET (self));
 
   g_signal_connect (self->carousel, "notify::position",
@@ -454,6 +599,18 @@ kgx_settings_page_init (KgxSettingsPage *self)
     g_signal_connect (scroll_ctrl, "scroll",
                       G_CALLBACK (carousel_scroll), self);
     gtk_widget_add_controller (GTK_WIDGET (self->carousel), scroll_ctrl);
+  }
+
+  /* App Glass — connect change signals and load initial data. */
+  {
+    GtkWidget **entries = app_glass_entries (self);
+    GtkWidget **colors  = app_glass_colors (self);
+    for (int i = 0; i < APP_GLASS_SLOTS; i++) {
+      g_signal_connect (entries[i], "changed",
+                        G_CALLBACK (app_glass_changed), self);
+      g_signal_connect (colors[i], "notify::rgba",
+                        G_CALLBACK (app_glass_color_changed), self);
+    }
   }
 
   /* Capybara sprite animation — credit: https://rainloaf.itch.io/capybara-sprite-sheet */

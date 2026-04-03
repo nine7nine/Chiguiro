@@ -18,6 +18,7 @@
 
 #include "kgx-config.h"
 
+#include <adwaita.h>
 #include <glib/gi18n.h>
 
 #include <vte/vte.h>
@@ -84,6 +85,11 @@ struct _KgxTerminal {
   KgxPalette    *palette;
   KgxDespatcher *despatcher;
   gboolean       translucent;
+  char          *process_bg_override;  /* hex color or NULL */
+  AdwAnimation  *bg_transition;
+  GdkRGBA        bg_from;
+  GdkRGBA        bg_to;
+  GdkRGBA        bg_current;    /* last applied bg color */
 
   /* Hyperlinks */
   char       *current_url;
@@ -122,6 +128,8 @@ kgx_terminal_dispose (GObject *object)
   g_clear_object (&self->cancellable);
 
   g_clear_pointer (&self->current_url, g_free);
+  g_clear_pointer (&self->process_bg_override, g_free);
+  g_clear_object (&self->bg_transition);
 
   g_clear_object (&self->settings);
 
@@ -172,12 +180,113 @@ kgx_terminal_apply_palette (KgxTerminal *self)
     }
   }
 
+  /* Process-specific background override takes precedence. */
+  if (self->process_bg_override && self->process_bg_override[0]) {
+    gdk_rgba_parse (&background, self->process_bg_override);
+    background.alpha = 1.0f;
+  }
+
   vte_terminal_set_colors (VTE_TERMINAL (self),
                            &foreground,
                            &background,
                            colours,
                            n_colours);
+  /* Don't overwrite bg_current if a process override is actively displayed. */
+  if (!self->process_bg_override || !self->process_bg_override[0])
+    self->bg_current = background;
   gtk_widget_queue_draw (GTK_WIDGET (self));
+}
+
+
+static void
+process_bg_lerp_cb (double       value,
+                    KgxTerminal *self)
+{
+  /* Interpolate from old bg to target bg. */
+  GdkRGBA c;
+  c.red   = self->bg_from.red   + (self->bg_to.red   - self->bg_from.red)   * value;
+  c.green = self->bg_from.green + (self->bg_to.green - self->bg_from.green) * value;
+  c.blue  = self->bg_from.blue  + (self->bg_to.blue  - self->bg_from.blue)  * value;
+  c.alpha = 1.0f;
+
+  if (self->palette) {
+    GdkRGBA fg;
+    const GdkRGBA *colours;
+    size_t n_colours;
+    GdkRGBA _bg;
+    kgx_palette_get_colours (self->palette, &fg, &_bg, &n_colours, &colours);
+    vte_terminal_set_colors (VTE_TERMINAL (self), &fg, &c, colours, n_colours);
+    self->bg_current = c;
+  }
+}
+
+
+void
+kgx_terminal_set_process_bg (KgxTerminal *self,
+                             const char  *color_hex)
+{
+  GdkRGBA target;
+
+  g_return_if_fail (KGX_IS_TERMINAL (self));
+
+  if (!self->palette)
+    return;
+
+  /* Capture current displayed color BEFORE clearing the override. */
+  self->bg_from = self->bg_current;
+
+  g_debug ("set_process_bg: color_hex=%s bg_from=(%.2f,%.2f,%.2f) override_was=%s",
+           color_hex ? color_hex : "NULL",
+           self->bg_from.red, self->bg_from.green, self->bg_from.blue,
+           self->process_bg_override ? self->process_bg_override : "NULL");
+
+  g_free (self->process_bg_override);
+  self->process_bg_override = g_strdup (color_hex);
+
+  /* Determine target. */
+  if (color_hex && color_hex[0] && gdk_rgba_parse (&target, color_hex)) {
+    self->bg_to = target;
+  } else if (self->palette) {
+    /* Revert to palette/chrome bg. */
+    { GdkRGBA _fg; size_t _n; const GdkRGBA *_c; kgx_palette_get_colours (self->palette, &_fg, &self->bg_to, &_n, &_c); }
+    if (self->settings) {
+      gboolean use_chrome = FALSE;
+      g_object_get (self->settings, "use-chrome-bg", &use_chrome, NULL);
+      if (use_chrome) {
+        g_autofree char *cc = NULL;
+        g_object_get (self->settings, "chrome-color", &cc, NULL);
+        if (cc) gdk_rgba_parse (&self->bg_to, cc);
+        self->bg_to.alpha = 1.0f;
+      }
+    }
+  } else {
+    kgx_terminal_apply_palette (self);
+    return;
+  }
+
+  /* Animate the transition. */
+  if (!self->bg_transition) {
+    AdwAnimationTarget *t = adw_callback_animation_target_new (
+        (AdwAnimationTargetFunc) process_bg_lerp_cb, self, NULL);
+    self->bg_transition = adw_timed_animation_new (GTK_WIDGET (self),
+                                                   0.0, 1.0, 160, t);
+    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->bg_transition),
+                                    ADW_EASE_IN_OUT_CUBIC);
+  }
+
+  adw_animation_reset (self->bg_transition);
+  adw_animation_play (self->bg_transition);
+}
+
+
+void
+kgx_terminal_set_bg_hint (KgxTerminal *self,
+                          const char  *color_hex)
+{
+  g_return_if_fail (KGX_IS_TERMINAL (self));
+
+  if (color_hex && gdk_rgba_parse (&self->bg_current, color_hex))
+    self->bg_current.alpha = 1.0f;
 }
 
 

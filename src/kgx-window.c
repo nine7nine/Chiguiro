@@ -38,6 +38,9 @@
 #include "kgx-utils.h"
 
 #include "kgx-edge.h"
+#include "kgx-process.h"
+#include "kgx-terminal.h"
+#include "kgx-train.h"
 #include "kgx-window.h"
 
 
@@ -63,6 +66,12 @@ struct _KgxWindowPrivate {
   GtkWidget            *content_stack;
   GtkWidget            *settings_page;
   KgxEdge              *edge;
+  char                 *process_chrome_override;
+  guint                 process_check_timer;
+  GtkCssProvider       *override_css;
+  char                 *window_css_class;
+
+  GSignalGroup         *tab_signals;
 
   GBindingGroup        *surface_binds;
 };
@@ -103,9 +112,26 @@ kgx_window_dispose (GObject *object)
   if (priv->surface_binds) {
     g_binding_group_set_source (priv->surface_binds, NULL);
   }
+  if (priv->tab_signals) {
+    g_signal_group_set_target (priv->tab_signals, NULL);
+  }
+
+  if (priv->process_check_timer) {
+    g_source_remove (priv->process_check_timer);
+    priv->process_check_timer = 0;
+  }
 
   /* chrome_css is a process-lifetime singleton — don't clear it */
+  if (priv->override_css) {
+    gtk_style_context_remove_provider_for_display (
+      gdk_display_get_default (),
+      GTK_STYLE_PROVIDER (priv->override_css));
+    g_clear_object (&priv->override_css);
+  }
+  g_clear_pointer (&priv->window_css_class, g_free);
+  g_clear_pointer (&priv->process_chrome_override, g_free);
 
+  g_clear_object (&priv->tab_signals);
   g_clear_object (&priv->settings);
 
   G_OBJECT_CLASS (kgx_window_parent_class)->dispose (object);
@@ -585,6 +611,130 @@ maybe_close_window (KgxWindow *self)
 }
 
 
+static gboolean update_process_chrome (KgxWindow *self);
+
+
+static gboolean
+process_check_tick (gpointer data)
+{
+  update_process_chrome (KGX_WINDOW (data));
+  return G_SOURCE_CONTINUE;
+}
+
+
+static gboolean
+update_process_chrome (KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  g_autoptr (KgxTab) active = NULL;
+  g_autoptr (KgxSettings) settings = NULL;
+  const char *match = NULL;
+
+  g_object_get (priv->pages, "active-page", &active, NULL);
+  g_object_get (self, "settings", &settings, NULL);
+
+  if (active && settings) {
+    g_autoptr (KgxTrain) train = NULL;
+    g_object_get (active, "train", &train, NULL);
+
+    if (train) {
+      g_autoptr (GPtrArray) children = kgx_train_get_children (train);
+
+      if (children) {
+        for (int i = children->len - 1; i >= 0 && !match; i--) {
+          KgxProcess *proc = g_ptr_array_index (children, i);
+          GStrv argv = kgx_process_get_argv (proc);
+          if (argv && argv[0]) {
+            g_autofree char *name = g_path_get_basename (argv[0]);
+            match = kgx_settings_lookup_process_color (settings, name);
+          }
+        }
+      }
+    }
+
+    /* Update VTE terminal background. */
+    {
+      g_autoptr (KgxTerminal) terminal = NULL;
+      g_object_get (active, "terminal", &terminal, NULL);
+      if (terminal)
+        kgx_terminal_set_process_bg (terminal, match);
+    }
+  }
+
+  g_free (priv->process_chrome_override);
+  priv->process_chrome_override = match ? g_strdup (match) : NULL;
+
+  /* Update per-window override CSS (scoped to this window only). */
+  if (priv->override_css) {
+    if (match) {
+      GdkRGBA rgba;
+      if (gdk_rgba_parse (&rgba, match)) {
+        int r = (int)(rgba.red * 255);
+        int g = (int)(rgba.green * 255);
+        int b = (int)(rgba.blue * 255);
+        g_autofree char *css = g_strdup_printf (
+          ".%s headerbar,"
+          ".%s tabbar,"
+          ".%s settings-page,"
+          ".%s scrollbar,"
+          ".%s scrollbar trough {"
+          "  background-color: rgba(%d, %d, %d, 0.94);"
+          "  transition: background-color 160ms ease;"
+          "}",
+          priv->window_css_class, priv->window_css_class,
+          priv->window_css_class, priv->window_css_class,
+          priv->window_css_class,
+          r, g, b);
+        gtk_css_provider_load_from_string (priv->override_css, css);
+      }
+    } else {
+      /* Transition back to default chrome color. */
+      g_autofree char *def_color = NULL;
+      GdkRGBA def_rgba;
+      g_object_get (priv->settings, "chrome-color", &def_color, NULL);
+      if (def_color && gdk_rgba_parse (&def_rgba, def_color)) {
+        int dr = (int)(def_rgba.red * 255);
+        int dg = (int)(def_rgba.green * 255);
+        int db = (int)(def_rgba.blue * 255);
+        g_autofree char *revert = g_strdup_printf (
+          ".%s headerbar,"
+          ".%s tabbar,"
+          ".%s settings-page,"
+          ".%s scrollbar,"
+          ".%s scrollbar trough {"
+          "  background-color: rgba(%d, %d, %d, 0.94);"
+          "  transition: background-color 160ms ease;"
+          "}",
+          priv->window_css_class, priv->window_css_class,
+          priv->window_css_class, priv->window_css_class,
+          priv->window_css_class,
+          dr, dg, db);
+        gtk_css_provider_load_from_string (priv->override_css, revert);
+      } else {
+        gtk_css_provider_load_from_string (priv->override_css, "");
+      }
+    }
+  }
+
+  return G_SOURCE_REMOVE;
+}
+
+
+static void
+tab_train_changed (GObject *object, GParamSpec *pspec, gpointer data)
+{
+  KgxWindow *self = KGX_WINDOW (data);
+
+  /* Children changed on the active tab's train — re-check process chrome.
+   * This catches name-based chrome matches (e.g. pwsh, htop) that don't
+   * affect status flags and would otherwise only update on the timer. */
+  g_idle_add_full (G_PRIORITY_HIGH_IDLE,
+                   (GSourceFunc) update_process_chrome,
+                   g_object_ref (self),
+                   g_object_unref);
+}
+
+
 static void
 status_changed (GObject *object, GParamSpec *pspec, gpointer data)
 {
@@ -613,6 +763,19 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
     gtk_widget_remove_css_class (GTK_WIDGET (self), KGX_WINDOW_STYLE_ROOT);
     kgx_edge_set_privileged (priv->edge, FALSE);
   }
+
+  /* Track the active tab for child process changes. */
+  {
+    g_autoptr (KgxTab) active = NULL;
+    g_object_get (priv->pages, "active-page", &active, NULL);
+    g_signal_group_set_target (priv->tab_signals, active);
+  }
+
+  /* Immediate check + deferred for late-arriving children. */
+  g_idle_add_full (G_PRIORITY_HIGH_IDLE,
+                   (GSourceFunc) update_process_chrome,
+                   g_object_ref (self),
+                   g_object_unref);
 }
 
 
@@ -975,6 +1138,29 @@ kgx_window_init (KgxWindow *self)
       GTK_STYLE_PROVIDER (chrome_css),
       GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
   }
+
+  /* Per-window CSS provider for process-specific chrome override. */
+  {
+    static int win_id = 0;
+    priv->window_css_class = g_strdup_printf ("kgx-win-%d", win_id++);
+    gtk_widget_add_css_class (GTK_WIDGET (self), priv->window_css_class);
+    priv->override_css = gtk_css_provider_new ();
+    gtk_style_context_add_provider_for_display (
+      gdk_display_get_default (),
+      GTK_STYLE_PROVIDER (priv->override_css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 2);
+  }
+
+  /* Track the active tab to react to child process changes for chrome. */
+  priv->tab_signals = g_signal_group_new (KGX_TYPE_TAB);
+  g_signal_group_connect (priv->tab_signals,
+                          "notify::train",
+                          G_CALLBACK (tab_train_changed),
+                          self);
+
+  /* Safety-net timer for process chrome — catches edge cases where
+   * signal-driven updates miss (e.g. tab switch timing). */
+  priv->process_check_timer = g_timeout_add_seconds (5, process_check_tick, self);
 
   g_binding_group_bind_full (priv->surface_binds, "state",
                              self, "floating",
