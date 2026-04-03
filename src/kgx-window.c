@@ -798,11 +798,12 @@ update_process_glass (KgxWindow *self)
       target.alpha = 1.0f;
     } else {
       target = get_default_glass_color (self);
-      match = NULL;
+      if (preset == KGX_PARTICLE_NONE)
+        match = NULL;
     }
 
     /* Activate or deactivate process particle on the edge widget. */
-    if (match && preset != KGX_PARTICLE_NONE) {
+    if (preset != KGX_PARTICLE_NONE) {
       particle_color.alpha = 1.0f;
       kgx_edge_set_process_particle (priv->edge, preset, &particle_color, reverse);
     } else {

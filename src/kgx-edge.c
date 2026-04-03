@@ -330,10 +330,13 @@ burst_fire (gpointer data)
 
   self->burst_head[i] = g_random_double () * perim;
 
-  /* Settings firework uses random colors (higher priority).
-   * Privilege uses privilege color only when settings is inactive. */
+  /* Settings firework uses random colors (highest priority).
+   * Process firework uses the configured particle color.
+   * Privilege uses privilege color when settings is inactive. */
   if (self->firework_settings)
     self->burst_color[i] = random_muted_color ();
+  else if (self->process_preset == KGX_PARTICLE_FIREWORKS)
+    self->burst_color[i] = self->process_color;
   else if (self->privileged && self->privilege_enabled)
     self->burst_color[i] = resolve_color (self, self->privilege_color);
   else
@@ -412,6 +415,10 @@ kgx_edge_snapshot (GtkWidget   *widget,
   int      width  = gtk_widget_get_width (widget);
   int      height = gtk_widget_get_height (widget);
 
+  /* When the settings page is visible, only show the ambient firework */
+  if (self->firework_settings)
+    goto draw_bursts;
+
   /* Overscroll beam */
   if (self->overscroll_progress >= 0.0 && self->overscroll_enabled) {
     GdkRGBA color = resolve_color (self, self->overscroll_color);
@@ -422,64 +429,99 @@ kgx_edge_snapshot (GtkWidget   *widget,
                      self->pulse_speed, self->pulse_depth);
   }
 
-  /* Firework / privilege decoration — staggered center-bursts */
-  for (int i = 0; i < MAX_BURSTS; i++) {
-    if (self->burst_progress[i] >= 0.0) {
-      double perim = 2.0 * (width + height);
-      double p     = self->burst_progress[i];
-      double fade  = p > 0.8 ? (1.0 - p) / 0.2 : 1.0;
-      float  a     = (float)(fade * 0.5);
-      double seg   = BASE_OVERSCROLL_SEG * self->tail_length * 2.0;
-      double spread = seg * 3.0 * p;
-      double left_head  = fmod (self->burst_head[i] - spread + perim, perim);
-      double right_head = fmod (self->burst_head[i] + spread, perim);
+draw_bursts:
+  /* Firework / privilege decoration — staggered center-bursts.
+   * When process_reverse + FIREWORKS: implode (converge to center). */
+  {
+    gboolean implode = (self->process_preset == KGX_PARTICLE_FIREWORKS &&
+                        self->process_reverse &&
+                        !self->firework_settings);
+    for (int i = 0; i < MAX_BURSTS; i++) {
+      if (self->burst_progress[i] >= 0.0) {
+        double perim = 2.0 * (width + height);
+        double p     = self->burst_progress[i];
+        double bp    = implode ? 1.0 - p : p;
+        double seg   = BASE_OVERSCROLL_SEG * self->tail_length * 2.0
+                       * MIN (bp * 5.0, 1.0);
+        /* Implode: tail converges to a point first (seg→0 at bp=0.0),
+         * then a brief alpha fade once everything is at center. */
+        double fade;
+        if (implode)
+          fade = (bp < 0.02) ? bp / 0.02 : 1.0;  /* fade after convergence */
+        else
+          fade = p > 0.8 ? (1.0 - p) / 0.2 : 1.0;
+        float  a     = (float)(fade * 0.5);
+        double spread = seg * 3.0 * bp;
+        double left_head  = fmod (self->burst_head[i] - spread + perim, perim);
+        double right_head = fmod (self->burst_head[i] + spread, perim);
+        /* Implode: trails point outward (away from center) */
+        int l_trail = implode ? -1 : +1;
+        int r_trail = implode ? +1 : -1;
 
-      draw_segment (snapshot, left_head, seg, a,
-                    width, height, &self->burst_color[i],
-                    +1, self->thickness, p,
-                    self->pulse_speed, self->pulse_depth);
-      draw_segment (snapshot, right_head, seg, a,
-                    width, height, &self->burst_color[i],
-                    -1, self->thickness, p,
-                    self->pulse_speed, self->pulse_depth);
+        draw_segment (snapshot, left_head, seg, a,
+                      width, height, &self->burst_color[i],
+                      l_trail, self->thickness, p,
+                      self->pulse_speed, self->pulse_depth);
+        draw_segment (snapshot, right_head, seg, a,
+                      width, height, &self->burst_color[i],
+                      r_trail, self->thickness, p,
+                      self->pulse_speed, self->pulse_depth);
+      }
     }
   }
 
-  /* Process-specific particle — one-shot with long fade like overscroll */
+  /* Process-specific particle (suppressed when settings page is open) */
   if (self->process_progress >= 0.0 &&
-      self->process_preset != KGX_PARTICLE_NONE) {
+      self->process_preset != KGX_PARTICLE_NONE &&
+      !self->firework_settings) {
     double perim = 2.0 * (width + height);
     double p     = self->process_progress;
     double fade  = p > 0.6 ? (1.0 - p) / 0.4 : 1.0;
     float  a     = (float)(fade * 0.8);
-    double seg   = BASE_OVERSCROLL_SEG * self->tail_length * 2.0;
+    double seg_full = BASE_OVERSCROLL_SEG * self->tail_length * 2.0;
+    /* Grow tail from zero so burst-style particles start clean at origin.
+     * Rotate keeps full tail — it's always in motion. */
+    double seg   = (self->process_preset == KGX_PARTICLE_ROTATE)
+                     ? seg_full
+                     : seg_full * MIN (p * 5.0, 1.0);
 
     switch (self->process_preset) {
     case KGX_PARTICLE_CORNERS: {
-      /* Burst from a corner along two adjacent edges — travel full edge length. */
-      double corner = self->process_reverse
-                        ? (double)(width + height)   /* bottom-right */
-                        : 0.0;                       /* top-left */
-      double h_head, v_head;
-      int h_trail, v_trail;
-
+      /* Two particles from opposite corners — each travels along two
+       * adjacent edges. Corner A = top-left (0), Corner B = bottom-right
+       * (width+height). Reverse swaps to top-right / bottom-left. */
+      double corner_a, corner_b;
       if (self->process_reverse) {
-        h_head  = fmod (corner + width * p, perim);           /* CW along bottom */
-        v_head  = fmod (corner - height * p + perim, perim);  /* CCW up right */
-        h_trail = -1; v_trail = +1;
+        corner_a = (double) width;               /* top-right */
+        corner_b = (double)(2 * width + height); /* bottom-left */
       } else {
-        h_head  = fmod (width * p, perim);                    /* CW along top */
-        v_head  = fmod (perim - height * p + perim, perim);   /* CCW up left */
-        h_trail = -1; v_trail = +1;
+        corner_a = 0.0;                          /* top-left */
+        corner_b = (double)(width + height);     /* bottom-right */
       }
 
-      draw_segment (snapshot, h_head, seg, a,
+      /* Particle A: from corner_a, one arm CW one arm CCW */
+      double a_cw  = fmod (corner_a + (width + height) / 2.0 * p, perim);
+      double a_ccw = fmod (corner_a - (width + height) / 2.0 * p + perim * 2, perim);
+
+      /* Particle B: from corner_b, same pattern */
+      double b_cw  = fmod (corner_b + (width + height) / 2.0 * p, perim);
+      double b_ccw = fmod (corner_b - (width + height) / 2.0 * p + perim * 2, perim);
+
+      draw_segment (snapshot, a_cw, seg, a,
                     width, height, &self->process_color,
-                    h_trail, self->thickness, p,
+                    -1, self->thickness, p,
                     self->pulse_speed, self->pulse_depth);
-      draw_segment (snapshot, v_head, seg, a,
+      draw_segment (snapshot, a_ccw, seg, a,
                     width, height, &self->process_color,
-                    v_trail, self->thickness, p,
+                    +1, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      draw_segment (snapshot, b_cw, seg, a,
+                    width, height, &self->process_color,
+                    -1, self->thickness, p,
+                    self->pulse_speed, self->pulse_depth);
+      draw_segment (snapshot, b_ccw, seg, a,
+                    width, height, &self->process_color,
+                    +1, self->thickness, p,
                     self->pulse_speed, self->pulse_depth);
       break;
     }
@@ -503,14 +545,53 @@ kgx_edge_snapshot (GtkWidget   *widget,
       break;
     }
     case KGX_PARTICLE_ROTATE: {
-      /* Single segment travelling the full perimeter. */
+      /* Two laps per cycle (full perimeter). Each lap fires from a
+       * corner, eases to the opposite corner, fades, then the next
+       * lap fires immediately from that corner. */
       int dir = self->process_reverse ? -1 : +1;
-      double head = fmod (dir * perim * p + perim, perim);
       int trail = self->process_reverse ? +1 : -1;
 
-      draw_segment (snapshot, head, seg * 2.0, a,
+      double half_p = fmod (p * 2.0, 1.0);
+      double eased = 1.0 - (1.0 - half_p) * (1.0 - half_p) * (1.0 - half_p);
+      double lap_fade = half_p > 0.75 ? (1.0 - half_p) / 0.25 : 1.0;
+      float  lap_a = (float)(lap_fade * 0.8);
+      double lap_seg = seg_full * MIN (half_p * 5.0, 1.0);
+
+      double offset = (p >= 0.5) ? perim / 2.0 : 0.0;
+      double head = fmod (dir * (perim / 2.0) * eased + offset + perim, perim);
+
+      draw_segment (snapshot, head, lap_seg * 2.0, lap_a,
                     width, height, &self->process_color,
-                    trail, self->thickness, p,
+                    trail, self->thickness, half_p,
+                    self->pulse_speed, self->pulse_depth);
+      break;
+    }
+    case KGX_PARTICLE_PING_PONG: {
+      /* Bounces back and forth along top edge (bottom if reversed).
+       * Matches overscroll style: same segment size, alpha. No fade —
+       * continuous bounce. */
+      double edge_start = self->process_reverse
+                            ? (double)(width + height)   /* bottom-right */
+                            : 0.0;                       /* top-left */
+
+      double half_p = fmod (p * 2.0, 1.0);
+      gboolean returning = (p >= 0.5);
+      float  pp_a = 0.9f;
+      double pp_seg = BASE_OVERSCROLL_SEG * MIN (half_p * 8.0, 1.0);
+
+      double pos;
+      int trail;
+      if (!returning) {
+        pos = fmod (edge_start + (double) width * half_p + perim, perim);
+        trail = -1;
+      } else {
+        pos = fmod (edge_start + (double) width * (1.0 - half_p) + perim, perim);
+        trail = +1;
+      }
+
+      draw_segment (snapshot, pos, pp_seg, pp_a,
+                    width, height, &self->process_color,
+                    trail, self->thickness, half_p,
                     self->pulse_speed, self->pulse_depth);
       break;
     }
@@ -966,6 +1047,7 @@ preset_from_string (const char *s)
   if (g_str_equal (s, "corners"))    return KGX_PARTICLE_CORNERS;
   if (g_str_equal (s, "pulse-out"))  return KGX_PARTICLE_PULSE_OUT;
   if (g_str_equal (s, "rotate"))     return KGX_PARTICLE_ROTATE;
+  if (g_str_equal (s, "ping-pong"))  return KGX_PARTICLE_PING_PONG;
   if (g_str_equal (s, "none"))       return KGX_PARTICLE_NONE;
   return KGX_PARTICLE_NONE;
 }
@@ -979,6 +1061,7 @@ kgx_particle_preset_to_string (KgxParticlePreset p)
   case KGX_PARTICLE_CORNERS:   return "corners";
   case KGX_PARTICLE_PULSE_OUT: return "pulse-out";
   case KGX_PARTICLE_ROTATE:    return "rotate";
+  case KGX_PARTICLE_PING_PONG: return "ping-pong";
   default:                     return "none";
   }
 }
@@ -1031,6 +1114,14 @@ process_particle_value_cb (double value, KgxEdge *self)
 static void
 process_particle_done_cb (KgxEdge *self)
 {
+  /* Rotate and ping-pong loop continuously while active */
+  if (self->process_preset == KGX_PARTICLE_ROTATE ||
+      self->process_preset == KGX_PARTICLE_PING_PONG) {
+    adw_animation_reset (self->process_anim);
+    adw_animation_play (self->process_anim);
+    return;
+  }
+
   self->process_progress = -1.0;
   gtk_widget_queue_draw (GTK_WIDGET (self));
 }
@@ -1054,7 +1145,23 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     self->process_progress = -1.0;
     if (self->process_anim)
       adw_animation_reset (self->process_anim);
+    /* Stop firework cycle if it was running */
+    if (self->firework_timeout) {
+      g_source_remove (self->firework_timeout);
+      self->firework_timeout = 0;
+    }
     gtk_widget_queue_draw (GTK_WIDGET (self));
+    return;
+  }
+
+  /* Fireworks reuses the burst/privilege animation system */
+  if (preset == KGX_PARTICLE_FIREWORKS) {
+    if (gtk_widget_get_mapped (GTK_WIDGET (self)) && !self->firework_timeout) {
+      self->burst_data[0].index = 0;
+      self->burst_data[0].self  = self;
+      burst_fire (&self->burst_data[0]);
+      firework_schedule (self);
+    }
     return;
   }
 
@@ -1075,10 +1182,18 @@ kgx_edge_set_process_particle (KgxEdge          *self,
       adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING)
     return;
 
-  /* Long one-shot durations with ease-out for natural fade */
+  /* Rotate uses linear easing (does its own per-lap easing in snapshot).
+   * Ping-pong uses linear too (consistent bounce speed). */
+  adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
+                                  (preset == KGX_PARTICLE_ROTATE ||
+                                   preset == KGX_PARTICLE_PING_PONG)
+                                    ? ADW_LINEAR
+                                    : ADW_EASE_OUT_CUBIC);
+
   guint duration;
   switch (preset) {
-  case KGX_PARTICLE_ROTATE:    duration = (guint)(4000.0 / self->speed); break;
+  case KGX_PARTICLE_ROTATE:    duration = (guint)(3500.0 / self->speed); break;
+  case KGX_PARTICLE_PING_PONG: duration = (guint)(1200.0 / self->speed); break;
   case KGX_PARTICLE_CORNERS:   duration = (guint)(2500.0 / self->speed); break;
   case KGX_PARTICLE_PULSE_OUT: duration = (guint)(2500.0 / self->speed); break;
   default:                     duration = (guint)(3000.0 / self->speed); break;

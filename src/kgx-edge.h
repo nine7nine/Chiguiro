@@ -28,6 +28,7 @@ typedef enum {
   KGX_PARTICLE_CORNERS,
   KGX_PARTICLE_PULSE_OUT,
   KGX_PARTICLE_ROTATE,
+  KGX_PARTICLE_PING_PONG,
 } KgxParticlePreset;
 
 #define KGX_TYPE_EDGE (kgx_edge_get_type ())

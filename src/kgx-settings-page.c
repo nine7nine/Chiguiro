@@ -644,7 +644,7 @@ app_glass_save (KgxSettingsPage *self)
       const GdkRGBA *pc = gtk_color_dialog_button_get_rgba (
                              GTK_COLOR_DIALOG_BUTTON (pcolors[i]));
 
-      const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate" };
+      const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", "ping-pong" };
       const char *preset_str = (preset_idx < G_N_ELEMENTS (preset_names))
                                  ? preset_names[preset_idx] : "none";
 
@@ -677,6 +677,7 @@ preset_string_to_index (const char *s)
   if (g_str_equal (s, "corners"))    return 2;
   if (g_str_equal (s, "pulse-out"))  return 3;
   if (g_str_equal (s, "rotate"))     return 4;
+  if (g_str_equal (s, "ping-pong"))  return 5;
   return 0;
 }
 
@@ -838,7 +839,7 @@ kgx_settings_page_init (KgxSettingsPage *self)
     GtkWidget **pcolors  = app_glass_pcolors (self);
 
     /* Each dropdown gets its own model to avoid double-free on dispose. */
-    const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", NULL };
+    const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", "ping-pong", NULL };
     for (int i = 0; i < APP_GLASS_SLOTS; i++) {
       GtkStringList *model = gtk_string_list_new (preset_names);
       gtk_drop_down_set_model (GTK_DROP_DOWN (presets[i]), G_LIST_MODEL (model));
@@ -852,7 +853,7 @@ kgx_settings_page_init (KgxSettingsPage *self)
                         G_CALLBACK (app_glass_color_changed), self);
       g_signal_connect (presets[i], "notify::selected",
                         G_CALLBACK (app_glass_color_changed), self);
-      g_signal_connect (reverses[i], "toggled",
+      g_signal_connect (reverses[i], "notify::active",
                         G_CALLBACK (app_glass_color_changed), self);
       g_signal_connect (pcolors[i], "notify::rgba",
                         G_CALLBACK (app_glass_color_changed), self);
