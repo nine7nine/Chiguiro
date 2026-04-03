@@ -1,0 +1,807 @@
+-- allium: 3
+-- chiguiro.allium
+
+-- Scope: Chiguiro terminal emulator domain behavior
+-- Includes: Process management, color/theming, tab/window lifecycle,
+--           settings, particles, close protection, app glass
+-- Excludes:
+--   - GTK/GObject implementation (widgets, signals, bindings)
+--   - VTE terminal internals (PTY, escape sequences)
+--   - D-Bus FileManager1 integration
+--   - Hyperlink regex detection (implementation detail)
+--   - CSS styling mechanics
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity SystemTheme {
+    is_dark: Boolean
+}
+
+external entity SystemProcess {
+    -- Operating system process, discovered by polling /proc
+    pid: Integer
+    parent_pid: Integer
+    euid: Integer
+    argv: List<String>
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value Color {
+    red: Decimal
+    green: Decimal
+    blue: Decimal
+    alpha: Decimal
+}
+
+value WindowGeometry {
+    width: Integer
+    height: Integer
+    is_maximised: Boolean
+}
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum ZoomDirection { zoom_in | zoom_out }
+
+enum CloseResult { close_anyway | cancelled }
+
+enum BurstOrigin { center | corner }
+
+enum CirculationDirection { clockwise | counter_clockwise }
+
+enum ParticleMode { idle | overscroll | privilege | settings_ambient }
+
+enum Edge { top | bottom | left | right }
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity Process {
+    -- Snapshot of a running child process. Immutable after creation.
+    pid: Integer
+    parent_pid: Integer
+    euid: Integer
+    argv: List<String>
+
+    -- Derived
+    is_root: euid = 0
+    is_remote: is_remote_command(argv)
+    is_playbox: is_playbox_command(argv)
+    name: basename(argv)
+}
+
+entity Train {
+    -- A shell session and its process tree
+    uuid: String
+    tag: String
+    shell_pid: Integer
+    is_remote: Boolean
+    is_privileged: Boolean
+    is_playbox: Boolean
+    is_alive: Boolean
+
+    -- Relationships
+    children: Process with parent_pid = this.shell_pid
+
+    -- Projections
+    remote_children: children where is_remote
+    privileged_children: children where is_root
+    playbox_children: children where is_playbox
+
+    -- Derived
+    has_children: children.count > 0
+    last_child_name: String?
+
+    invariant StatusReflectsChildren {
+        (remote_children.count > 0 implies is_remote)
+        and (remote_children.count = 0 implies not is_remote)
+        and (privileged_children.count > 0 implies is_privileged)
+        and (privileged_children.count = 0 implies not is_privileged)
+        and (playbox_children.count > 0 implies is_playbox)
+        and (playbox_children.count = 0 implies not is_playbox)
+    }
+}
+
+entity Palette {
+    -- A set of terminal colors
+    foreground: Color
+    background: Color
+    transparency: Decimal
+    ansi_colors: List<Color>
+
+    -- Derived
+    is_opaque: transparency = 0.0
+}
+
+entity Livery {
+    -- A color scheme identified by UUID, with night and optional day palettes
+    uuid: String
+    name: String?
+    night: Palette
+    day: Palette?
+
+    -- Derived
+    has_day_palette: day != null
+}
+
+entity Tab {
+    -- A terminal session bound to a train
+    id: Integer
+    title: String
+    path: String?
+    tooltip: String?
+    is_active: Boolean
+    close_on_quit: Boolean
+    needs_attention: Boolean
+    is_ringing: Boolean
+
+    -- Relationships
+    train: Train?
+    window: Window?
+    palette: Palette?
+
+    -- Derived
+    is_remote: train != null and train.is_remote
+    is_privileged: train != null and train.is_privileged
+    is_playbox: train != null and train.is_playbox
+    has_running_processes: train != null and train.has_children
+    is_spawned: train != null
+
+    -- CSS classes (remote, root, playbox) are applied to the window
+    -- based on the active tab's derived status flags.
+}
+
+entity Window {
+    -- Application window containing tabs
+    is_active: Boolean
+    is_floating: Boolean
+    search_mode: Boolean
+    settings_visible: Boolean
+    translucent: Boolean
+
+    -- Relationships
+    tabs: Tab with window = this
+    active_tab: Tab?
+
+    -- Projections
+    ringing_tabs: tabs where is_ringing
+
+    -- Derived
+    is_ringing: ringing_tabs.count > 0
+    has_running_processes: tabs.any(t => t.has_running_processes)
+
+    -- Process chrome
+    chrome_color: Color?
+
+    -- Particles
+    particle_state: Particles with window = this
+}
+
+entity Particles {
+    -- Edge particle animation state for a window
+    window: Window
+    mode: ParticleMode
+
+    -- Overscroll state
+    overscroll_edge: Edge?
+    overscroll_progress: Decimal?
+
+    -- Ambient burst state
+    active_burst_count: Integer
+
+    -- Derived
+    is_ambient: mode in { privilege, settings_ambient }
+    is_animating: mode != idle
+}
+
+entity LiveryManager {
+    -- Catalog of available color schemes
+    fallback: Livery
+    builtins: Set<Livery>
+    customs: Set<Livery>
+
+    -- Derived
+    all_liveries: builtins + customs
+
+    invariant FallbackAlwaysExists {
+        fallback != null
+    }
+
+    invariant FallbackIsBuiltin {
+        fallback in builtins
+    }
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- Font
+    font_scale: Decimal = 1.0
+    custom_font: String = ""
+    use_system_font: Boolean = true
+
+    -- Shell
+    shell: List<String> = []
+    software_flow_control: Boolean = false
+
+    -- Scrollback
+    scrollback_lines: Integer = 10000
+    ignore_scrollback_limit: Boolean = false
+
+    -- Window
+    restore_window_size: Boolean = true
+
+    -- Bell
+    audible_bell: Boolean = true
+    visual_bell: Boolean = true
+
+    -- Transparency
+    transparency_enabled: Boolean = false
+    transparency_level: Decimal = 0.04
+
+    -- App Glass
+    chrome_opacity: Decimal = 0.94
+    chrome_color: String = "#1b1b1f"
+    use_chrome_bg: Boolean = true
+    accent_color: String = "#3584e4"
+    process_chrome_colors: Set<String> = {}
+
+    -- Particles
+    overscroll_enabled: Boolean = true
+    overscroll_color: String = ""
+    overscroll_style: BurstOrigin = corner
+    privilege_enabled: Boolean = true
+    privilege_color: String = "#d940a6"
+    privilege_direction: CirculationDirection = clockwise
+    thickness: Integer = 20
+    speed: Decimal = 0.3
+    pulse_speed: Decimal = 0.8
+    pulse_depth: Decimal = 0.5
+    tail_length: Decimal = 0.9
+    burst_count: Integer = 8
+    burst_spread: Decimal = 3.1
+}
+
+------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------
+
+-- Built-in liveries
+
+-- KGX Standard: the default GNOME-style livery
+-- UUID: 9f1374fd-f199-429f-bae6-9cf1260f6e3e
+-- Night: white on dark gray, transparency 0.04
+-- Day: black on white, transparency 0.01
+
+-- Linux: classic Linux console colors
+-- UUID: 131b4aac-399b-4ee4-a8e1-f22e5c3c7bdd
+-- Night only, no transparency
+
+-- XTerm: classic XTerm colors
+-- UUID: 54156855-4a0d-454a-9d5a-7d3e2c9f26f5
+-- Night only
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Process Management ===
+
+rule SpawnSession {
+    -- A new terminal session is started with a shell process
+    when: SpawnSession(working_dir, command?, environ?)
+
+    let resolved_command = command ?? config.shell
+    let tag = basename(resolved_command)
+
+    ensures:
+        let train = Train.created(
+            uuid: generate_uuid(),
+            tag: tag,
+            shell_pid: spawned_pid(working_dir, resolved_command, environ),
+            is_remote: false,
+            is_privileged: false,
+            is_playbox: false,
+            is_alive: true
+        )
+        Tab.created(
+            title: tag,
+            path: working_dir,
+            train: train,
+            is_active: true,
+            close_on_quit: command = null,
+            needs_attention: false,
+            is_ringing: false
+        )
+}
+
+rule ChildDiscovered {
+    -- Watcher discovers a new child process of a watched shell
+    when: ChildDiscovered(train, process)
+
+    requires: train.is_alive
+    requires: not process in train.children
+
+    ensures: train.children.add(process)
+    ensures: train.last_child_name = process.name
+    ensures:
+        if process.is_remote:
+            train.is_remote = true
+    ensures:
+        if process.is_root:
+            train.is_privileged = true
+    ensures:
+        if process.is_playbox:
+            train.is_playbox = true
+}
+
+rule ChildDied {
+    -- Watcher detects a child process no longer exists
+    when: ChildDied(train, process)
+
+    requires: train.is_alive
+    requires: process in train.children
+
+    ensures: train.children.remove(process)
+    ensures:
+        if train.remote_children.count = 0:
+            train.is_remote = false
+    ensures:
+        if train.privileged_children.count = 0:
+            train.is_privileged = false
+    ensures:
+        if train.playbox_children.count = 0:
+            train.is_playbox = false
+
+    @guidance
+        -- If this was the last child and the tab is not active,
+        -- a desktop notification should be shown with the child name.
+}
+
+rule ShellDied {
+    -- The shell process itself has exited
+    when: ShellDied(train, exit_status)
+
+    requires: train.is_alive
+
+    ensures: train.is_alive = false
+    ensures: ShellExited(train: train, exit_status: exit_status)
+
+    @guidance
+        -- The tab should display an exit message.
+        -- If close_on_quit is true and exit was clean, tab auto-closes.
+}
+
+-- === Watcher Polling ===
+
+rule WatcherPoll {
+    -- Periodic discovery of child processes for all watched trains
+    when: WatcherTick(trains)
+
+    for train in trains:
+        for sys_proc in SystemProcesses where parent_pid = train.shell_pid:
+            if not train.children.any(c => c.pid = sys_proc.pid):
+                ensures: ChildDiscovered(train: train, process: sys_proc)
+        for child in train.children:
+            if not exists SystemProcess{pid: child.pid}:
+                ensures: ChildDied(train: train, process: child)
+
+    @guidance
+        -- Poll interval: 500ms when app is in foreground, 2000ms in background.
+        -- Discovered children are also registered as watched parents
+        -- to track grandchild processes.
+}
+
+-- === Tab/Window Lifecycle ===
+
+rule ActivateTab {
+    when: ActivateTab(tab, window)
+
+    requires: tab in window.tabs
+
+    ensures: window.active_tab = tab
+    ensures: tab.is_active = true
+    ensures: tab.needs_attention = false
+    ensures:
+        for t in window.tabs:
+            if t != tab: t.is_active = false
+}
+
+rule CloseTab {
+    -- Close a single tab, with protection if processes are running
+    when: CloseTabRequested(tab)
+
+    ensures:
+        if tab.has_running_processes:
+            CloseConfirmation(context: tab, scope: tab)
+        else:
+            TabClosed(tab: tab)
+}
+
+rule CloseWindow {
+    -- Close the entire window, with protection if any tab has processes
+    when: CloseWindowRequested(window)
+
+    ensures:
+        if window.has_running_processes:
+            CloseConfirmation(context: window, scope: window)
+        else:
+            WindowClosed(window: window)
+}
+
+rule CloseTabConfirmed {
+    -- User confirmed closing a tab despite running processes
+    when: CloseDecision(tab, result)
+
+    requires: result = close_anyway
+
+    ensures: TabClosed(tab: tab)
+}
+
+rule CloseWindowConfirmed {
+    -- User confirmed closing a window despite running processes
+    when: CloseWindowDecision(window, result)
+
+    requires: result = close_anyway
+
+    ensures: WindowClosed(window: window)
+}
+
+rule LastTabRemoved {
+    -- When the last tab is removed from a window, the window closes
+    when: TabClosed(tab)
+
+    let window = tab.window
+    requires: window.tabs.count = 1
+    requires: tab in window.tabs
+
+    ensures: WindowClosed(window: window)
+}
+
+-- === Bell ===
+
+rule BellRang {
+    -- Terminal bell received
+    when: BellRang(tab)
+
+    ensures: tab.is_ringing = true
+    ensures: BellTimeout(tab: tab)
+
+    @guidance
+        -- is_ringing auto-clears after 500ms via BellTimeout.
+        -- If audible_bell is enabled, system bell sounds.
+        -- If visual_bell is enabled, window gets bell CSS class.
+}
+
+rule BellCleared {
+    when: BellTimeout(tab)
+    requires: tab.is_ringing
+    ensures: tab.is_ringing = false
+}
+
+-- === Zoom ===
+
+rule ZoomRequested {
+    when: ZoomRequested(tab, direction)
+
+    ensures:
+        if direction = zoom_in:
+            FontScaleIncreased(tab: tab)
+        else:
+            FontScaleDecreased(tab: tab)
+}
+
+-- === Color/Theming ===
+
+rule SelectLivery {
+    -- User selects a livery by UUID
+    when: SelectLivery(uuid, manager)
+
+    let livery = resolve_livery(manager, uuid)
+    let resolved = livery ?? manager.fallback
+
+    ensures: LiverySelected(livery: resolved)
+
+    @guidance
+        -- If UUID is unknown, warn and fall back to default.
+        -- Selected UUID is persisted to settings.
+}
+
+rule ResolvePalette {
+    -- Determine the active palette from current livery and system state
+    when: ResolvePalette(livery, theme, translucent, transparency_level)
+
+    let is_day = not theme.is_dark
+    let base_palette = if is_day and livery.has_day_palette: livery.day else: livery.night
+
+    ensures:
+        if translucent:
+            PaletteResolved(palette: with_transparency(base_palette, transparency_level))
+        else:
+            PaletteResolved(palette: as_opaque(base_palette))
+
+    @guidance
+        -- Palette resolution is reactive: it re-evaluates when any
+        -- input changes (livery, system theme, transparency settings).
+}
+
+rule ImportLivery {
+    -- Import a custom livery from file
+    when: ImportLivery(file, manager)
+
+    ensures: Livery.created(
+        uuid: parsed_uuid,
+        name: parsed_name,
+        night: parsed_night,
+        day: parsed_day
+    )
+
+    @guidance
+        -- Livery files use INI/KeyFile format with [Livery], [Night],
+        -- and optional [Day] sections. UUID mismatches are warned.
+}
+
+-- === App Glass (Process Chrome) ===
+
+rule ProcessChromeCheck {
+    -- Periodic check for process-specific chrome colors
+    when: ProcessChromeCheck(window)
+
+    requires: window.active_tab != null
+    requires: window.active_tab.train != null
+
+    let train = window.active_tab.train
+    let matching_color = lookup_chrome_color(train.children, config.process_chrome_colors)
+
+    ensures:
+        if matching_color != null:
+            window.chrome_color = matching_color
+        else:
+            window.chrome_color = null
+
+    @guidance
+        -- Runs on a 200ms tick timer.
+        -- Matches child process names against process_chrome_colors map.
+        -- Chrome color applies to headerbar, tab bar, and scrollbar.
+        -- Color transitions animate over 160ms with cubic easing.
+        -- When use_chrome_bg is enabled, terminal background also changes.
+}
+
+-- === Particles ===
+
+rule OverscrollFired {
+    -- Terminal scrolled past bounds
+    when: OverscrollFired(particles, edge)
+
+    requires: config.overscroll_enabled
+
+    let color = if config.overscroll_color != "": config.overscroll_color else: config.accent_color
+
+    ensures: particles.mode = overscroll
+    ensures: particles.overscroll_edge = edge
+    ensures: OverscrollAnimation(
+        particles: particles,
+        edge: edge,
+        origin: config.overscroll_style,
+        color: color
+    )
+
+    @guidance
+        -- Two snakes split from origin point and travel outward.
+        -- Animation duration: 600ms / speed.
+        -- Easing: ease-out-cubic.
+        -- Mode returns to idle (or ambient) when animation completes.
+}
+
+rule PrivilegeActivated {
+    -- Active tab entered privileged (root) state
+    when: tab: Tab.is_privileged becomes true
+
+    requires: config.privilege_enabled
+    requires: not tab.window.settings_visible
+
+    ensures: tab.window.particle_state.mode = privilege
+    ensures: AmbientBurstCycle(
+        particles: tab.window.particle_state,
+        color: config.privilege_color,
+        direction: config.privilege_direction
+    )
+}
+
+rule PrivilegeDeactivated {
+    -- Active tab left privileged state
+    when: tab: Tab.is_privileged becomes false
+
+    requires: not tab.window.settings_visible
+
+    ensures: tab.window.particle_state.mode = idle
+}
+
+rule SettingsAmbientActivated {
+    -- Settings page opened, decorative ambient particles begin
+    when: SettingsOpened(window)
+
+    ensures: window.particle_state.mode = settings_ambient
+    ensures: AmbientBurstCycle(
+        particles: window.particle_state,
+        color: random_ambient_color(),
+        direction: clockwise
+    )
+
+    @guidance
+        -- Settings ambient uses random muted colors from a fixed palette:
+        -- magenta, blue, green, orange.
+        -- Takes priority over privilege mode.
+}
+
+rule SettingsAmbientDeactivated {
+    when: SettingsClosed(window)
+
+    ensures:
+        if window.active_tab.is_privileged and config.privilege_enabled:
+            window.particle_state.mode = privilege
+        else:
+            window.particle_state.mode = idle
+}
+
+rule AmbientBurstCycle {
+    -- Fire a cycle of staggered bursts around the window perimeter
+    when: AmbientBurstCycle(particles, color, direction)
+
+    requires: particles.is_ambient
+
+    ensures: particles.active_burst_count = config.burst_count
+    ensures: BurstsScheduled(
+        particles: particles,
+        count: config.burst_count,
+        spread: config.burst_spread,
+        color: color
+    )
+
+    @guidance
+        -- First burst fires immediately.
+        -- Remaining bursts stagger with random delays: 150*i*spread to 600*i*spread ms.
+        -- Each burst animates for 800ms / speed with ease-out-cubic.
+        -- Next cycle auto-schedules after 600*spread to 1200*spread ms.
+        -- Bursts overlap, typically 3+ visible simultaneously.
+}
+
+-- === Window Geometry ===
+
+rule SaveWindowGeometry {
+    when: WindowClosed(window, geometry)
+
+    requires: window.is_active
+    requires: config.restore_window_size
+
+    ensures: GeometrySaved(
+        width: geometry.width,
+        height: geometry.height,
+        is_maximised: geometry.is_maximised
+    )
+}
+
+rule RestoreWindowGeometry {
+    when: WindowCreated(window)
+
+    requires: config.restore_window_size
+
+    ensures: GeometryRestored(window: window)
+
+    @guidance
+        -- Restores last saved window size and maximised state.
+}
+
+-- === Paste Protection ===
+
+rule PasteRequested {
+    -- Clipboard paste routed through safety dialog
+    when: PasteRequested(tab, content)
+
+    ensures: PasteDialog(tab: tab, content: content)
+
+    @guidance
+        -- Dialog may block if pasted content looks dangerous
+        -- (e.g., contains sudo, rm -rf, or multiline commands).
+        -- User confirms or cancels before content reaches terminal.
+}
+
+-- === Tab Detach ===
+
+rule DetachTab {
+    -- Move a tab to a new window
+    when: DetachTab(tab, source_window)
+
+    requires: tab in source_window.tabs
+
+    ensures: Window.created(
+        is_active: true,
+        is_floating: false,
+        search_mode: false,
+        settings_visible: false,
+        translucent: true,
+        active_tab: tab
+    )
+    ensures: source_window.tabs.remove(tab)
+}
+
+-- === Search ===
+
+rule SearchChanged {
+    when: SearchChanged(window, query)
+
+    requires: window.search_mode
+    requires: window.active_tab != null
+
+    ensures: SearchApplied(
+        tab: window.active_tab,
+        query: query
+    )
+
+    @guidance
+        -- Query is escaped to regex with PCRE2 MULTILINE.
+        -- Auto-detects case sensitivity: if query matches
+        -- itself lowercased, search is case-insensitive.
+        -- VTE handles highlighting and selection.
+}
+
+-- === Background State ===
+
+rule AppEnteredBackground {
+    -- All windows lost focus
+    when: AppEnteredBackground()
+
+    ensures: WatcherFrequencyChanged(interval: 2000)
+
+    @guidance
+        -- Watcher polling interval increases to 2000ms to reduce overhead.
+}
+
+rule AppEnteredForeground {
+    -- At least one window gained focus
+    when: AppWindowActivated(window)
+
+    ensures: WatcherFrequencyChanged(interval: 500)
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant OneTrainPerTab {
+    -- Each tab is bound to at most one train
+    for a in Tabs:
+        for b in Tabs:
+            a != b and a.train != null and b.train != null
+                implies a.train != b.train
+}
+
+invariant LiveryHasNightPalette {
+    -- Every livery has a night palette
+    for l in Liveries:
+        l.night != null
+}
+
+invariant PaletteHas16Colors {
+    -- Every palette has exactly 16 ANSI colors
+    for p in Palettes:
+        p.ansi_colors.count = 16
+}
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Should custom livery import validate UUID uniqueness against builtins?"
+open question "Should paste protection rules be configurable per-session?"
+open question "Should particle colors support gradients or remain single-color?"
