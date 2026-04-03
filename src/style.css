@@ -206,6 +206,30 @@ settings-page preferencesgroup > box > label {
   color: var(--accent-bg-color);
 }
 
+/* ── App Glass entry boxes ─────────────────────────────── */
+
+.glass-entry {
+  background-color: transparent;
+  background-image: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  box-shadow: none;
+  min-height: 28px;
+  padding: 2px 8px;
+  color: inherit;
+}
+
+.glass-entry:focus-within {
+  border-color: rgba(255, 255, 255, 0.3);
+  outline: none;
+  box-shadow: none;
+}
+
+.glass-entry > text {
+  background: transparent;
+  caret-color: currentColor;
+}
+
 /* ── Font picker ───────────────────────────────────────── */
 
 .font-picker {

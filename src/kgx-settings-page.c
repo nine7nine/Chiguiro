@@ -64,8 +64,12 @@ struct _KgxSettingsPage {
   guint                 app_glass_save_timeout;
   GtkWidget            *app_glass_0, *app_glass_1, *app_glass_2, *app_glass_3;
   GtkWidget            *app_glass_4, *app_glass_5, *app_glass_6, *app_glass_7;
+  GtkWidget            *app_glass_8, *app_glass_9, *app_glass_10, *app_glass_11;
+  GtkWidget            *app_glass_12, *app_glass_13, *app_glass_14;
   GtkWidget            *app_glass_color_0, *app_glass_color_1, *app_glass_color_2, *app_glass_color_3;
   GtkWidget            *app_glass_color_4, *app_glass_color_5, *app_glass_color_6, *app_glass_color_7;
+  GtkWidget            *app_glass_color_8, *app_glass_color_9, *app_glass_color_10, *app_glass_color_11;
+  GtkWidget            *app_glass_color_12, *app_glass_color_13, *app_glass_color_14;
   GtkWidget            *logo_picture;
   GtkWidget            *page_title;
   AdwCarousel          *carousel;
@@ -368,6 +372,20 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_5);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_6);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_7);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_8);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_9);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_10);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_11);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_12);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_13);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_14);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_8);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_9);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_10);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_11);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_12);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_13);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
@@ -422,17 +440,21 @@ notify_use_system (gpointer user_data)
 }
 
 
-#define APP_GLASS_SLOTS 8
+#define APP_GLASS_SLOTS 15
 
 
 static inline GtkWidget **
 app_glass_entries (KgxSettingsPage *self)
 {
   static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_0; arr[1] = self->app_glass_1;
-  arr[2] = self->app_glass_2; arr[3] = self->app_glass_3;
-  arr[4] = self->app_glass_4; arr[5] = self->app_glass_5;
-  arr[6] = self->app_glass_6; arr[7] = self->app_glass_7;
+  arr[0] = self->app_glass_0;   arr[1] = self->app_glass_1;
+  arr[2] = self->app_glass_2;   arr[3] = self->app_glass_3;
+  arr[4] = self->app_glass_4;   arr[5] = self->app_glass_5;
+  arr[6] = self->app_glass_6;   arr[7] = self->app_glass_7;
+  arr[8] = self->app_glass_8;   arr[9] = self->app_glass_9;
+  arr[10] = self->app_glass_10; arr[11] = self->app_glass_11;
+  arr[12] = self->app_glass_12; arr[13] = self->app_glass_13;
+  arr[14] = self->app_glass_14;
   return arr;
 }
 
@@ -441,12 +463,36 @@ static inline GtkWidget **
 app_glass_colors (KgxSettingsPage *self)
 {
   static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_color_0; arr[1] = self->app_glass_color_1;
-  arr[2] = self->app_glass_color_2; arr[3] = self->app_glass_color_3;
-  arr[4] = self->app_glass_color_4; arr[5] = self->app_glass_color_5;
-  arr[6] = self->app_glass_color_6; arr[7] = self->app_glass_color_7;
+  arr[0] = self->app_glass_color_0;   arr[1] = self->app_glass_color_1;
+  arr[2] = self->app_glass_color_2;   arr[3] = self->app_glass_color_3;
+  arr[4] = self->app_glass_color_4;   arr[5] = self->app_glass_color_5;
+  arr[6] = self->app_glass_color_6;   arr[7] = self->app_glass_color_7;
+  arr[8] = self->app_glass_color_8;   arr[9] = self->app_glass_color_9;
+  arr[10] = self->app_glass_color_10; arr[11] = self->app_glass_color_11;
+  arr[12] = self->app_glass_color_12; arr[13] = self->app_glass_color_13;
+  arr[14] = self->app_glass_color_14;
   return arr;
 }
+
+
+/* Muted dark defaults for empty slots — slight color tints on near-black */
+static const GdkRGBA glass_default_colors[APP_GLASS_SLOTS] = {
+  { 0.11f, 0.11f, 0.14f, 1.0f },  /* blue-grey */
+  { 0.13f, 0.11f, 0.15f, 1.0f },  /* violet */
+  { 0.11f, 0.13f, 0.12f, 1.0f },  /* green */
+  { 0.14f, 0.12f, 0.11f, 1.0f },  /* warm */
+  { 0.11f, 0.12f, 0.14f, 1.0f },  /* steel */
+  { 0.13f, 0.11f, 0.12f, 1.0f },  /* mauve */
+  { 0.11f, 0.14f, 0.13f, 1.0f },  /* teal */
+  { 0.14f, 0.11f, 0.12f, 1.0f },  /* rose */
+  { 0.12f, 0.12f, 0.11f, 1.0f },  /* olive */
+  { 0.11f, 0.11f, 0.13f, 1.0f },  /* slate */
+  { 0.12f, 0.13f, 0.11f, 1.0f },  /* moss */
+  { 0.13f, 0.12f, 0.14f, 1.0f },  /* plum */
+  { 0.11f, 0.13f, 0.14f, 1.0f },  /* ocean */
+  { 0.14f, 0.13f, 0.11f, 1.0f },  /* amber */
+  { 0.12f, 0.11f, 0.13f, 1.0f },  /* dusk */
+};
 
 
 static void
@@ -500,9 +546,12 @@ app_glass_load (KgxSettingsPage *self)
 
   g_object_get (self->settings, "process-glass-colors", &ht, NULL);
 
-  /* Clear all slots first. */
-  for (int j = 0; j < APP_GLASS_SLOTS; j++)
+  /* Clear all slots and set muted default colors. */
+  for (int j = 0; j < APP_GLASS_SLOTS; j++) {
     gtk_editable_set_text (GTK_EDITABLE (entries[j]), "");
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[j]),
+                                      &glass_default_colors[j]);
+  }
 
   if (ht) {
     g_hash_table_iter_init (&iter, ht);
