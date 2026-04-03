@@ -231,10 +231,17 @@ draw_overscroll (GtkSnapshot     *snapshot,
       v_head = fmod (corner + height * progress, perim);  /* down along right */
     }
 
-    draw_segment (snapshot, h_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, color, -1, thick, progress, pulse_spd, pulse_depth);
-    draw_segment (snapshot, v_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, color, -1, thick, progress, pulse_spd, pulse_depth);
+    /* Trail must oppose the head's travel direction:
+     * bottom: h_head moves CW (trail -1), v_head moves CCW (trail +1)
+     * top:    h_head moves CCW (trail +1), v_head moves CW (trail -1) */
+    {
+      int h_trail = (edge == GTK_POS_BOTTOM) ? -1 : +1;
+      int v_trail = (edge == GTK_POS_BOTTOM) ? +1 : -1;
+      draw_segment (snapshot, h_head, BASE_OVERSCROLL_SEG, a,
+                    width, height, color, h_trail, thick, progress, pulse_spd, pulse_depth);
+      draw_segment (snapshot, v_head, BASE_OVERSCROLL_SEG, a,
+                    width, height, color, v_trail, thick, progress, pulse_spd, pulse_depth);
+    }
   } else {
     /* Center mode: burst from center of edge, two snakes split outward. */
     double center;
