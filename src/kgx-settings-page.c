@@ -105,10 +105,10 @@ kgx_settings_page_dispose (GObject *object)
 
   g_clear_handle_id (&self->app_glass_save_timeout, g_source_remove);
 
+  /* settings_binds is a template child — disconnect but do NOT free */
   if (self->settings_binds) {
     g_binding_group_set_source (self->settings_binds, NULL);
   }
-  g_clear_object (&self->settings_binds);
 
   g_clear_object (&self->settings);
 

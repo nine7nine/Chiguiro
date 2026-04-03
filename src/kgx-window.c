@@ -117,6 +117,9 @@ kgx_window_dispose (GObject *object)
   KgxWindow *self = KGX_WINDOW (object);
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
+  /* Disconnect binding/signal groups — prevents callbacks during teardown.
+   * settings_binds and surface_binds are template children (owned by the
+   * template system) — disconnect but do NOT g_clear_object them. */
   if (priv->settings_binds) {
     g_binding_group_set_source (priv->settings_binds, NULL);
   }
@@ -148,8 +151,7 @@ kgx_window_dispose (GObject *object)
     g_clear_object (&priv->glass_transition);
   }
 
-  g_clear_object (&priv->settings_binds);
-  g_clear_object (&priv->surface_binds);
+  /* tab_signals is created in init (not a template child) — safe to clear */
   g_clear_object (&priv->tab_signals);
   g_clear_object (&priv->settings);
 

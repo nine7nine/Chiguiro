@@ -192,7 +192,9 @@ kgx_tab_dispose (GObject *object)
     g_clear_pointer (&priv->notification_id, g_free);
   }
 
-  /* Disconnect all signal/binding groups before their targets are destroyed */
+  /* Disconnect all signal/binding groups before their targets are destroyed.
+   * train_signals, terminal_signals, drop_target are template children —
+   * disconnect but do NOT g_clear_object them. */
   if (priv->settings_signals)
     g_signal_group_set_target (priv->settings_signals, NULL);
   if (priv->train_signals)
@@ -200,12 +202,7 @@ kgx_tab_dispose (GObject *object)
   if (priv->terminal_signals)
     g_signal_group_set_target (priv->terminal_signals, NULL);
 
-  /* Dispose template before parent class destroys widget tree */
-
   g_clear_object (&priv->settings_signals);
-  g_clear_object (&priv->train_signals);
-  g_clear_object (&priv->terminal_signals);
-  g_clear_object (&priv->drop_target);
   g_clear_object (&priv->application);
   g_clear_object (&priv->settings);
   g_clear_object (&priv->train);
