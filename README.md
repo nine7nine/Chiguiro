@@ -4,13 +4,32 @@ A fast, transparent, and customizable terminal emulator for Linux, forked from [
 
 ## Features
 
-- **App Glass** — translucent window with configurable glass opacity, color, and accent. Process-specific glass colors with smooth animated transitions
-- **Edge particles** — overscroll bursts and ambient privilege/settings animations along window edges, fully configurable
+- **App Glass** — translucent window with configurable opacity, color, and accent
+- **Per-process glass** — smooth animated color transitions when processes are detected
+- **Edge particles** — overscroll bursts, privilege fireworks, per-process presets with tunable shapes, envelopes, and shimmer
 - **Dynamic tab titles** — running process name with braille activity indicator (`bash: htop ⠲`)
 - **No menus** — paginated settings overlay with carousel, keyboard shortcuts side-by-side
 - **Headless server mode** — systemd user service for instant window startup via D-Bus
 - **Smooth animations** — swing transitions, translucent hover states, animated sprite branding
 - **GTK4 + libadwaita** — always-dark, VTE terminal, configurable scrollback, bell, and fonts
+
+## Particle System
+
+Each animation preset has independently tunable parameters:
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| Speed | 0.1 – 3.0 | Animation speed multiplier |
+| Thickness | 2 – 40 | Block size in pixels |
+| Tail Length | 0.1 – 3.0 | Trail length multiplier |
+| Pulse Depth | 0.0 – 1.0 | Shimmer intensity |
+| Pulse Speed | 0.1 – 5.0 | Shimmer wave speed |
+| Env Attack | 0.0 – 0.5 | Grow-in fraction of lifetime |
+| Env Release | 0.0 – 0.5 | Fade-out fraction of lifetime |
+| Release Mode | Uniform / Retract | Tail stays or shrinks back on fade |
+| Shape | Square / Circle / Diamond / Triangle | Block shape (triangle faces motion) |
+
+Presets: **Fireworks**, **Corners**, **Pulse Out**, **Rotate**, **Ping-Pong** — each configurable per-process via App Glass.
 
 ## Building
 
