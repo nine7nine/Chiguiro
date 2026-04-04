@@ -1250,7 +1250,9 @@ kgx_edge_set_ambient (KgxEdge  *self,
     }
     if (!self->firework_timeout)
       self->firework_timeout = g_timeout_add (50, firework_fire, self);
-  } else if (!self->firework_privilege) {
+  } else {
+    /* Always stop the settings firework loop — in-flight burst
+     * animations will fade out naturally via their envelope. */
     if (self->firework_timeout) {
       g_source_remove (self->firework_timeout);
       self->firework_timeout = 0;
@@ -1261,6 +1263,12 @@ kgx_edge_set_ambient (KgxEdge  *self,
         self->burst_timeout[i] = 0;
       }
     }
+    /* Restart if privilege or process firework still needs the loop. */
+    if ((self->firework_privilege ||
+         self->process_preset == KGX_PARTICLE_FIREWORKS) &&
+        !self->firework_timeout &&
+        gtk_widget_get_mapped (GTK_WIDGET (self)))
+      self->firework_timeout = g_timeout_add (50, firework_fire, self);
   }
 }
 
