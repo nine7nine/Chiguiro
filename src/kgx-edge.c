@@ -137,7 +137,8 @@ static GParamSpec *edge_pspecs[LAST_PROP] = { NULL, };
 /* Property name tables — keep in sync with TUNE_* indices */
 static const char * const tune_names[N_TUNE_FIELDS] = {
   "speed", "thickness", "tail-length", "pulse-depth", "pulse-speed",
-  "env-attack", "env-release", "release-mode", "shape"
+  "env-attack", "env-release", "release-mode", "shape",
+  "env-curve", "thk-attack", "thk-release", "thk-curve"
 };
 static const char * const preset_suffixes[N_PRESETS] = {
   "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient"
@@ -167,6 +168,8 @@ set_tunable_double (KgxParticleTunables *t, int field, double v)
   case TUNE_PULSE_SPEED:  t->pulse_speed  = v; break;
   case TUNE_ENV_ATTACK:   t->env_attack   = v; break;
   case TUNE_ENV_RELEASE:  t->env_release  = v; break;
+  case TUNE_THK_ATTACK:   t->thk_attack   = v; break;
+  case TUNE_THK_RELEASE:  t->thk_release  = v; break;
   default: break;
   }
 }
@@ -181,20 +184,38 @@ get_tunable_double (const KgxParticleTunables *t, int field)
   case TUNE_PULSE_SPEED:  return t->pulse_speed;
   case TUNE_ENV_ATTACK:   return t->env_attack;
   case TUNE_ENV_RELEASE:  return t->env_release;
+  case TUNE_THK_ATTACK:   return t->thk_attack;
+  case TUNE_THK_RELEASE:  return t->thk_release;
   default:                return 0.0;
   }
 }
 
 /* Compute envelope value at normalized time t (0..1).
- * Returns 0..1: ramps up during attack, holds at 1, fades during release. */
+ * Returns 0..1: ramps up during attack, holds at 1, fades during release.
+ * curve: 1=concave (fast rise/fall), 2=linear, 3=convex (slow rise/fall). */
 static inline float
-envelope (double t, double attack, double release)
+envelope (double t, double attack, double release, int curve)
 {
-  if (attack > 0.0 && t < attack)
-    return (float)(t / attack);
-  if (release > 0.0 && t > 1.0 - release)
-    return (float)((1.0 - t) / release);
+  float linear;
+  if (attack > 0.0 && t < attack) {
+    linear = (float)(t / attack);
+    if (curve == 1) return sqrtf (linear);      /* concave — fast rise */
+    if (curve == 3) return linear * linear;      /* convex — slow rise */
+    return linear;
+  }
+  if (release > 0.0 && t > 1.0 - release) {
+    linear = (float)((1.0 - t) / release);
+    if (curve == 1) return sqrtf (linear);
+    if (curve == 3) return linear * linear;
+    return linear;
+  }
   return 1.0f;
+}
+
+static inline float
+thickness_envelope (double t, double attack, double release, int curve)
+{
+  return envelope (t, attack, release, curve);
 }
 
 
@@ -309,6 +330,12 @@ draw_segment (GtkSnapshot                *snapshot,
               double                      phase)
 {
   double blk   = (double) tune->thickness;
+  if (tune->thk_attack > 0.0 || tune->thk_release > 0.0) {
+    float thk_env = thickness_envelope (phase, tune->thk_attack,
+                                        tune->thk_release, tune->thk_curve);
+    blk *= thk_env;
+    if (blk < 1.0) blk = 1.0;
+  }
   double gap   = blk;
   double perim = 2.0 * (width + height);
   double step  = blk + gap;
@@ -392,7 +419,7 @@ draw_overscroll (GtkSnapshot                *snapshot,
                  const KgxParticleTunables  *tune)
 {
   double perim  = 2.0 * (width + height);
-  float  env    = envelope (progress, tune->env_attack, tune->env_release);
+  float  env    = envelope (progress, tune->env_attack, tune->env_release, tune->env_curve);
   float  a      = env * 0.9f;
 
   if (style == 1) {
@@ -730,9 +757,9 @@ kgx_edge_snapshot (GtkWidget   *widget,
         double p     = self->burst_progress[i];
         double bp    = implode ? 1.0 - p : p;
         float  b_env = implode
-                          ? envelope (bp, 0.0, 0.02)
-                          : envelope (p, bt->env_attack, bt->env_release);
-        double seg_env = envelope (bp, bt->env_attack, 0.0);
+                          ? envelope (bp, 0.0, 0.02, 2)
+                          : envelope (p, bt->env_attack, bt->env_release, bt->env_curve);
+        double seg_env = envelope (bp, bt->env_attack, 0.0, bt->env_curve);
         double seg   = BASE_OVERSCROLL_SEG * bt->tail_length * 2.0 * seg_env;
         float  a     = b_env * 0.5f;
         double spread = seg * 3.0 * bp;
@@ -759,8 +786,8 @@ kgx_edge_snapshot (GtkWidget   *widget,
       if (self->ambient_progress[i] >= 0.0) {
         double perim = 2.0 * (width + height);
         double p     = self->ambient_progress[i];
-        float  b_env = envelope (p, abt->env_attack, abt->env_release);
-        double seg_env = envelope (p, abt->env_attack, 0.0);
+        float  b_env = envelope (p, abt->env_attack, abt->env_release, abt->env_curve);
+        double seg_env = envelope (p, abt->env_attack, 0.0, abt->env_curve);
         double seg   = BASE_OVERSCROLL_SEG * abt->tail_length * 2.0 * seg_env;
         float  a     = b_env * 0.5f;
         double spread = seg * 3.0 * p;
@@ -786,7 +813,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
     const KgxParticleTunables *pt = resolve_tunables (self, self->process_preset);
     double perim = 2.0 * (width + height);
     double p     = self->process_progress;
-    float  env   = envelope (p, pt->env_attack, pt->env_release);
+    float  env   = envelope (p, pt->env_attack, pt->env_release, pt->env_curve);
     float  a     = env * 0.8f;
 
     double seg_full = BASE_OVERSCROLL_SEG * pt->tail_length * 2.0;
@@ -796,9 +823,9 @@ kgx_edge_snapshot (GtkWidget   *widget,
     if (self->process_preset == KGX_PARTICLE_ROTATE)
       tail_env = 1.0;
     else if (pt->release_mode == KGX_RELEASE_RETRACT)
-      tail_env = envelope (p, pt->env_attack, pt->env_release);
+      tail_env = envelope (p, pt->env_attack, pt->env_release, pt->env_curve);
     else
-      tail_env = envelope (p, pt->env_attack, 0.0);  /* uniform: attack only */
+      tail_env = envelope (p, pt->env_attack, 0.0, pt->env_curve);  /* uniform: attack only */
     double seg = seg_full * tail_env;
 
     switch (self->process_preset) {
@@ -841,11 +868,11 @@ kgx_edge_snapshot (GtkWidget   *widget,
 
       double half_p   = fmod (p * 2.0, 1.0);
       double eased    = 1.0 - (1.0 - half_p) * (1.0 - half_p) * (1.0 - half_p);
-      float  lap_env  = envelope (half_p, pt->env_attack, pt->env_release);
+      float  lap_env  = envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve);
       float  lap_a    = lap_env * 0.8f;
       double lap_tail = (pt->release_mode == KGX_RELEASE_RETRACT)
-                          ? envelope (half_p, pt->env_attack, pt->env_release)
-                          : envelope (half_p, pt->env_attack, 0.0);
+                          ? envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve)
+                          : envelope (half_p, pt->env_attack, 0.0, pt->env_curve);
       double lap_seg  = seg_full * lap_tail;
 
       double offset = (p >= 0.5) ? perim / 2.0 : 0.0;
@@ -861,11 +888,11 @@ kgx_edge_snapshot (GtkWidget   *widget,
 
       double half_p = fmod (p * 2.0, 1.0);
       gboolean returning = (p >= 0.5);
-      float  pp_env = envelope (half_p, pt->env_attack, pt->env_release);
+      float  pp_env = envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve);
       float  pp_a   = pp_env * 0.9f;
       double pp_tail = (pt->release_mode == KGX_RELEASE_RETRACT)
-                         ? envelope (half_p, pt->env_attack, pt->env_release)
-                         : envelope (half_p, pt->env_attack, 0.0);
+                         ? envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve)
+                         : envelope (half_p, pt->env_attack, 0.0, pt->env_curve);
       double pp_seg = BASE_OVERSCROLL_SEG * pp_tail;
 
       double pos;
@@ -965,6 +992,10 @@ kgx_edge_set_property (GObject      *object,
       self->preset[pi].release_mode = CLAMP (g_value_get_int (value), 0, 1);
     else if (field == TUNE_SHAPE)
       self->preset[pi].shape = CLAMP (g_value_get_int (value), 0, 3);
+    else if (field == TUNE_ENV_CURVE)
+      self->preset[pi].env_curve = CLAMP (g_value_get_int (value), 1, 3);
+    else if (field == TUNE_THK_CURVE)
+      self->preset[pi].thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     else
       set_tunable_double (&self->preset[pi], field, g_value_get_double (value));
     gtk_widget_queue_draw (GTK_WIDGET (self));
@@ -981,6 +1012,10 @@ kgx_edge_set_property (GObject      *object,
       self->global.release_mode = CLAMP (g_value_get_int (value), 0, 1);
     } else if (field == TUNE_SHAPE) {
       self->global.shape = CLAMP (g_value_get_int (value), 0, 3);
+    } else if (field == TUNE_ENV_CURVE) {
+      self->global.env_curve = CLAMP (g_value_get_int (value), 1, 3);
+    } else if (field == TUNE_THK_CURVE) {
+      self->global.thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     } else if (field == TUNE_SPEED) {
       self->global.speed = g_value_get_double (value);
       /* Update overscroll / burst animation durations */
@@ -1080,6 +1115,10 @@ kgx_edge_get_property (GObject    *object,
       g_value_set_int (value, self->preset[pi].release_mode);
     else if (field == TUNE_SHAPE)
       g_value_set_int (value, self->preset[pi].shape);
+    else if (field == TUNE_ENV_CURVE)
+      g_value_set_int (value, self->preset[pi].env_curve);
+    else if (field == TUNE_THK_CURVE)
+      g_value_set_int (value, self->preset[pi].thk_curve);
     else
       g_value_set_double (value, get_tunable_double (&self->preset[pi], field));
     return;
@@ -1095,6 +1134,10 @@ kgx_edge_get_property (GObject    *object,
       g_value_set_int (value, self->global.release_mode);
     else if (field == TUNE_SHAPE)
       g_value_set_int (value, self->global.shape);
+    else if (field == TUNE_ENV_CURVE)
+      g_value_set_int (value, self->global.env_curve);
+    else if (field == TUNE_THK_CURVE)
+      g_value_set_int (value, self->global.thk_curve);
     else
       g_value_set_double (value, get_tunable_double (&self->global, field));
     return;
@@ -1269,11 +1312,11 @@ kgx_edge_class_init (KgxEdgeClass *klass)
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /* ── global tunable property specs ─────────────────────── */
-  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape */
+  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape  ecurve thkatk thkrel thkcurve */
   {
-    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0 };
-    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0 };
-    static const double dbl_def[] = { 1.0, 0, 1.0, 0.3, 1.0, 0.2, 0.3, 0, 0 };
+    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0 };
+    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0, 0, 0.5, 0.5, 0 };
+    static const double dbl_def[] = { 1.0, 0, 1.0, 0.3, 1.0, 0.2, 0.3, 0, 0, 0, 0.0, 0.0, 0 };
 
     for (int f = 0; f < N_TUNE_FIELDS; f++) {
       int id = PROP_GLOBAL_BASE + f;
@@ -1289,6 +1332,10 @@ kgx_edge_class_init (KgxEdgeClass *klass)
         edge_pspecs[id] =
           g_param_spec_int (tune_names[f], NULL, NULL, 0, 3, 0,
                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+      } else if (f == TUNE_ENV_CURVE || f == TUNE_THK_CURVE) {
+        edge_pspecs[id] =
+          g_param_spec_int (tune_names[f], NULL, NULL, 1, 3, 2,
+                            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
       } else {
         edge_pspecs[id] =
           g_param_spec_double (tune_names[f], NULL, NULL,
@@ -1299,11 +1346,11 @@ kgx_edge_class_init (KgxEdgeClass *klass)
   }
 
   /* ── per-preset tunable property specs ─────────────────── */
-  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape */
+  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape  ecurve thkatk thkrel thkcurve */
   {
-    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0 };
-    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0 };
-    static const double dbl_def[] = { 1.0, 0, 0.9, 0.5, 0.8, 0.2, 0.3, 0, 0 };
+    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0 };
+    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0, 0, 0.5, 0.5, 0 };
+    static const double dbl_def[] = { 1.0, 0, 0.9, 0.5, 0.8, 0.2, 0.3, 0, 0, 0, 0.0, 0.0, 0 };
 
     for (int p = 0; p < N_PRESETS; p++) {
       for (int f = 0; f < N_TUNE_FIELDS; f++) {
@@ -1321,6 +1368,10 @@ kgx_edge_class_init (KgxEdgeClass *klass)
         } else if (f == TUNE_SHAPE) {
           edge_pspecs[id] =
             g_param_spec_int (name, NULL, NULL, 0, 3, 0,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+        } else if (f == TUNE_ENV_CURVE || f == TUNE_THK_CURVE) {
+          edge_pspecs[id] =
+            g_param_spec_int (name, NULL, NULL, 1, 3, 2,
                               G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
         } else {
           edge_pspecs[id] =
@@ -1367,6 +1418,7 @@ kgx_edge_init (KgxEdge *self)
     .pulse_depth = 0.5, .pulse_speed = 0.8,
     .env_attack = 0.2, .env_release = 0.3,
     .release_mode = KGX_RELEASE_UNIFORM,
+    .env_curve = 2, .thk_attack = 0.0, .thk_release = 0.0, .thk_curve = 2,
   };
 
   /* Per-preset tunables */
@@ -1376,6 +1428,7 @@ kgx_edge_init (KgxEdge *self)
       .pulse_depth = 0.5, .pulse_speed = 0.8,
       .env_attack = 0.2, .env_release = 0.3,
       .release_mode = KGX_RELEASE_UNIFORM,
+      .env_curve = 2, .thk_attack = 0.0, .thk_release = 0.0, .thk_curve = 2,
     };
   }
 

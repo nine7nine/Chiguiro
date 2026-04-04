@@ -57,6 +57,10 @@ enum {
   TUNE_ENV_RELEASE,
   TUNE_RELEASE_MODE,
   TUNE_SHAPE,
+  TUNE_ENV_CURVE,
+  TUNE_THK_ATTACK,
+  TUNE_THK_RELEASE,
+  TUNE_THK_CURVE,
   N_TUNE_FIELDS
 };
 
@@ -70,6 +74,10 @@ typedef struct {
   double  env_release;   /* fraction of lifetime for fade-out (0.0 .. 0.5) */
   int     release_mode;  /* KgxReleaseMode                             */
   int     shape;         /* KgxParticleShape                           */
+  int     env_curve;     /* envelope curve: 1=concave 2=linear 3=convex */
+  double  thk_attack;    /* thickness envelope attack     (0.0 .. 0.5) */
+  double  thk_release;   /* thickness envelope release    (0.0 .. 0.5) */
+  int     thk_curve;     /* thickness envelope curve: 1-3              */
 } KgxParticleTunables;
 
 #define KGX_TYPE_EDGE (kgx_edge_get_type ())

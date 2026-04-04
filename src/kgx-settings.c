@@ -138,7 +138,8 @@ static GParamSpec *pspecs[LAST_PROP] = { NULL, };
 /* Property name tables — keep in sync with TUNE_* indices and kgx-edge.c */
 static const char * const tune_names[N_TUNE_FIELDS] = {
   "speed", "thickness", "tail-length", "pulse-depth", "pulse-speed",
-  "env-attack", "env-release", "release-mode", "shape"
+  "env-attack", "env-release", "release-mode", "shape",
+  "env-curve", "thk-attack", "thk-release", "thk-curve"
 };
 static const char * const preset_suffixes[N_PRESETS] = {
   "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient"
@@ -159,6 +160,10 @@ static const struct {
   [TUNE_ENV_RELEASE]  = { 0.0, 0.5, 0.3, 0.3, 0, 0, 0, 0, FALSE },
   [TUNE_RELEASE_MODE] = { 0,   0,   0,   0,   0, 1, 0, 0, TRUE },
   [TUNE_SHAPE]        = { 0,   0,   0,   0,   0, 3, 0, 0, TRUE },
+  [TUNE_ENV_CURVE]    = { 0,   0,   0,   0,   1, 3, 2, 2, TRUE },
+  [TUNE_THK_ATTACK]   = { 0.0, 0.5, 0.0, 0.0, 0, 0, 0, 0, FALSE },
+  [TUNE_THK_RELEASE]  = { 0.0, 0.5, 0.0, 0.0, 0, 0, 0, 0, FALSE },
+  [TUNE_THK_CURVE]    = { 0,   0,   0,   0,   1, 3, 2, 2, TRUE },
 };
 
 /* ── Tunable field accessors ──────────────────────────────── */
@@ -173,6 +178,8 @@ get_tunable_double_field (const KgxParticleTunables *t, int field)
   case TUNE_PULSE_SPEED: return t->pulse_speed;
   case TUNE_ENV_ATTACK:  return t->env_attack;
   case TUNE_ENV_RELEASE: return t->env_release;
+  case TUNE_THK_ATTACK:  return t->thk_attack;
+  case TUNE_THK_RELEASE: return t->thk_release;
   default:               return 0.0;
   }
 }
@@ -187,6 +194,8 @@ set_tunable_double_field (KgxParticleTunables *t, int field, double v)
   case TUNE_PULSE_SPEED: t->pulse_speed = v; break;
   case TUNE_ENV_ATTACK:  t->env_attack  = v; break;
   case TUNE_ENV_RELEASE: t->env_release = v; break;
+  case TUNE_THK_ATTACK:  t->thk_attack  = v; break;
+  case TUNE_THK_RELEASE: t->thk_release = v; break;
   default: break;
   }
 }
@@ -198,6 +207,8 @@ get_tunable_int_field (const KgxParticleTunables *t, int field)
   case TUNE_THICKNESS:    return t->thickness;
   case TUNE_RELEASE_MODE: return t->release_mode;
   case TUNE_SHAPE:        return t->shape;
+  case TUNE_ENV_CURVE:    return t->env_curve;
+  case TUNE_THK_CURVE:    return t->thk_curve;
   default:                return 0;
   }
 }
@@ -209,6 +220,8 @@ set_tunable_int_field (KgxParticleTunables *t, int field, int v)
   case TUNE_THICKNESS:    t->thickness    = v; break;
   case TUNE_RELEASE_MODE: t->release_mode = v; break;
   case TUNE_SHAPE:        t->shape        = v; break;
+  case TUNE_ENV_CURVE:    t->env_curve    = v; break;
+  case TUNE_THK_CURVE:    t->thk_curve    = v; break;
   default: break;
   }
 }
