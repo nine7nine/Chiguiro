@@ -105,6 +105,20 @@ struct _KgxEdge {
   GdkRGBA           stashed_color;
   gboolean          stashed_reverse;
   gboolean          has_stashed;
+
+  /* ── snapshotted tunables (captured at animation start) ──── */
+  KgxParticleTunables process_tune_snap; /* for process_anim in-flight   */
+  KgxParticleTunables burst_tune_snap;   /* for firework/privilege bursts */
+  KgxParticleTunables ambient_tune_snap; /* for ambient bursts            */
+
+  /* ── cached pre-built path for triangle shape ────────────── */
+  GskPath            *unit_triangle;
+
+  /* ── cached parsed colors (invalidated on property change) ── */
+  GdkRGBA             overscroll_rgba;
+  gboolean            overscroll_rgba_valid;
+  GdkRGBA             privilege_rgba;
+  gboolean            privilege_rgba_valid;
 };
 
 
@@ -218,18 +232,26 @@ thickness_envelope (double t, double attack, double release, int curve)
 /* ── colour helpers ──────────────────────────────────────── */
 
 static GdkRGBA
-resolve_color (KgxEdge *self, const char *hex_or_empty)
+resolve_color_cached (KgxEdge    *self,
+                      const char *hex_or_empty,
+                      GdkRGBA    *cache,
+                      gboolean   *valid)
 {
+  if (*valid)
+    return *cache;
+
   GdkRGBA color = { 0, 0, 0, 1 };
 
   if (hex_or_empty && hex_or_empty[0] != '\0') {
     gdk_rgba_parse (&color, hex_or_empty);
     color.alpha = 1.0f;
+    *cache = color;
+    *valid = TRUE;
     return color;
   }
 
+  /* Accent color — don't cache, it can change dynamically. */
   gtk_widget_get_color (GTK_WIDGET (self), &color);
-
   return color;
 }
 
@@ -271,9 +293,11 @@ append_diamond (GtkSnapshot   *snapshot,
 }
 
 /* Triangle pointing in direction of motion.
- * angle: 0=right, 90=down, 180=left, 270=up */
+ * angle: 0=right, 90=down, 180=left, 270=up
+ * Uses a pre-built unit triangle (-0.5..0.5) scaled to size — zero allocations. */
 static void
 append_triangle (GtkSnapshot   *snapshot,
+                 GskPath       *unit_path,
                  float          px,
                  float          py,
                  float          size,
@@ -281,20 +305,11 @@ append_triangle (GtkSnapshot   *snapshot,
                  const GdkRGBA *color)
 {
   float half = size / 2.0f;
-  /* Build a right-pointing triangle centered at origin, then rotate */
   gtk_snapshot_save (snapshot);
   gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (px + half, py + half));
   gtk_snapshot_rotate (snapshot, angle);
-
-  GskPathBuilder *builder = gsk_path_builder_new ();
-  gsk_path_builder_move_to (builder, -half, -half);        /* top-left */
-  gsk_path_builder_line_to (builder,  half,  0);           /* right-center (tip) */
-  gsk_path_builder_line_to (builder, -half,  half);        /* bottom-left */
-  gsk_path_builder_close (builder);
-
-  GskPath *path = gsk_path_builder_free_to_path (builder);
-  gtk_snapshot_append_fill (snapshot, path, GSK_FILL_RULE_WINDING, color);
-  gsk_path_unref (path);
+  gtk_snapshot_scale (snapshot, size, size);
+  gtk_snapshot_append_fill (snapshot, unit_path, GSK_FILL_RULE_WINDING, color);
   gtk_snapshot_restore (snapshot);
 }
 
@@ -323,7 +338,8 @@ draw_segment (GtkSnapshot                *snapshot,
               const GdkRGBA              *color,
               int                         trail_dir,
               const KgxParticleTunables  *tune,
-              double                      phase)
+              double                      phase,
+              GskPath                    *unit_triangle)
 {
   double blk   = (double) tune->thickness;
   if (tune->thk_attack > 0.0 || tune->thk_release > 0.0) {
@@ -391,7 +407,7 @@ draw_segment (GtkSnapshot                *snapshot,
       append_diamond (snapshot, px, py, (float) blk, &c);
       break;
     case KGX_PARTICLE_SHAPE_TRIANGLE:
-      append_triangle (snapshot, px, py, (float) blk, tri_angle, &c);
+      append_triangle (snapshot, unit_triangle, px, py, (float) blk, tri_angle, &c);
       break;
     default: /* SQUARE */
       gtk_snapshot_append_color (snapshot, &c,
@@ -412,7 +428,8 @@ draw_overscroll (GtkSnapshot                *snapshot,
                  float                       width,
                  float                       height,
                  const GdkRGBA              *color,
-                 const KgxParticleTunables  *tune)
+                 const KgxParticleTunables  *tune,
+                 GskPath                    *unit_triangle)
 {
   double perim  = 2.0 * (width + height);
   float  env    = envelope (progress, tune->env_attack, tune->env_release, tune->env_curve);
@@ -442,9 +459,11 @@ draw_overscroll (GtkSnapshot                *snapshot,
       int h_trail = (edge == GTK_POS_BOTTOM) ? -1 : +1;
       int v_trail = (edge == GTK_POS_BOTTOM) ? +1 : -1;
       draw_segment (snapshot, h_head, BASE_OVERSCROLL_SEG, a,
-                    width, height, color, h_trail, tune, progress);
+                    width, height, color, h_trail, tune, progress,
+                    unit_triangle);
       draw_segment (snapshot, v_head, BASE_OVERSCROLL_SEG, a,
-                    width, height, color, v_trail, tune, progress);
+                    width, height, color, v_trail, tune, progress,
+                    unit_triangle);
     }
   } else {
     /* Center mode: burst from center of edge, two snakes split outward. */
@@ -461,9 +480,11 @@ draw_overscroll (GtkSnapshot                *snapshot,
     right_head = fmod (center + (width / 2.0) * progress, perim);
 
     draw_segment (snapshot, left_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, color, +1, tune, progress);
+                  width, height, color, +1, tune, progress,
+                  unit_triangle);
     draw_segment (snapshot, right_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, color, -1, tune, progress);
+                  width, height, color, -1, tune, progress,
+                  unit_triangle);
   }
 }
 
@@ -531,16 +552,20 @@ burst_fire (gpointer data)
   if (self->process_preset == KGX_PARTICLE_FIREWORKS)
     self->burst_color[i] = self->process_color;
   else if (self->privileged && self->privilege_enabled)
-    self->burst_color[i] = resolve_color (self, self->privilege_color);
+    self->burst_color[i] = resolve_color_cached (self, self->privilege_color,
+                                                  &self->privilege_rgba,
+                                                  &self->privilege_rgba_valid);
   else
     self->burst_color[i] = random_muted_color ();
 
-  /* Apply per-preset speed to firework bursts when active */
+  /* Snapshot tunables at burst-fire time so in-flight bursts are
+   * decoupled from live state (preset switches, tunable adjustments). */
   {
     const KgxParticleTunables *bt =
       (self->process_preset == KGX_PARTICLE_FIREWORKS)
         ? resolve_tunables (self, KGX_PARTICLE_FIREWORKS)
         : &self->global;
+    self->burst_tune_snap = *bt;
     adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->burst_anim[i]),
                                       (guint)(800.0 / bt->speed));
   }
@@ -651,9 +676,13 @@ ambient_burst_fire (gpointer data)
 
   self->ambient_burst_color[i] = random_muted_color ();
 
-  const KgxParticleTunables *bt = &self->preset[N_PRESETS - 1]; /* ambient tunables */
-  adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
-                                    (guint)(800.0 / bt->speed));
+  /* Snapshot ambient tunables at burst-fire time. */
+  {
+    const KgxParticleTunables *bt = &self->preset[N_PRESETS - 1]; /* ambient tunables */
+    self->ambient_tune_snap = *bt;
+    adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
+                                      (guint)(800.0 / bt->speed));
+  }
 
   adw_animation_reset (self->ambient_anim[i]);
   adw_animation_play (self->ambient_anim[i]);
@@ -723,24 +752,26 @@ kgx_edge_snapshot (GtkWidget   *widget,
   int      width  = gtk_widget_get_width (widget);
   int      height = gtk_widget_get_height (widget);
 
+  GskPath *tri = self->unit_triangle;
+
   /* Overscroll beam */
   if (self->overscroll_progress >= 0.0 && self->overscroll_enabled) {
-    GdkRGBA color = resolve_color (self, self->overscroll_color);
+    GdkRGBA color = resolve_color_cached (self, self->overscroll_color,
+                                          &self->overscroll_rgba,
+                                          &self->overscroll_rgba_valid);
 
     draw_overscroll (snapshot, self->overscroll_progress,
                      self->overscroll_edge, self->overscroll_style,
-                     width, height, &color, &self->global);
+                     width, height, &color, &self->global, tri);
   }
 
   /* Firework / privilege decoration — staggered center-bursts.
-   * When process_reverse + FIREWORKS: implode (converge to center). */
+   * When process_reverse + FIREWORKS: implode (converge to center).
+   * Uses snapshotted tunables captured at burst-fire time. */
   {
     gboolean implode = (self->process_preset == KGX_PARTICLE_FIREWORKS &&
                         self->process_reverse);
-    const KgxParticleTunables *bt =
-      (self->process_preset == KGX_PARTICLE_FIREWORKS)
-        ? resolve_tunables (self, KGX_PARTICLE_FIREWORKS)
-        : &self->global;
+    const KgxParticleTunables *bt = &self->burst_tune_snap;
 
     for (int i = 0; i < MAX_BURSTS; i++) {
       if (self->burst_progress[i] >= 0.0) {
@@ -761,17 +792,18 @@ kgx_edge_snapshot (GtkWidget   *widget,
 
         draw_segment (snapshot, left_head, seg, a,
                       width, height, &self->burst_color[i],
-                      l_trail, bt, p);
+                      l_trail, bt, p, tri);
         draw_segment (snapshot, right_head, seg, a,
                       width, height, &self->burst_color[i],
-                      r_trail, bt, p);
+                      r_trail, bt, p, tri);
       }
     }
   }
 
-  /* Ambient burst decoration — independent from privilege/process fireworks. */
+  /* Ambient burst decoration — independent from privilege/process fireworks.
+   * Uses snapshotted tunables captured at ambient-burst-fire time. */
   if (self->ambient_active && self->ambient_enabled) {
-    const KgxParticleTunables *abt = &self->preset[N_PRESETS - 1]; /* ambient tunables */
+    const KgxParticleTunables *abt = &self->ambient_tune_snap;
 
     for (int i = 0; i < MAX_BURSTS; i++) {
       if (self->ambient_progress[i] >= 0.0) {
@@ -787,21 +819,22 @@ kgx_edge_snapshot (GtkWidget   *widget,
 
         draw_segment (snapshot, left_head, seg, a,
                       width, height, &self->ambient_burst_color[i],
-                      +1, abt, p);
+                      +1, abt, p, tri);
         draw_segment (snapshot, right_head, seg, a,
                       width, height, &self->ambient_burst_color[i],
-                      -1, abt, p);
+                      -1, abt, p, tri);
       }
     }
   }
 
   /* Process-specific particle — suppressed when settings page is open,
    * EXCEPT during the brief graceful falloff (pending_change in progress).
-   * Once the pending fires and stops the animation, suppression kicks in. */
+   * Once the pending fires and stops the animation, suppression kicks in.
+   * Uses snapshotted tunables captured at animation start. */
   if (self->process_progress >= 0.0 &&
       self->process_preset != KGX_PARTICLE_NONE &&
       (!self->ambient_active || self->pending_change)) {
-    const KgxParticleTunables *pt = resolve_tunables (self, self->process_preset);
+    const KgxParticleTunables *pt = &self->process_tune_snap;
     double perim = 2.0 * (width + height);
     double p     = self->process_progress;
     float  env   = envelope (p, pt->env_attack, pt->env_release, pt->env_curve);
@@ -835,10 +868,10 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double b_cw  = fmod (corner_b + (width + height) / 2.0 * p, perim);
       double b_ccw = fmod (corner_b - (width + height) / 2.0 * p + perim * 2, perim);
 
-      draw_segment (snapshot, a_cw,  seg, a, width, height, &self->process_color, -1, pt, p);
-      draw_segment (snapshot, a_ccw, seg, a, width, height, &self->process_color, +1, pt, p);
-      draw_segment (snapshot, b_cw,  seg, a, width, height, &self->process_color, -1, pt, p);
-      draw_segment (snapshot, b_ccw, seg, a, width, height, &self->process_color, +1, pt, p);
+      draw_segment (snapshot, a_cw,  seg, a, width, height, &self->process_color, -1, pt, p, tri);
+      draw_segment (snapshot, a_ccw, seg, a, width, height, &self->process_color, +1, pt, p, tri);
+      draw_segment (snapshot, b_cw,  seg, a, width, height, &self->process_color, -1, pt, p, tri);
+      draw_segment (snapshot, b_ccw, seg, a, width, height, &self->process_color, +1, pt, p, tri);
       break;
     }
     case KGX_PARTICLE_PULSE_OUT: {
@@ -849,8 +882,8 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double left_head  = fmod (center - spread + perim, perim);
       double right_head = fmod (center + spread, perim);
 
-      draw_segment (snapshot, left_head,  seg, a, width, height, &self->process_color, +1, pt, p);
-      draw_segment (snapshot, right_head, seg, a, width, height, &self->process_color, -1, pt, p);
+      draw_segment (snapshot, left_head,  seg, a, width, height, &self->process_color, +1, pt, p, tri);
+      draw_segment (snapshot, right_head, seg, a, width, height, &self->process_color, -1, pt, p, tri);
       break;
     }
     case KGX_PARTICLE_ROTATE: {
@@ -870,7 +903,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double head   = fmod (dir * (perim / 2.0) * eased + offset + perim, perim);
 
       draw_segment (snapshot, head, lap_seg * 2.0, lap_a,
-                    width, height, &self->process_color, trail, pt, half_p);
+                    width, height, &self->process_color, trail, pt, half_p, tri);
       break;
     }
     case KGX_PARTICLE_PING_PONG: {
@@ -897,7 +930,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
       }
 
       draw_segment (snapshot, pos, pp_seg, pp_a,
-                    width, height, &self->process_color, trail, pt, half_p);
+                    width, height, &self->process_color, trail, pt, half_p, tri);
       break;
     }
     default:
@@ -1034,6 +1067,7 @@ kgx_edge_set_property (GObject      *object,
     case PROP_OVERSCROLL_COLOR:
       g_free (self->overscroll_color);
       self->overscroll_color = g_value_dup_string (value);
+      self->overscroll_rgba_valid = FALSE;
       gtk_widget_queue_draw (GTK_WIDGET (self));
       break;
     case PROP_PRIVILEGE_ENABLED:
@@ -1043,6 +1077,7 @@ kgx_edge_set_property (GObject      *object,
     case PROP_PRIVILEGE_COLOR:
       g_free (self->privilege_color);
       self->privilege_color = g_value_dup_string (value);
+      self->privilege_rgba_valid = FALSE;
       gtk_widget_queue_draw (GTK_WIDGET (self));
       break;
     case PROP_OVERSCROLL_STYLE:
@@ -1197,6 +1232,7 @@ kgx_edge_dispose (GObject *object)
     g_clear_object (&self->ambient_anim[i]);
   g_clear_pointer (&self->overscroll_color, g_free);
   g_clear_pointer (&self->privilege_color, g_free);
+  g_clear_pointer (&self->unit_triangle, gsk_path_unref);
 
   if (self->firework_timeout) {
     g_source_remove (self->firework_timeout);
@@ -1407,6 +1443,16 @@ kgx_edge_init (KgxEdge *self)
       .release_mode = KGX_RELEASE_UNIFORM,
       .env_curve = 2, .thk_attack = 0.0, .thk_release = 0.0, .thk_curve = 2,
     };
+  }
+
+  /* Pre-build a unit-size right-pointing triangle path (no per-frame alloc). */
+  {
+    GskPathBuilder *builder = gsk_path_builder_new ();
+    gsk_path_builder_move_to (builder, -0.5f, -0.5f);
+    gsk_path_builder_line_to (builder,  0.5f,  0.0f);
+    gsk_path_builder_line_to (builder, -0.5f,  0.5f);
+    gsk_path_builder_close (builder);
+    self->unit_triangle = gsk_path_builder_free_to_path (builder);
   }
 
   gtk_widget_set_can_target (GTK_WIDGET (self), FALSE);
@@ -1707,9 +1753,11 @@ process_particle_done_cb (KgxEdge *self)
     return;
   }
 
-  /* Rotate and ping-pong loop continuously while active */
+  /* Rotate and ping-pong loop continuously while active.
+   * Re-snapshot tunables so live changes take effect on the next cycle. */
   if (self->process_preset == KGX_PARTICLE_ROTATE ||
       self->process_preset == KGX_PARTICLE_PING_PONG) {
+    self->process_tune_snap = *resolve_tunables (self, self->process_preset);
     adw_animation_reset (self->process_anim);
     adw_animation_play (self->process_anim);
     return;
@@ -1730,8 +1778,10 @@ kgx_edge_set_process_particle (KgxEdge          *self,
 
   /* If an animation is currently playing and the preset is changing,
    * queue the change as pending so the current cycle finishes gracefully.
-   * Switch to linear easing so the outgoing animation doesn't decelerate
-   * (ease-out-cubic slows down at the end, which looks like a stall). */
+   * Keep the original easing — switching to LINEAR mid-animation causes a
+   * visible position jump because the time→value mapping changes abruptly
+   * (e.g. ease-out-cubic at t=0.5 ≈ 0.875, LINEAR at t=0.5 = 0.5).
+   * The natural deceleration is fine now that tunables are snapshotted. */
   if (self->process_progress >= 0.0 &&
       self->process_anim &&
       adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING &&
@@ -1743,9 +1793,6 @@ kgx_edge_set_process_particle (KgxEdge          *self,
       self->pending_color = *color;
     else
       self->pending_color = (GdkRGBA) { 0.5f, 0.5f, 0.5f, 1.0f };
-
-    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
-                                    ADW_LINEAR);
     return;
   }
 
@@ -1792,6 +1839,10 @@ kgx_edge_set_process_particle (KgxEdge          *self,
                               G_CALLBACK (process_particle_done_cb), self);
   }
 
+  /* Snapshot tunables at animation start so in-flight rendering is
+   * decoupled from live state.  Re-snapshotted on loop restart. */
+  self->process_tune_snap = *resolve_tunables (self, preset);
+
   /* Always update easing and duration — speed may have changed */
   adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
                                   (preset == KGX_PARTICLE_ROTATE ||
@@ -1799,7 +1850,7 @@ kgx_edge_set_process_particle (KgxEdge          *self,
                                     ? ADW_LINEAR
                                     : ADW_EASE_OUT_CUBIC);
 
-  double spd = resolve_tunables (self, preset)->speed;
+  double spd = self->process_tune_snap.speed;
   guint duration;
   switch (preset) {
   case KGX_PARTICLE_ROTATE:    duration = (guint)(3500.0 / spd); break;

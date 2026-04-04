@@ -82,6 +82,9 @@ struct _KgxWindowPrivate {
   GdkRGBA               glass_current;
   gboolean              glass_has_current;
 
+  /* Cached terminal for glass transition — avoids g_object_get per frame */
+  KgxTerminal          *glass_cached_terminal;  /* weak pointer */
+
   /* Deferred particle — fires after glass transition completes */
   gboolean              deferred_particle;
   KgxParticlePreset     deferred_preset;
@@ -152,6 +155,8 @@ kgx_window_dispose (GObject *object)
   g_clear_pointer (&priv->window_css_class, g_free);
   g_clear_pointer (&priv->override_css_selectors, g_free);
   g_clear_pointer (&priv->process_glass_override, g_free);
+
+  g_clear_weak_pointer (&priv->glass_cached_terminal);
 
   if (priv->glass_transition) {
     adw_animation_reset (priv->glass_transition);
@@ -659,11 +664,16 @@ apply_glass_color (KgxWindow     *self,
                     const GdkRGBA *color)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
-  int r = (int)(color->red * 255);
-  int g = (int)(color->green * 255);
-  int b = (int)(color->blue * 255);
 
-  /* Update CSS glass — skip if RGB unchanged since last frame. */
+  /* Quantize to steps of 4 so the CSS dedup check below naturally
+   * skips most frames during smooth transitions — reduces CSS
+   * reparsing from ~12 to ~3 per 200ms transition.  VTE bg still
+   * updates at full precision every frame for visual smoothness. */
+  int r = (int)(color->red * 255) & ~3;
+  int g = (int)(color->green * 255) & ~3;
+  int b = (int)(color->blue * 255) & ~3;
+
+  /* Update CSS glass — skip if quantized RGB unchanged since last frame. */
   if (priv->override_css && priv->override_css_selectors &&
       (r != priv->override_last_r ||
        g != priv->override_last_g ||
@@ -678,17 +688,10 @@ apply_glass_color (KgxWindow     *self,
     priv->override_last_b = b;
   }
 
-  /* Update VTE terminal background — set directly, no separate animation. */
-  {
-    g_autoptr (KgxTab) active = NULL;
-    g_object_get (priv->pages, "active-page", &active, NULL);
-    if (active) {
-      g_autoptr (KgxTerminal) terminal = NULL;
-      g_object_get (active, "terminal", &terminal, NULL);
-      if (terminal)
-        kgx_terminal_apply_bg_immediate (terminal, color);
-    }
-  }
+  /* Update VTE terminal background using the cached pointer from
+   * start_glass_transition — avoids two g_object_get per frame. */
+  if (priv->glass_cached_terminal)
+    kgx_terminal_apply_bg_immediate (priv->glass_cached_terminal, color);
 }
 
 
@@ -719,6 +722,8 @@ glass_transition_done_cb (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
+  g_clear_weak_pointer (&priv->glass_cached_terminal);
+
   if (priv->deferred_particle) {
     priv->deferred_particle = FALSE;
     priv->deferred_color.alpha = 1.0f;
@@ -737,6 +742,20 @@ start_glass_transition (KgxWindow     *self,
 
   priv->glass_from = priv->glass_current;
   priv->glass_to = *target;
+
+  /* Cache the active terminal for the duration of the transition
+   * so apply_glass_color doesn't need g_object_get per frame. */
+  g_clear_weak_pointer (&priv->glass_cached_terminal);
+  {
+    g_autoptr (KgxTab) active = NULL;
+    g_object_get (priv->pages, "active-page", &active, NULL);
+    if (active) {
+      g_autoptr (KgxTerminal) terminal = NULL;
+      g_object_get (active, "terminal", &terminal, NULL);
+      if (terminal)
+        g_set_weak_pointer (&priv->glass_cached_terminal, terminal);
+    }
+  }
 
   if (!priv->glass_transition) {
     AdwAnimationTarget *t = adw_callback_animation_target_new (
