@@ -82,6 +82,12 @@ struct _KgxWindowPrivate {
   GdkRGBA               glass_current;
   gboolean              glass_has_current;
 
+  /* Deferred particle — fires after glass transition completes */
+  gboolean              deferred_particle;
+  KgxParticlePreset     deferred_preset;
+  GdkRGBA               deferred_color;
+  gboolean              deferred_reverse;
+
   GSignalGroup         *tab_signals;
 
   GBindingGroup        *surface_binds;
@@ -702,6 +708,21 @@ glass_lerp_cb (double    value,
 
 
 static void
+glass_transition_done_cb (KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+
+  if (priv->deferred_particle) {
+    priv->deferred_particle = FALSE;
+    priv->deferred_color.alpha = 1.0f;
+    kgx_edge_set_process_particle (priv->edge,
+                                   priv->deferred_preset,
+                                   &priv->deferred_color,
+                                   priv->deferred_reverse);
+  }
+}
+
+static void
 start_glass_transition (KgxWindow     *self,
                          const GdkRGBA *target)
 {
@@ -717,6 +738,8 @@ start_glass_transition (KgxWindow     *self,
                                                         0.0, 1.0, 400, t);
     adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (priv->glass_transition),
                                     ADW_EASE_IN_OUT_CUBIC);
+    g_signal_connect_swapped (priv->glass_transition, "done",
+                              G_CALLBACK (glass_transition_done_cb), self);
   }
 
   adw_animation_reset (priv->glass_transition);
@@ -802,12 +825,15 @@ update_process_glass (KgxWindow *self)
         match = NULL;
     }
 
-    /* Activate or deactivate process particle on the edge widget. */
-    if (preset != KGX_PARTICLE_NONE) {
-      particle_color.alpha = 1.0f;
-      kgx_edge_set_process_particle (priv->edge, preset, &particle_color,
-                                     reverse);
-    } else {
+    /* Store particle config — will fire after glass transition completes,
+     * or immediately if no transition is needed (handled below). */
+    priv->deferred_preset  = preset;
+    priv->deferred_color   = particle_color;
+    priv->deferred_reverse = reverse;
+    priv->deferred_particle = (preset != KGX_PARTICLE_NONE);
+
+    /* NONE always applies immediately — no need to wait for color. */
+    if (preset == KGX_PARTICLE_NONE) {
       kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
                                      FALSE);
     }
@@ -826,6 +852,15 @@ update_process_glass (KgxWindow *self)
   if (priv->glass_current.red   == target.red   &&
       priv->glass_current.green == target.green &&
       priv->glass_current.blue  == target.blue) {
+    /* No transition needed — fire particle immediately. */
+    if (priv->deferred_particle) {
+      priv->deferred_particle = FALSE;
+      priv->deferred_color.alpha = 1.0f;
+      kgx_edge_set_process_particle (priv->edge,
+                                     priv->deferred_preset,
+                                     &priv->deferred_color,
+                                     priv->deferred_reverse);
+    }
     /* Keep the terminal's override string consistent. */
     if (active) {
       g_autoptr (KgxTerminal) terminal = NULL;

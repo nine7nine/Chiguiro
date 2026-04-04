@@ -75,6 +75,12 @@ struct _KgxEdge {
   gboolean          process_reverse;
   AdwAnimation     *process_anim;
   double            process_progress;   /* -1 = idle, 0..1 = active */
+
+  /* ── pending preset (for graceful transitions) ──────────── */
+  gboolean          pending_change;
+  KgxParticlePreset pending_preset;
+  GdkRGBA           pending_color;
+  gboolean          pending_reverse;
 };
 
 
@@ -608,7 +614,8 @@ kgx_edge_snapshot (GtkWidget   *widget,
     }
   }
 
-  /* Process-specific particle (suppressed when settings page is open) */
+  /* Process-specific particle — suppressed when settings page is open
+   * (the pending_change mechanism ensures the loop stops gracefully). */
   if (self->process_progress >= 0.0 &&
       self->process_preset != KGX_PARTICLE_NONE &&
       !self->firework_settings) {
@@ -1231,6 +1238,16 @@ kgx_edge_set_ambient (KgxEdge  *self,
   self->firework_settings = ambient;
 
   if (ambient) {
+    /* Stop the process particle loop gracefully — it will fade out
+     * via its envelope while the settings fireworks play over it. */
+    if (self->process_progress >= 0.0 &&
+        self->process_anim &&
+        adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING) {
+      self->pending_change = TRUE;
+      self->pending_preset = KGX_PARTICLE_NONE;
+      self->pending_color = (GdkRGBA) { 0, 0, 0, 0 };
+      self->pending_reverse = FALSE;
+    }
     if (!self->firework_timeout)
       self->firework_timeout = g_timeout_add (50, firework_fire, self);
   } else if (!self->firework_privilege) {
@@ -1317,6 +1334,18 @@ kgx_parse_process_config (const char        *value,
 static void
 process_particle_value_cb (double value, KgxEdge *self)
 {
+  /* For multi-step presets (ROTATE, PING_PONG), check if we've crossed
+   * the half-cycle boundary (0.5) while a pending change is queued.
+   * If so, stop the animation early so the transition happens at the
+   * step boundary rather than waiting for the full cycle. */
+  if (self->pending_change &&
+      (self->process_preset == KGX_PARTICLE_ROTATE ||
+       self->process_preset == KGX_PARTICLE_PING_PONG) &&
+      self->process_progress < 0.5 && value >= 0.5) {
+    adw_animation_skip (self->process_anim);
+    return;
+  }
+
   self->process_progress = value;
   gtk_widget_queue_draw (GTK_WIDGET (self));
 }
@@ -1325,6 +1354,20 @@ process_particle_value_cb (double value, KgxEdge *self)
 static void
 process_particle_done_cb (KgxEdge *self)
 {
+  /* If a preset change is pending, apply it now that the current
+   * animation has finished gracefully. */
+  if (self->pending_change) {
+    self->pending_change = FALSE;
+    self->process_progress = -1.0;
+    gtk_widget_queue_draw (GTK_WIDGET (self));
+    /* Apply the pending preset (may be NONE, which just stops). */
+    kgx_edge_set_process_particle (self,
+                                   self->pending_preset,
+                                   &self->pending_color,
+                                   self->pending_reverse);
+    return;
+  }
+
   /* Rotate and ping-pong loop continuously while active */
   if (self->process_preset == KGX_PARTICLE_ROTATE ||
       self->process_preset == KGX_PARTICLE_PING_PONG) {
@@ -1346,6 +1389,24 @@ kgx_edge_set_process_particle (KgxEdge          *self,
 {
   g_return_if_fail (KGX_IS_EDGE (self));
 
+  /* If an animation is currently playing and the preset is changing,
+   * queue the change as pending so the current cycle finishes gracefully. */
+  if (self->process_progress >= 0.0 &&
+      self->process_anim &&
+      adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING &&
+      (preset != self->process_preset || preset == KGX_PARTICLE_NONE)) {
+    self->pending_change = TRUE;
+    self->pending_preset = preset;
+    self->pending_reverse = reverse;
+    if (color)
+      self->pending_color = *color;
+    else
+      self->pending_color = (GdkRGBA) { 0.5f, 0.5f, 0.5f, 1.0f };
+
+    return;
+  }
+
+  self->pending_change = FALSE;
   self->process_preset = preset;
   self->process_reverse = reverse;
 
@@ -1356,8 +1417,9 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     self->process_progress = -1.0;
     if (self->process_anim)
       adw_animation_reset (self->process_anim);
-    /* Stop firework cycle if it was running */
-    if (self->firework_timeout) {
+    /* Stop firework cycle if it was running for a process FIREWORKS preset */
+    if (self->firework_timeout &&
+        !self->firework_settings && !self->firework_privilege) {
       g_source_remove (self->firework_timeout);
       self->firework_timeout = 0;
     }
