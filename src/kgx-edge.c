@@ -55,8 +55,6 @@ struct _KgxEdge {
 
   /* ── ambient (settings page) configuration ─────────────── */
   gboolean        ambient_enabled;     /* edge-settings-animation GSettings */
-  char           *ambient_color;       /* edge-settings-color GSettings */
-  int             ambient_preset;      /* edge-settings-preset (KgxParticlePreset) */
 
   /* ── privilege preset configuration ──────────────────────── */
   int             privilege_preset;    /* edge-privilege-preset (KgxParticlePreset) */
@@ -122,8 +120,6 @@ enum {
   PROP_PRIVILEGE_DIRECTION,
   PROP_PRIVILEGE_PRESET,
   PROP_AMBIENT_ENABLED,
-  PROP_AMBIENT_COLOR,
-  PROP_AMBIENT_PRESET,
   PROP_AMBIENT_BURST_COUNT,
   PROP_AMBIENT_BURST_SPREAD,
   /* Global tunables (N_TUNE_FIELDS values) */
@@ -653,12 +649,7 @@ ambient_burst_fire (gpointer data)
 
   self->ambient_head[i] = g_random_double () * perim;
 
-  if (self->ambient_color && self->ambient_color[0]) {
-    gdk_rgba_parse (&self->ambient_burst_color[i], self->ambient_color);
-    self->ambient_burst_color[i].alpha = 1.0f;
-  } else {
-    self->ambient_burst_color[i] = random_muted_color ();
-  }
+  self->ambient_burst_color[i] = random_muted_color ();
 
   const KgxParticleTunables *bt = &self->preset[N_PRESETS - 1]; /* ambient tunables */
   adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
@@ -964,7 +955,6 @@ kgx_edge_map (GtkWidget *widget)
     firework_schedule (self);
 
   if (self->ambient_active && self->ambient_enabled &&
-      self->ambient_preset == KGX_PARTICLE_FIREWORKS &&
       self->ambient_progress[0] < 0.0)
     ambient_schedule (self);
 }
@@ -1072,15 +1062,15 @@ kgx_edge_set_property (GObject      *object,
       self->privilege_preset = CLAMP (g_value_get_int (value), 1, 5);
       break;
     case PROP_AMBIENT_ENABLED:
-      self->ambient_enabled = g_value_get_boolean (value);
-      break;
-    case PROP_AMBIENT_COLOR:
-      g_free (self->ambient_color);
-      self->ambient_color = g_value_dup_string (value);
-      gtk_widget_queue_draw (GTK_WIDGET (self));
-      break;
-    case PROP_AMBIENT_PRESET:
-      self->ambient_preset = CLAMP (g_value_get_int (value), 1, 5);
+      {
+        gboolean was = self->ambient_enabled;
+        self->ambient_enabled = g_value_get_boolean (value);
+        /* Restart or stop ambient if settings page is currently open. */
+        if (self->ambient_active && was != self->ambient_enabled) {
+          self->ambient_active = FALSE;
+          kgx_edge_set_ambient (self, TRUE);
+        }
+      }
       break;
     case PROP_AMBIENT_BURST_COUNT:
       self->ambient_burst_count = CLAMP (g_value_get_int (value), 1, MAX_BURSTS);
@@ -1174,12 +1164,6 @@ kgx_edge_get_property (GObject    *object,
     case PROP_AMBIENT_ENABLED:
       g_value_set_boolean (value, self->ambient_enabled);
       break;
-    case PROP_AMBIENT_COLOR:
-      g_value_set_string (value, self->ambient_color ? self->ambient_color : "");
-      break;
-    case PROP_AMBIENT_PRESET:
-      g_value_set_int (value, self->ambient_preset);
-      break;
     case PROP_AMBIENT_BURST_COUNT:
       g_value_set_int (value, self->ambient_burst_count);
       break;
@@ -1213,7 +1197,6 @@ kgx_edge_dispose (GObject *object)
     g_clear_object (&self->ambient_anim[i]);
   g_clear_pointer (&self->overscroll_color, g_free);
   g_clear_pointer (&self->privilege_color, g_free);
-  g_clear_pointer (&self->ambient_color, g_free);
 
   if (self->firework_timeout) {
     g_source_remove (self->firework_timeout);
@@ -1295,13 +1278,9 @@ kgx_edge_class_init (KgxEdgeClass *klass)
     g_param_spec_boolean ("ambient-enabled", NULL, NULL, TRUE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
-  edge_pspecs[PROP_AMBIENT_COLOR] =
-    g_param_spec_string ("ambient-color", NULL, NULL, "",
-                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
-  edge_pspecs[PROP_AMBIENT_PRESET] =
-    g_param_spec_int ("ambient-preset", NULL, NULL, 1, 5, 1,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+
 
   edge_pspecs[PROP_AMBIENT_BURST_COUNT] =
     g_param_spec_int ("ambient-burst-count", NULL, NULL, 1, 8, 8,
@@ -1403,8 +1382,6 @@ kgx_edge_init (KgxEdge *self)
   self->burst_spread        = 3.1;
   self->burst_count         = 8;
   self->ambient_enabled     = TRUE;
-  self->ambient_color       = g_strdup ("");
-  self->ambient_preset      = KGX_PARTICLE_FIREWORKS;
   self->ambient_burst_count = 8;
   self->ambient_burst_spread = 3.1;
   self->privilege_preset    = KGX_PARTICLE_FIREWORKS;
@@ -1593,56 +1570,32 @@ kgx_edge_set_ambient (KgxEdge  *self,
     if (!self->ambient_enabled)
       return;
 
-    if (self->ambient_preset == KGX_PARTICLE_FIREWORKS) {
-      /* FIREWORKS — use the independent ambient burst system. */
-      /* Stop the process particle loop gracefully — it will fade out
-       * via its envelope while the ambient fireworks play over it. */
-      if (self->process_progress >= 0.0 &&
-          self->process_anim &&
-          adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING) {
-        self->pending_change = TRUE;
-        self->pending_preset = KGX_PARTICLE_NONE;
-        self->pending_color = (GdkRGBA) { 0, 0, 0, 0 };
-        self->pending_reverse = FALSE;
-      }
-      if (!self->ambient_timeout)
-        self->ambient_timeout = g_timeout_add (50, ambient_fire, self);
-    } else {
-      /* Non-FIREWORKS — take over the process particle system. */
-      self->stashed_preset  = self->process_preset;
-      self->stashed_color   = self->process_color;
-      self->stashed_reverse = self->process_reverse;
-      self->has_stashed     = TRUE;
-      GdkRGBA color;
-      if (self->ambient_color && self->ambient_color[0])
-        gdk_rgba_parse (&color, self->ambient_color);
-      else
-        color = (GdkRGBA) { 0.5f, 0.5f, 0.6f, 1.0f };
-      color.alpha = 1.0f;
-      kgx_edge_set_process_particle (self, self->ambient_preset,
-                                     &color, FALSE);
+    /* Always use the independent ambient burst system.
+     * Gracefully stop any running process particle so it fades out
+     * while ambient fireworks play over it. */
+    if (self->process_progress >= 0.0 &&
+        self->process_anim &&
+        adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING) {
+      self->pending_change = TRUE;
+      self->pending_preset = KGX_PARTICLE_NONE;
+      self->pending_color = (GdkRGBA) { 0, 0, 0, 0 };
+      self->pending_reverse = FALSE;
     }
+    if (!self->ambient_timeout)
+      self->ambient_timeout = g_timeout_add (50, ambient_fire, self);
   } else {
-    if (self->ambient_timeout || self->ambient_progress[0] >= 0.0) {
-      /* Was using ambient burst system — stop it. */
-      if (self->ambient_timeout) {
-        g_source_remove (self->ambient_timeout);
-        self->ambient_timeout = 0;
-      }
-      for (int i = 0; i < MAX_BURSTS; i++) {
-        if (self->ambient_burst_timeout[i]) {
-          g_source_remove (self->ambient_burst_timeout[i]);
-          self->ambient_burst_timeout[i] = 0;
-        }
-      }
-      /* In-flight ambient_anim[] play out naturally. */
-    } else if (self->has_stashed) {
-      /* Was using process particle system — stop ambient particle. */
-      self->has_stashed = FALSE;
-      /* Let update_process_glass restore the correct process particle
-       * (triggered by the window after settings closes). */
-      kgx_edge_set_process_particle (self, KGX_PARTICLE_NONE, NULL, FALSE);
+    /* Stop ambient burst timers. */
+    if (self->ambient_timeout) {
+      g_source_remove (self->ambient_timeout);
+      self->ambient_timeout = 0;
     }
+    for (int i = 0; i < MAX_BURSTS; i++) {
+      if (self->ambient_burst_timeout[i]) {
+        g_source_remove (self->ambient_burst_timeout[i]);
+        self->ambient_burst_timeout[i] = 0;
+      }
+    }
+    /* In-flight ambient_anim[] play out naturally (graceful finish). */
   }
 }
 

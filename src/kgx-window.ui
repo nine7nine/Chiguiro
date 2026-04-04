@@ -244,16 +244,6 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
-            <binding name="ambient-color">
-              <lookup name="edge-settings-color">
-                <lookup name="settings">KgxWindow</lookup>
-              </lookup>
-            </binding>
-            <binding name="ambient-preset">
-              <lookup name="edge-settings-preset">
-                <lookup name="settings">KgxWindow</lookup>
-              </lookup>
-            </binding>
             <binding name="ambient-burst-count">
               <lookup name="edge-burst-count-ambient">
                 <lookup name="settings">KgxWindow</lookup>
@@ -541,6 +531,191 @@
             </binding>
             <binding name="shape-ping-pong">
               <lookup name="edge-shape-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve">
+              <lookup name="edge-env-curve">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-fireworks">
+              <lookup name="edge-env-curve-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-corners">
+              <lookup name="edge-env-curve-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-pulse-out">
+              <lookup name="edge-env-curve-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-rotate">
+              <lookup name="edge-env-curve-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-ping-pong">
+              <lookup name="edge-env-curve-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed-ambient">
+              <lookup name="edge-speed-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-ambient">
+              <lookup name="edge-thickness-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-ambient">
+              <lookup name="edge-tail-length-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-ambient">
+              <lookup name="edge-pulse-depth-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-ambient">
+              <lookup name="edge-pulse-speed-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-ambient">
+              <lookup name="edge-env-attack-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-ambient">
+              <lookup name="edge-env-release-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-ambient">
+              <lookup name="edge-release-mode-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-ambient">
+              <lookup name="edge-shape-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-ambient">
+              <lookup name="edge-env-curve-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack">
+              <lookup name="edge-thk-attack">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-fireworks">
+              <lookup name="edge-thk-attack-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-corners">
+              <lookup name="edge-thk-attack-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-pulse-out">
+              <lookup name="edge-thk-attack-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-rotate">
+              <lookup name="edge-thk-attack-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-ping-pong">
+              <lookup name="edge-thk-attack-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-ambient">
+              <lookup name="edge-thk-attack-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release">
+              <lookup name="edge-thk-release">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-fireworks">
+              <lookup name="edge-thk-release-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-corners">
+              <lookup name="edge-thk-release-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-pulse-out">
+              <lookup name="edge-thk-release-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-rotate">
+              <lookup name="edge-thk-release-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-ping-pong">
+              <lookup name="edge-thk-release-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-ambient">
+              <lookup name="edge-thk-release-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve">
+              <lookup name="edge-thk-curve">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-fireworks">
+              <lookup name="edge-thk-curve-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-corners">
+              <lookup name="edge-thk-curve-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-pulse-out">
+              <lookup name="edge-thk-curve-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-rotate">
+              <lookup name="edge-thk-curve-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-ping-pong">
+              <lookup name="edge-thk-curve-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-ambient">
+              <lookup name="edge-thk-curve-ambient">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
