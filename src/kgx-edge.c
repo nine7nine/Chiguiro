@@ -1717,7 +1717,9 @@ kgx_edge_set_process_particle (KgxEdge          *self,
   g_return_if_fail (KGX_IS_EDGE (self));
 
   /* If an animation is currently playing and the preset is changing,
-   * queue the change as pending so the current cycle finishes gracefully. */
+   * queue the change as pending so the current cycle finishes gracefully.
+   * Switch to linear easing so the outgoing animation doesn't decelerate
+   * (ease-out-cubic slows down at the end, which looks like a stall). */
   if (self->process_progress >= 0.0 &&
       self->process_anim &&
       adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING &&
@@ -1730,6 +1732,8 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     else
       self->pending_color = (GdkRGBA) { 0.5f, 0.5f, 0.5f, 1.0f };
 
+    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
+                                    ADW_LINEAR);
     return;
   }
 
