@@ -67,7 +67,8 @@ struct _KgxEdge {
   gboolean        firework_privilege;  /* privilege triggered (FIREWORKS preset) */
 #define MAX_BURSTS 8
 #define firework_active(s) ((s)->firework_privilege || \
-                            (s)->process_preset == KGX_PARTICLE_FIREWORKS)
+                            (s)->process_preset == KGX_PARTICLE_FIREWORKS || \
+                            (s)->process_preset == KGX_PARTICLE_AMBIENT)
 
   guint           firework_timeout;
   AdwAnimation   *burst_anim[MAX_BURSTS];
@@ -151,7 +152,7 @@ G_DEFINE_FINAL_TYPE (KgxEdge, kgx_edge, GTK_TYPE_WIDGET)
 static inline const KgxParticleTunables *
 resolve_tunables (KgxEdge *self, KgxParticlePreset preset)
 {
-  if (preset >= KGX_PARTICLE_FIREWORKS && preset <= KGX_PARTICLE_PING_PONG)
+  if (preset >= KGX_PARTICLE_FIREWORKS && preset <= KGX_PARTICLE_AMBIENT)
     return &self->preset[preset - 1];
   return &self->global;
 }
@@ -776,11 +777,12 @@ kgx_edge_snapshot (GtkWidget   *widget,
     }
   }
 
-  /* Process-specific particle — always rendered when active.
-   * The pending_change mechanism handles graceful transitions (e.g.
-   * when entering settings or switching tabs). */
+  /* Process-specific particle — suppressed when settings page is open,
+   * EXCEPT during the brief graceful falloff (pending_change in progress).
+   * Once the pending fires and stops the animation, suppression kicks in. */
   if (self->process_progress >= 0.0 &&
-      self->process_preset != KGX_PARTICLE_NONE) {
+      self->process_preset != KGX_PARTICLE_NONE &&
+      (!self->ambient_active || self->pending_change)) {
     const KgxParticleTunables *pt = resolve_tunables (self, self->process_preset);
     double perim = 2.0 * (width + height);
     double p     = self->process_progress;
@@ -1603,6 +1605,7 @@ preset_from_string (const char *s)
   if (g_str_equal (s, "pulse-out"))  return KGX_PARTICLE_PULSE_OUT;
   if (g_str_equal (s, "rotate"))     return KGX_PARTICLE_ROTATE;
   if (g_str_equal (s, "ping-pong"))  return KGX_PARTICLE_PING_PONG;
+  if (g_str_equal (s, "ambient"))    return KGX_PARTICLE_AMBIENT;
   if (g_str_equal (s, "none"))       return KGX_PARTICLE_NONE;
   return KGX_PARTICLE_NONE;
 }
@@ -1617,6 +1620,7 @@ kgx_particle_preset_to_string (KgxParticlePreset p)
   case KGX_PARTICLE_PULSE_OUT: return "pulse-out";
   case KGX_PARTICLE_ROTATE:    return "rotate";
   case KGX_PARTICLE_PING_PONG: return "ping-pong";
+  case KGX_PARTICLE_AMBIENT:   return "ambient";
   default:                     return "none";
   }
 }
@@ -1661,14 +1665,16 @@ kgx_parse_process_config (const char        *value,
 static void
 process_particle_value_cb (double value, KgxEdge *self)
 {
-  /* For multi-step presets (ROTATE, PING_PONG), check if we've crossed
-   * the half-cycle boundary (0.5) while a pending change is queued.
-   * If so, stop the animation early so the transition happens at the
-   * step boundary rather than waiting for the full cycle. */
+  /* When a pending change is queued, skip at the half-cycle boundary
+   * so the outgoing animation doesn't linger too long.
+   * - For ROTATE/PING_PONG: natural step boundary
+   * - For all presets going to NONE (e.g. entering settings): quick exit
+   * - For preset-to-preset transitions: let the full cycle play */
   if (self->pending_change &&
+      self->process_progress < 0.5 && value >= 0.5 &&
       (self->process_preset == KGX_PARTICLE_ROTATE ||
-       self->process_preset == KGX_PARTICLE_PING_PONG) &&
-      self->process_progress < 0.5 && value >= 0.5) {
+       self->process_preset == KGX_PARTICLE_PING_PONG ||
+       self->pending_preset == KGX_PARTICLE_NONE)) {
     adw_animation_skip (self->process_anim);
     return;
   }
@@ -1757,8 +1763,8 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     return;
   }
 
-  /* Fireworks reuses the burst/privilege animation system */
-  if (preset == KGX_PARTICLE_FIREWORKS) {
+  /* Fireworks and Ambient reuse the burst/privilege animation system */
+  if (preset == KGX_PARTICLE_FIREWORKS || preset == KGX_PARTICLE_AMBIENT) {
     if (gtk_widget_get_mapped (GTK_WIDGET (self)) && !self->firework_timeout) {
       self->burst_data[0].index = 0;
       self->burst_data[0].self  = self;

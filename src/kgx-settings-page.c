@@ -894,6 +894,7 @@ preset_string_to_index (const char *s)
   if (g_str_equal (s, "pulse-out"))  return 3;
   if (g_str_equal (s, "rotate"))     return 4;
   if (g_str_equal (s, "ping-pong"))  return 5;
+  if (g_str_equal (s, "ambient"))   return 6;
   return 0;
 }
 
@@ -1054,7 +1055,7 @@ kgx_settings_page_init (KgxSettingsPage *self)
     GtkWidget **pcolors  = app_glass_pcolors (self);
 
     /* Each dropdown gets its own model to avoid double-free on dispose. */
-    const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", "ping-pong", NULL };
+    const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient", NULL };
     for (int i = 0; i < APP_GLASS_SLOTS; i++) {
       GtkStringList *model = gtk_string_list_new (preset_names);
       gtk_drop_down_set_model (GTK_DROP_DOWN (presets[i]), G_LIST_MODEL (model));
@@ -1077,7 +1078,7 @@ kgx_settings_page_init (KgxSettingsPage *self)
 
   /* Indicator preset dropdowns (no "none" — presets are 1-indexed). */
   {
-    const char *indicator_presets[] = { "fireworks", "corners", "pulse-out", "rotate", "ping-pong", NULL };
+    const char *indicator_presets[] = { "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient", NULL };
     GtkWidget *btns[] = { self->privilege_preset_btn, self->ambient_preset_btn };
     for (int i = 0; i < (int) G_N_ELEMENTS (btns); i++) {
       GtkStringList *model = gtk_string_list_new (indicator_presets);

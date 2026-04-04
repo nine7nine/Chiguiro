@@ -742,7 +742,7 @@ start_glass_transition (KgxWindow     *self,
     AdwAnimationTarget *t = adw_callback_animation_target_new (
         (AdwAnimationTargetFunc) glass_lerp_cb, self, NULL);
     priv->glass_transition = adw_timed_animation_new (GTK_WIDGET (self),
-                                                        0.0, 1.0, 400, t);
+                                                        0.0, 1.0, 200, t);
     adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (priv->glass_transition),
                                     ADW_EASE_IN_OUT_CUBIC);
     g_signal_connect_swapped (priv->glass_transition, "done",
@@ -832,15 +832,15 @@ update_process_glass (KgxWindow *self)
         match = NULL;
     }
 
-    /* Store particle config — will fire after glass transition completes,
-     * or immediately if no transition is needed (handled below). */
-    priv->deferred_preset  = preset;
-    priv->deferred_color   = particle_color;
-    priv->deferred_reverse = reverse;
-    priv->deferred_particle = (preset != KGX_PARTICLE_NONE);
-
-    /* NONE always applies immediately — no need to wait for color. */
-    if (preset == KGX_PARTICLE_NONE) {
+    /* Fire particle immediately — don't wait for the glass color
+     * transition.  A brief color mismatch during the transition is
+     * less noticeable than a delayed particle start. */
+    priv->deferred_particle = FALSE;
+    if (preset != KGX_PARTICLE_NONE) {
+      particle_color.alpha = 1.0f;
+      kgx_edge_set_process_particle (priv->edge, preset,
+                                     &particle_color, reverse);
+    } else {
       kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
                                      FALSE);
     }
