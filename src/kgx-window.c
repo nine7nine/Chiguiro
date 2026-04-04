@@ -115,6 +115,7 @@ static GParamSpec *pspecs[LAST_PROP] = { NULL, };
 static void kgx_window_update_opaque_region (KgxWindow *self);
 static void kgx_window_update_glass_opacity (KgxWindow *self);
 static void glass_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
+static gboolean update_process_glass (KgxWindow *self);
 
 
 static void
@@ -230,6 +231,12 @@ kgx_window_set_property (GObject      *object,
         }
         /* Ambient edge decoration while settings page is visible. */
         kgx_edge_set_ambient (priv->edge, priv->settings_visible);
+        /* Restore process particle immediately when leaving settings. */
+        if (!priv->settings_visible)
+          g_idle_add_full (G_PRIORITY_HIGH_IDLE,
+                           (GSourceFunc) update_process_glass,
+                           g_object_ref (self),
+                           g_object_unref);
       }
       break;
     default:

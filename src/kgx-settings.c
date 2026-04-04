@@ -65,6 +65,12 @@ struct _KgxSettings {
   int                   edge_overscroll_style;
   gboolean              edge_privilege;
   char                 *edge_privilege_color;
+  int                   edge_privilege_preset;
+  gboolean              edge_settings_animation;
+  char                 *edge_settings_color;
+  int                   edge_settings_preset;
+  int                   edge_burst_count_ambient;
+  double                edge_burst_spread_ambient;
   KgxParticleTunables   edge_global;
   KgxParticleTunables   edge_preset[N_PRESETS];
   int                   edge_burst_count;
@@ -111,6 +117,12 @@ enum {
   PROP_EDGE_OVERSCROLL_STYLE,
   PROP_EDGE_PRIVILEGE,
   PROP_EDGE_PRIVILEGE_COLOR,
+  PROP_EDGE_PRIVILEGE_PRESET,
+  PROP_EDGE_SETTINGS_ANIMATION,
+  PROP_EDGE_SETTINGS_COLOR,
+  PROP_EDGE_SETTINGS_PRESET,
+  PROP_EDGE_BURST_COUNT_AMBIENT,
+  PROP_EDGE_BURST_SPREAD_AMBIENT,
   /* Indexed tunables: global (N_TUNE_FIELDS values) */
   PROP_EDGE_GLOBAL_BASE,
   /* Per-preset tunables (N_PRESETS * N_TUNE_FIELDS values) */
@@ -129,7 +141,7 @@ static const char * const tune_names[N_TUNE_FIELDS] = {
   "env-attack", "env-release", "release-mode", "shape"
 };
 static const char * const preset_suffixes[N_PRESETS] = {
-  "fireworks", "corners", "pulse-out", "rotate", "ping-pong"
+  "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient"
 };
 
 /* Tunable field metadata for table-driven property installation */
@@ -217,6 +229,7 @@ kgx_settings_dispose (GObject *object)
   g_clear_pointer (&self->accent_color, g_free);
   g_clear_pointer (&self->edge_overscroll_color, g_free);
   g_clear_pointer (&self->edge_privilege_color, g_free);
+  g_clear_pointer (&self->edge_settings_color, g_free);
 
   G_OBJECT_CLASS (kgx_settings_parent_class)->dispose (object);
 }
@@ -418,6 +431,50 @@ kgx_settings_set_property (GObject      *object,
       self->edge_privilege_color = g_value_dup_string (value);
       g_object_notify_by_pspec (object, pspec);
       break;
+    case PROP_EDGE_PRIVILEGE_PRESET:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 1, 5);
+        if (new_value != self->edge_privilege_preset) {
+          self->edge_privilege_preset = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_SETTINGS_ANIMATION:
+      kgx_set_boolean_prop (object, pspec, &self->edge_settings_animation, value);
+      break;
+    case PROP_EDGE_SETTINGS_COLOR:
+      g_free (self->edge_settings_color);
+      self->edge_settings_color = g_value_dup_string (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_EDGE_SETTINGS_PRESET:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 1, 5);
+        if (new_value != self->edge_settings_preset) {
+          self->edge_settings_preset = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_BURST_COUNT_AMBIENT:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 1, 8);
+        if (new_value != self->edge_burst_count_ambient) {
+          self->edge_burst_count_ambient = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
+    case PROP_EDGE_BURST_SPREAD_AMBIENT:
+      {
+        double new_value = CLAMP (g_value_get_double (value), 0.5, 5.0);
+        if (!G_APPROX_VALUE (self->edge_burst_spread_ambient, new_value, DBL_EPSILON)) {
+          self->edge_burst_spread_ambient = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
     case PROP_EDGE_BURST_COUNT:
       {
         int new_value = CLAMP (g_value_get_int (value), 1, 8);
@@ -561,6 +618,24 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_EDGE_PRIVILEGE_COLOR:
       g_value_set_string (value, self->edge_privilege_color ? self->edge_privilege_color : "#d940a6");
+      break;
+    case PROP_EDGE_PRIVILEGE_PRESET:
+      g_value_set_int (value, self->edge_privilege_preset);
+      break;
+    case PROP_EDGE_SETTINGS_ANIMATION:
+      g_value_set_boolean (value, self->edge_settings_animation);
+      break;
+    case PROP_EDGE_SETTINGS_COLOR:
+      g_value_set_string (value, self->edge_settings_color ? self->edge_settings_color : "");
+      break;
+    case PROP_EDGE_SETTINGS_PRESET:
+      g_value_set_int (value, self->edge_settings_preset);
+      break;
+    case PROP_EDGE_BURST_COUNT_AMBIENT:
+      g_value_set_int (value, self->edge_burst_count_ambient);
+      break;
+    case PROP_EDGE_BURST_SPREAD_AMBIENT:
+      g_value_set_double (value, self->edge_burst_spread_ambient);
       break;
     case PROP_EDGE_BURST_COUNT:
       g_value_set_int (value, self->edge_burst_count);
@@ -747,6 +822,36 @@ kgx_settings_class_init (KgxSettingsClass *klass)
   pspecs[PROP_EDGE_PRIVILEGE_COLOR] =
     g_param_spec_string ("edge-privilege-color", NULL, NULL,
                          "#d940a6",
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_PRIVILEGE_PRESET] =
+    g_param_spec_int ("edge-privilege-preset", NULL, NULL,
+                      1, 5, 1,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_SETTINGS_ANIMATION] =
+    g_param_spec_boolean ("edge-settings-animation", NULL, NULL,
+                          TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_EDGE_SETTINGS_COLOR] =
+    g_param_spec_string ("edge-settings-color", NULL, NULL,
+                         "",
+                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_SETTINGS_PRESET] =
+    g_param_spec_int ("edge-settings-preset", NULL, NULL,
+                      1, 5, 1,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_BURST_COUNT_AMBIENT] =
+    g_param_spec_int ("edge-burst-count-ambient", NULL, NULL,
+                      1, 8, 8,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_EDGE_BURST_SPREAD_AMBIENT] =
+    g_param_spec_double ("edge-burst-spread-ambient", NULL, NULL,
+                         0.5, 5.0, 3.1,
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /* ── Global tunables (table-driven) ──────────────────────── */
@@ -1046,6 +1151,24 @@ kgx_settings_init (KgxSettings *self)
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "edge-privilege-color",
                    self, "edge-privilege-color",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-privilege-preset",
+                   self, "edge-privilege-preset",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-settings-animation",
+                   self, "edge-settings-animation",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-settings-color",
+                   self, "edge-settings-color",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-settings-preset",
+                   self, "edge-settings-preset",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-burst-count-ambient",
+                   self, "edge-burst-count-ambient",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-burst-spread-ambient",
+                   self, "edge-burst-spread-ambient",
                    G_SETTINGS_BIND_DEFAULT);
   /* Global tunables */
   for (int f = 0; f < N_TUNE_FIELDS; f++) {

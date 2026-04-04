@@ -307,7 +307,8 @@ settings-page preferencesgroup > box > label {
 }
 
 /* Per-preset label colors */
-.preset-row > label.preset-global    { color: #78a5d4; }
+.preset-row > label.preset-overscroll { color: #78a5d4; }
+.preset-row > label.preset-ambient   { color: #7cb8d9; }
 .preset-row > label.preset-fireworks { color: #e0a050; }
 .preset-row > label.preset-corners   { color: #60c890; }
 .preset-row > label.preset-pulse-out { color: #c080d8; }

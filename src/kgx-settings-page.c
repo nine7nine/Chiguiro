@@ -50,10 +50,14 @@ struct _KgxSettingsPage {
   GtkWidget            *accent_color;
   GtkWidget            *unlimited_scrollback;
   GtkWidget            *scrollback;
-  GtkWidget            *edge_overscroll;
-  GtkWidget            *edge_overscroll_color;
-  GtkWidget            *edge_privilege;
-  GtkWidget            *edge_privilege_color;
+  GtkWidget            *overscroll_switch;
+  GtkWidget            *overscroll_color_btn;
+  GtkWidget            *privilege_switch;
+  GtkWidget            *privilege_color_btn;
+  GtkWidget            *privilege_preset_btn;
+  GtkWidget            *ambient_switch;
+  GtkWidget            *ambient_color_btn;
+  GtkWidget            *ambient_preset_btn;
   GtkWidget            *edge_thickness;
   GtkWidget            *edge_speed;
   GtkWidget            *edge_pulse_depth;
@@ -133,6 +137,17 @@ struct _KgxSettingsPage {
   GtkWidget            *edge_env_release_ping_pong;
   GtkWidget            *edge_release_mode_ping_pong;
   GtkWidget            *edge_shape_ping_pong;
+  GtkWidget            *edge_speed_ambient;
+  GtkWidget            *edge_thickness_ambient;
+  GtkWidget            *edge_tail_length_ambient;
+  GtkWidget            *edge_pulse_depth_ambient;
+  GtkWidget            *edge_pulse_speed_ambient;
+  GtkWidget            *edge_env_attack_ambient;
+  GtkWidget            *edge_env_release_ambient;
+  GtkWidget            *edge_release_mode_ambient;
+  GtkWidget            *edge_shape_ambient;
+  GtkWidget            *edge_burst_count_ambient;
+  GtkWidget            *edge_burst_spread_ambient;
   GtkWidget            *logo_picture;
   GtkWidget            *page_title;
   AdwCarousel          *carousel;
@@ -209,6 +224,8 @@ kgx_settings_page_dispose (GObject *object)
     g_signal_handlers_disconnect_by_data (self->edge_shape_rotate, self);
   if (self->edge_shape_ping_pong)
     g_signal_handlers_disconnect_by_data (self->edge_shape_ping_pong, self);
+  if (self->edge_shape_ambient)
+    g_signal_handlers_disconnect_by_data (self->edge_shape_ambient, self);
 
   /* settings_binds is a template child — disconnect but do NOT free */
   if (self->settings_binds) {
@@ -432,6 +449,30 @@ bool_to_int (GBinding     *binding,
 }
 
 
+/* 1-indexed GSettings preset int  <->  0-indexed GtkDropDown selected */
+static gboolean
+preset_int_to_selected (GBinding     *binding,
+                        const GValue *from,
+                        GValue       *to,
+                        gpointer      user_data)
+{
+  int v = g_value_get_int (from);
+  g_value_set_uint (to, (v > 0) ? (guint) (v - 1) : 0);
+  return TRUE;
+}
+
+
+static gboolean
+selected_to_preset_int (GBinding     *binding,
+                        const GValue *from,
+                        GValue       *to,
+                        gpointer      user_data)
+{
+  g_value_set_int (to, (int) g_value_get_uint (from) + 1);
+  return TRUE;
+}
+
+
 static const char *shape_labels[] = { "\u25A0", "\u25CF", "\u25C6", "\u25B6" };
 
 
@@ -486,6 +527,7 @@ sync_all_shapes (KgxSettingsPage *self)
   sync_shape_label (self, self->edge_shape_pulse_out, "edge-shape-pulse-out");
   sync_shape_label (self, self->edge_shape_rotate, "edge-shape-rotate");
   sync_shape_label (self, self->edge_shape_ping_pong, "edge-shape-ping-pong");
+  sync_shape_label (self, self->edge_shape_ambient, "edge-shape-ambient");
 }
 
 
@@ -524,10 +566,14 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_overscroll);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_overscroll_color);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_privilege);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_privilege_color);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, overscroll_switch);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, overscroll_color_btn);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, privilege_switch);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, privilege_color_btn);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, privilege_preset_btn);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, ambient_switch);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, ambient_color_btn);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, ambient_preset_btn);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth);
@@ -659,6 +705,17 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_ping_pong);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_ping_pong);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_count_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_spread_ambient);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
@@ -1051,6 +1108,17 @@ kgx_settings_page_init (KgxSettingsPage *self)
     }
   }
 
+  /* Indicator preset dropdowns (no "none" — presets are 1-indexed). */
+  {
+    const char *indicator_presets[] = { "fireworks", "corners", "pulse-out", "rotate", "ping-pong", NULL };
+    GtkWidget *btns[] = { self->privilege_preset_btn, self->ambient_preset_btn };
+    for (int i = 0; i < (int) G_N_ELEMENTS (btns); i++) {
+      GtkStringList *model = gtk_string_list_new (indicator_presets);
+      gtk_drop_down_set_model (GTK_DROP_DOWN (btns[i]), G_LIST_MODEL (model));
+      g_object_unref (model);
+    }
+  }
+
   /* Capybara sprite animation — credit: https://rainloaf.itch.io/capybara-sprite-sheet */
   self->sprite = kgx_sprite_new (KGX_APPLICATION_PATH "icons/capybara.png",
                                  24, 28, 10, 96, 10.0);
@@ -1124,21 +1192,38 @@ kgx_settings_page_init (KgxSettingsPage *self)
                         self->scrollback, "value",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 
-  /* Edge effects */
+  /* Indicator rows (in App Glass list) */
   g_binding_group_bind (self->settings_binds, "edge-overscroll",
-                        self->edge_overscroll, "active",
+                        self->overscroll_switch, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   g_binding_group_bind_full (self->settings_binds, "edge-overscroll-color",
-                             self->edge_overscroll_color, "rgba",
+                             self->overscroll_color_btn, "rgba",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              string_to_rgba, rgba_to_string, NULL, NULL);
   g_binding_group_bind (self->settings_binds, "edge-privilege",
-                        self->edge_privilege, "active",
+                        self->privilege_switch, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   g_binding_group_bind_full (self->settings_binds, "edge-privilege-color",
-                             self->edge_privilege_color, "rgba",
+                             self->privilege_color_btn, "rgba",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              string_to_rgba, rgba_to_string, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-privilege-preset",
+                             self->privilege_preset_btn, "selected",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             preset_int_to_selected, selected_to_preset_int,
+                             NULL, NULL);
+  g_binding_group_bind (self->settings_binds, "edge-settings-animation",
+                        self->ambient_switch, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-settings-color",
+                             self->ambient_color_btn, "rgba",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             string_to_rgba, rgba_to_string, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-settings-preset",
+                             self->ambient_preset_btn, "selected",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             preset_int_to_selected, selected_to_preset_int,
+                             NULL, NULL);
   g_binding_group_bind (self->settings_binds, "edge-thickness",
                         self->edge_thickness, "value",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
@@ -1166,6 +1251,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->edge_speed_ping_pong, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed-ambient",
+                             self->edge_speed_ambient, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
   /* Per-preset thickness (int, direct bind) */
   g_binding_group_bind (self->settings_binds, "edge-thickness-fireworks",
                         self->edge_thickness_fireworks, "value",
@@ -1181,6 +1270,9 @@ kgx_settings_page_init (KgxSettingsPage *self)
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   g_binding_group_bind (self->settings_binds, "edge-thickness-ping-pong",
                         self->edge_thickness_ping_pong, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "edge-thickness-ambient",
+                        self->edge_thickness_ambient, "value",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   /* Per-preset tail-length (double, percent transform) */
   g_binding_group_bind_full (self->settings_binds, "edge-tail-length-fireworks",
@@ -1201,6 +1293,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              value_to_percent, percent_to_value, NULL, NULL);
   g_binding_group_bind_full (self->settings_binds, "edge-tail-length-ping-pong",
                              self->edge_tail_length_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-ambient",
+                             self->edge_tail_length_ambient, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
   /* Per-preset pulse-depth (double, percent transform) */
@@ -1224,6 +1320,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->edge_pulse_depth_ping_pong, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-ambient",
+                             self->edge_pulse_depth_ambient, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
   /* Per-preset pulse-speed (double, percent transform) */
   g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-fireworks",
                              self->edge_pulse_speed_fireworks, "value",
@@ -1243,6 +1343,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              value_to_percent, percent_to_value, NULL, NULL);
   g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-ping-pong",
                              self->edge_pulse_speed_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-ambient",
+                             self->edge_pulse_speed_ambient, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
   g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth",
@@ -1290,6 +1394,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->edge_env_attack_ping_pong, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-ambient",
+                             self->edge_env_attack_ambient, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
 
   /* Envelope release (percent transform) */
   g_binding_group_bind_full (self->settings_binds, "edge-env-release",
@@ -1314,6 +1422,10 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              value_to_percent, percent_to_value, NULL, NULL);
   g_binding_group_bind_full (self->settings_binds, "edge-env-release-ping-pong",
                              self->edge_env_release_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release-ambient",
+                             self->edge_env_release_ambient, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
 
@@ -1342,6 +1454,18 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->edge_release_mode_ping_pong, "active",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              int_to_bool, bool_to_int, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-ambient",
+                             self->edge_release_mode_ambient, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+
+  g_binding_group_bind (self->settings_binds, "edge-burst-count-ambient",
+                        self->edge_burst_count_ambient, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-burst-spread-ambient",
+                             self->edge_burst_spread_ambient, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
 
   /* Shape buttons (cycle on click, no binding — manual sync) */
   setup_shape_button (self, self->edge_shape, "edge-shape");
@@ -1350,4 +1474,5 @@ kgx_settings_page_init (KgxSettingsPage *self)
   setup_shape_button (self, self->edge_shape_pulse_out, "edge-shape-pulse-out");
   setup_shape_button (self, self->edge_shape_rotate, "edge-shape-rotate");
   setup_shape_button (self, self->edge_shape_ping_pong, "edge-shape-ping-pong");
+  setup_shape_button (self, self->edge_shape_ambient, "edge-shape-ambient");
 }

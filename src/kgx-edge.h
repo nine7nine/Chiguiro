@@ -31,7 +31,7 @@ typedef enum {
   KGX_PARTICLE_PING_PONG,
 } KgxParticlePreset;
 
-#define N_PRESETS 5   /* FIREWORKS .. PING_PONG */
+#define N_PRESETS 6   /* FIREWORKS .. PING_PONG + AMBIENT */
 
 typedef enum {
   KGX_RELEASE_UNIFORM = 0,  /* alpha fades, tail stays full length  */

@@ -234,6 +234,36 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+            <binding name="privilege-preset">
+              <lookup name="edge-privilege-preset">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="ambient-enabled">
+              <lookup name="edge-settings-animation">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="ambient-color">
+              <lookup name="edge-settings-color">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="ambient-preset">
+              <lookup name="edge-settings-preset">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="ambient-burst-count">
+              <lookup name="edge-burst-count-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="ambient-burst-spread">
+              <lookup name="edge-burst-spread-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
             <binding name="thickness">
               <lookup name="edge-thickness">
                 <lookup name="settings">KgxWindow</lookup>
