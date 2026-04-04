@@ -306,6 +306,33 @@ settings-page preferencesgroup > box > label {
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* Per-preset label colors */
+.preset-row > label.preset-global    { color: #78a5d4; }
+.preset-row > label.preset-fireworks { color: #e0a050; }
+.preset-row > label.preset-corners   { color: #60c890; }
+.preset-row > label.preset-pulse-out { color: #c080d8; }
+.preset-row > label.preset-rotate    { color: #58b8d8; }
+.preset-row > label.preset-ping-pong { color: #d07080; }
+
+/* Release mode toggle — text-only, no button chrome */
+.preset-row button.release-toggle,
+.preset-row button.release-toggle.flat,
+.preset-row button.release-toggle:hover,
+.preset-row button.release-toggle:active,
+.preset-row button.release-toggle:checked {
+  all: unset;
+  padding: 2px 6px;
+  background: none;
+  background-image: none;
+  box-shadow: none;
+  border: none;
+  color: var(--accent-color, @accent_color);
+}
+
+.preset-row button.release-toggle:checked {
+  color: #50d070;
+}
+
 .tune-header {
   color: var(--accent-color, @accent_color);
   font-size: small;
