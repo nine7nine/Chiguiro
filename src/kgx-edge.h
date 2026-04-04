@@ -31,6 +31,46 @@ typedef enum {
   KGX_PARTICLE_PING_PONG,
 } KgxParticlePreset;
 
+#define N_PRESETS 5   /* FIREWORKS .. PING_PONG */
+
+typedef enum {
+  KGX_RELEASE_UNIFORM = 0,  /* alpha fades, tail stays full length  */
+  KGX_RELEASE_RETRACT,      /* tail shrinks back toward head        */
+} KgxReleaseMode;
+
+typedef enum {
+  KGX_PARTICLE_SHAPE_SQUARE = 0,
+  KGX_PARTICLE_SHAPE_CIRCLE,
+  KGX_PARTICLE_SHAPE_DIAMOND,
+  KGX_PARTICLE_SHAPE_TRIANGLE,
+} KgxParticleShape;
+
+/* Tunable field indices — keep in sync with KgxParticleTunables layout */
+enum {
+  TUNE_SPEED = 0,
+  TUNE_THICKNESS,
+  TUNE_TAIL_LENGTH,
+  TUNE_PULSE_DEPTH,
+  TUNE_PULSE_SPEED,
+  TUNE_ENV_ATTACK,
+  TUNE_ENV_RELEASE,
+  TUNE_RELEASE_MODE,
+  TUNE_SHAPE,
+  N_TUNE_FIELDS
+};
+
+typedef struct {
+  double  speed;         /* animation speed multiplier   (0.1 .. 3.0) */
+  int     thickness;     /* block size in pixels          (2 .. 20)   */
+  double  tail_length;   /* tail length multiplier        (0.1 .. 3.0) */
+  double  pulse_depth;   /* shimmer intensity             (0.0 .. 1.0) */
+  double  pulse_speed;   /* shimmer wave speed            (0.1 .. 5.0) */
+  double  env_attack;    /* fraction of lifetime for grow-in  (0.0 .. 0.5) */
+  double  env_release;   /* fraction of lifetime for fade-out (0.0 .. 0.5) */
+  int     release_mode;  /* KgxReleaseMode                             */
+  int     shape;         /* KgxParticleShape                           */
+} KgxParticleTunables;
+
 #define KGX_TYPE_EDGE (kgx_edge_get_type ())
 G_DECLARE_FINAL_TYPE (KgxEdge, kgx_edge, KGX, EDGE, GtkWidget)
 

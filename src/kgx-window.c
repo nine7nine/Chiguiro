@@ -788,9 +788,9 @@ update_process_glass (KgxWindow *self)
     KgxParticlePreset preset = KGX_PARTICLE_NONE;
     gboolean reverse = FALSE;
     GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
-
     if (match) {
-      kgx_parse_process_config (match, &glass_hex, &preset, &reverse, &particle_color);
+      kgx_parse_process_config (match, &glass_hex, &preset, &reverse,
+                                &particle_color);
     }
 
     /* Determine target glass color. */
@@ -805,9 +805,11 @@ update_process_glass (KgxWindow *self)
     /* Activate or deactivate process particle on the edge widget. */
     if (preset != KGX_PARTICLE_NONE) {
       particle_color.alpha = 1.0f;
-      kgx_edge_set_process_particle (priv->edge, preset, &particle_color, reverse);
+      kgx_edge_set_process_particle (priv->edge, preset, &particle_color,
+                                     reverse);
     } else {
-      kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL, FALSE);
+      kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
+                                     FALSE);
     }
   }
 

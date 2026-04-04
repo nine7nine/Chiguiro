@@ -253,6 +253,69 @@ settings-page preferencesgroup > box > label {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* ── Preset tunables table ─────────────────────────────── */
+
+.preset-row spinbutton {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.preset-row spinbutton:focus-within {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.preset-row spinbutton button {
+  all: unset;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  opacity: 0;
+  -gtk-icon-size: 0px;
+}
+
+.preset-row spinbutton text {
+  min-height: 0;
+  padding: 2px 6px;
+  caret-color: currentColor;
+  color: inherit;
+}
+
+.preset-row button.flat,
+.preset-row togglebutton.flat {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  min-height: 0;
+  min-width: 0;
+  padding: 2px 6px;
+  color: var(--accent-color, @accent_color);
+}
+
+.preset-row > label {
+  color: var(--accent-color, @accent_color);
+}
+
+.preset-row > label.dim-label {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tune-header {
+  color: var(--accent-color, @accent_color);
+  font-size: small;
+}
+
+settings-page popover listview row:hover {
+  background-color: color-mix(in srgb, var(--accent-bg-color, @accent_bg_color) 40%, transparent);
+  color: white;
+}
+
 /* ── Font picker ───────────────────────────────────────── */
 
 .font-picker {

@@ -114,7 +114,7 @@
             <!-- ── Page 1: General ── -->
             <child>
               <object class="AdwClamp">
-                <property name="maximum-size">600</property>
+                <property name="maximum-size">900</property>
                 <property name="valign">start</property>
                 <property name="hexpand">True</property>
                 <property name="margin-top">8</property>
@@ -337,7 +337,7 @@
             <!-- ── Page 2: Particles ── -->
             <child>
               <object class="AdwClamp">
-                <property name="maximum-size">600</property>
+                <property name="maximum-size">900</property>
                 <property name="valign">start</property>
                 <property name="hexpand">True</property>
                 <property name="margin-top">8</property>
@@ -348,162 +348,149 @@
                   <object class="GtkBox">
                     <property name="orientation">vertical</property>
                     <property name="spacing">16</property>
+
+                    <!-- Indicators group -->
+                    <child>
+                      <object class="AdwPreferencesGroup">
+                        <property name="title" translatable="yes">Indicators</property>
+                        <child><object class="AdwSwitchRow" id="edge_overscroll"><property name="title" translatable="yes">Overscroll</property></object></child>
                         <child>
-                          <object class="AdwPreferencesGroup">
-                            <property name="title" translatable="yes">Particles</property>
-                            <child>
-                              <object class="AdwSwitchRow" id="edge_overscroll">
-                                <property name="title" translatable="yes">_Overscroll Indicator</property>
-                                <property name="use-underline">True</property>
+                          <object class="AdwActionRow">
+                            <property name="title" translatable="yes">Overscroll Color</property>
+                            <property name="activatable-widget">edge_overscroll_color</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="edge_overscroll_color">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
                               </object>
                             </child>
-                            <child>
-                              <object class="AdwActionRow">
-                                <property name="title" translatable="yes">Overscroll Co_lor</property>
-                                <property name="use-underline">True</property>
-                                <property name="activatable-widget">edge_overscroll_color</property>
-                                <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="edge_overscroll_color"><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
-                                    <property name="valign">center</property>
-                                    <property name="dialog">
-                                      <object class="GtkColorDialog">
-                                        <property name="with-alpha">False</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSwitchRow" id="edge_privilege">
-                                <property name="title" translatable="yes">_Privilege Indicator</property>
-                                <property name="use-underline">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow">
-                                <property name="title" translatable="yes">Privilege C_olor</property>
-                                <property name="use-underline">True</property>
-                                <property name="activatable-widget">edge_privilege_color</property>
-                                <child type="suffix">
-                                  <object class="GtkColorDialogButton" id="edge_privilege_color"><property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
-                                    <property name="valign">center</property>
-                                    <property name="dialog">
-                                      <object class="GtkColorDialog">
-                                        <property name="with-alpha">False</property>
-                                      </object>
-                                    </property>
-                                  </object>
-                                </child>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_thickness">
-                                <property name="title" translatable="yes">_Thickness</property>
-                                <property name="use-underline">True</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">2</property>
-                                    <property name="upper">20</property>
-                                    <property name="step-increment">1</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_speed">
-                                <property name="title" translatable="yes">_Speed</property>
-                                <property name="use-underline">True</property>
-                                <property name="digits">1</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">10</property>
-                                    <property name="upper">300</property>
-                                    <property name="step-increment">10</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_pulse_depth">
-                                <property name="title" translatable="yes">Pulse _Depth</property>
-                                <property name="use-underline">True</property>
-                                <property name="digits">0</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">0</property>
-                                    <property name="upper">100</property>
-                                    <property name="step-increment">5</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_tail_length">
-                                <property name="title" translatable="yes">Tail _Length</property>
-                                <property name="use-underline">True</property>
-                                <property name="digits">0</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">10</property>
-                                    <property name="upper">300</property>
-                                    <property name="step-increment">10</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_pulse_speed">
-                                <property name="title" translatable="yes">_Pulse Speed</property>
-                                <property name="use-underline">True</property>
-                                <property name="digits">1</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">10</property>
-                                    <property name="upper">500</property>
-                                    <property name="step-increment">10</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_burst_count">
-                                <property name="title" translatable="yes">_Burst Count</property>
-                                <property name="use-underline">True</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">1</property>
-                                    <property name="upper">8</property>
-                                    <property name="step-increment">1</property>
-                                  </object>
-                                </property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwSpinRow" id="edge_burst_spread">
-                                <property name="title" translatable="yes">_Burst Spread</property>
-                                <property name="use-underline">True</property>
-                                <property name="digits">0</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">50</property>
-                                    <property name="upper">500</property>
-                                    <property name="step-increment">10</property>
-                                  </object>
-                                </property>
+                          </object>
+                        </child>
+                        <child><object class="AdwSwitchRow" id="edge_privilege"><property name="title" translatable="yes">Privilege</property></object></child>
+                        <child>
+                          <object class="AdwActionRow">
+                            <property name="title" translatable="yes">Privilege Color</property>
+                            <property name="activatable-widget">edge_privilege_color</property>
+                            <child type="suffix">
+                              <object class="GtkColorDialogButton" id="edge_privilege_color">
+                                <property name="valign">center</property>
+                                <property name="dialog"><object class="GtkColorDialog"><property name="with-alpha">False</property></object></property>
                               </object>
                             </child>
                           </object>
                         </child>
                       </object>
-                  </property>
+                    </child>
+
+                    <!-- Tunables grid -->
+                    <child>
+                      <object class="GtkGrid">
+                        <property name="halign">center</property>
+                        <property name="row-spacing">6</property>
+                        <property name="column-spacing">8</property>
+                        <property name="column-homogeneous">False</property>
+                        <style><class name="preset-row"/></style>
+
+                        <!-- Row 0: Headers -->
+                        <child><object class="GtkLabel"><property name="label" translatable="yes">Tunables</property><property name="xalign">0</property><style><class name="title-4"/></style><layout><property name="column">0</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Spd</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">1</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Thk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">2</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Tail</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">3</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">P.Dep</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">4</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">P.Spd</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">5</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Atk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">6</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Rel</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">7</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Rls</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">8</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label"></property><layout><property name="column">9</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Bst</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">10</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Spr</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">11</property><property name="row">0</property></layout></object></child>
+
+                        <!-- Row 1: Global -->
+                        <child><object class="GtkLabel"><property name="label">Global</property><property name="xalign">0</property><layout><property name="column">0</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_speed"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">1</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_thickness"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">2</property><property name="upper">40</property><property name="step-increment">1</property></object></property><layout><property name="column">2</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_tail_length"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">3</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_depth"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">100</property><property name="step-increment">5</property></object></property><layout><property name="column">4</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_speed"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">5</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_attack"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Attack</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">6</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_release"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Release</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">7</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkToggleButton" id="edge_release_mode"><property name="label">R</property><property name="tooltip-text">Tail retraction on release</property><style><class name="flat"/></style><layout><property name="column">8</property><property name="row">1</property></layout></object></child>
+                        <child><object class="GtkButton" id="edge_shape"><property name="label">&#x25A0;</property><property name="tooltip-text">Particle shape</property><style><class name="flat"/></style><layout><property name="column">9</property><property name="row">1</property></layout></object></child>
+
+                        <!-- Row 2: Fireworks -->
+                        <child><object class="GtkLabel"><property name="label">Fireworks</property><property name="xalign">0</property><layout><property name="column">0</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_speed_fireworks"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">1</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_thickness_fireworks"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">2</property><property name="upper">40</property><property name="step-increment">1</property></object></property><layout><property name="column">2</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_tail_length_fireworks"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">3</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_depth_fireworks"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">100</property><property name="step-increment">5</property></object></property><layout><property name="column">4</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_speed_fireworks"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">5</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_attack_fireworks"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Attack</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">6</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_release_fireworks"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Release</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">7</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkToggleButton" id="edge_release_mode_fireworks"><property name="label">R</property><property name="tooltip-text">Tail retraction on release</property><style><class name="flat"/></style><layout><property name="column">8</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkButton" id="edge_shape_fireworks"><property name="label">&#x25A0;</property><property name="tooltip-text">Particle shape</property><style><class name="flat"/></style><layout><property name="column">9</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_burst_count"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Burst Count</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">1</property><property name="upper">8</property><property name="step-increment">1</property></object></property><layout><property name="column">10</property><property name="row">2</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_burst_spread"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Burst Spread</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">50</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">11</property><property name="row">2</property></layout></object></child>
+
+                        <!-- Row 3: Corners -->
+                        <child><object class="GtkLabel"><property name="label">Corners</property><property name="xalign">0</property><layout><property name="column">0</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_speed_corners"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">1</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_thickness_corners"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">2</property><property name="upper">40</property><property name="step-increment">1</property></object></property><layout><property name="column">2</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_tail_length_corners"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">3</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_depth_corners"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">100</property><property name="step-increment">5</property></object></property><layout><property name="column">4</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_speed_corners"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">5</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_attack_corners"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Attack</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">6</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_release_corners"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Release</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">7</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkToggleButton" id="edge_release_mode_corners"><property name="label">R</property><property name="tooltip-text">Tail retraction on release</property><style><class name="flat"/></style><layout><property name="column">8</property><property name="row">3</property></layout></object></child>
+                        <child><object class="GtkButton" id="edge_shape_corners"><property name="label">&#x25A0;</property><property name="tooltip-text">Particle shape</property><style><class name="flat"/></style><layout><property name="column">9</property><property name="row">3</property></layout></object></child>
+
+                        <!-- Row 5: Pulse Out -->
+                        <child><object class="GtkLabel"><property name="label">Pulse Out</property><property name="xalign">0</property><layout><property name="column">0</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_speed_pulse_out"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">1</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_thickness_pulse_out"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">2</property><property name="upper">40</property><property name="step-increment">1</property></object></property><layout><property name="column">2</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_tail_length_pulse_out"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">3</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_depth_pulse_out"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">100</property><property name="step-increment">5</property></object></property><layout><property name="column">4</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_speed_pulse_out"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">5</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_attack_pulse_out"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Attack</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">6</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_release_pulse_out"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Release</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">7</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkToggleButton" id="edge_release_mode_pulse_out"><property name="label">R</property><property name="tooltip-text">Tail retraction on release</property><style><class name="flat"/></style><layout><property name="column">8</property><property name="row">4</property></layout></object></child>
+                        <child><object class="GtkButton" id="edge_shape_pulse_out"><property name="label">&#x25A0;</property><property name="tooltip-text">Particle shape</property><style><class name="flat"/></style><layout><property name="column">9</property><property name="row">4</property></layout></object></child>
+
+                        <!-- Row 6: Rotate -->
+                        <child><object class="GtkLabel"><property name="label">Rotate</property><property name="xalign">0</property><layout><property name="column">0</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_speed_rotate"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">1</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_thickness_rotate"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">2</property><property name="upper">40</property><property name="step-increment">1</property></object></property><layout><property name="column">2</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_tail_length_rotate"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">3</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_depth_rotate"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">100</property><property name="step-increment">5</property></object></property><layout><property name="column">4</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_speed_rotate"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">5</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_attack_rotate"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Attack</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">6</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_release_rotate"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Release</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">7</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkToggleButton" id="edge_release_mode_rotate"><property name="label">R</property><property name="tooltip-text">Tail retraction on release</property><style><class name="flat"/></style><layout><property name="column">8</property><property name="row">5</property></layout></object></child>
+                        <child><object class="GtkButton" id="edge_shape_rotate"><property name="label">&#x25A0;</property><property name="tooltip-text">Particle shape</property><style><class name="flat"/></style><layout><property name="column">9</property><property name="row">5</property></layout></object></child>
+
+                        <!-- Row 7: Ping-Pong -->
+                        <child><object class="GtkLabel"><property name="label">Ping-Pong</property><property name="xalign">0</property><layout><property name="column">0</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_speed_ping_pong"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">1</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_thickness_ping_pong"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">2</property><property name="upper">40</property><property name="step-increment">1</property></object></property><layout><property name="column">2</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_tail_length_ping_pong"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">300</property><property name="step-increment">10</property></object></property><layout><property name="column">3</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_depth_ping_pong"><property name="xalign">1</property><property name="digits">0</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">100</property><property name="step-increment">5</property></object></property><layout><property name="column">4</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_pulse_speed_ping_pong"><property name="xalign">1</property><property name="digits">1</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">10</property><property name="upper">500</property><property name="step-increment">10</property></object></property><layout><property name="column">5</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_attack_ping_pong"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Attack</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">6</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkSpinButton" id="edge_env_release_ping_pong"><property name="xalign">1</property><property name="digits">0</property><property name="tooltip-text">Release</property><property name="adjustment"><object class="GtkAdjustment"><property name="lower">0</property><property name="upper">50</property><property name="step-increment">5</property></object></property><layout><property name="column">7</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkToggleButton" id="edge_release_mode_ping_pong"><property name="label">R</property><property name="tooltip-text">Tail retraction on release</property><style><class name="flat"/></style><layout><property name="column">8</property><property name="row">6</property></layout></object></child>
+                        <child><object class="GtkButton" id="edge_shape_ping_pong"><property name="label">&#x25A0;</property><property name="tooltip-text">Particle shape</property><style><class name="flat"/></style><layout><property name="column">9</property><property name="row">6</property></layout></object></child>
+
+                      </object>
+                    </child>
+
+                  </object>
+                </property>
               </object>
             </child>
 
             <!-- ── Page 3: App Glass ── -->
             <child>
               <object class="AdwClamp">
-                <property name="maximum-size">600</property>
+                <property name="maximum-size">900</property>
                 <property name="valign">start</property>
                 <property name="hexpand">True</property>
                 <property name="margin-top">8</property>
@@ -685,7 +672,7 @@
             <!-- ── Page 4: Shortcuts ── -->
             <child>
               <object class="AdwClamp">
-                <property name="maximum-size">600</property>
+                <property name="maximum-size">900</property>
                 <property name="valign">start</property>
                 <property name="hexpand">True</property>
                 <property name="margin-top">8</property>

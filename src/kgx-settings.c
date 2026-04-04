@@ -21,6 +21,7 @@
 #include <gio/gio.h>
 #include <vte/vte.h>
 
+#include "kgx-edge.h"
 #include "kgx-livery-manager.h"
 #include "kgx-livery.h"
 #include "kgx-marshals.h"
@@ -64,11 +65,8 @@ struct _KgxSettings {
   int                   edge_overscroll_style;
   gboolean              edge_privilege;
   char                 *edge_privilege_color;
-  int                   edge_thickness;
-  double                edge_speed;
-  double                edge_pulse_speed;
-  double                edge_pulse_depth;
-  double                edge_tail_length;
+  KgxParticleTunables   edge_global;
+  KgxParticleTunables   edge_preset[N_PRESETS];
   int                   edge_burst_count;
   double                edge_burst_spread;
   int                   edge_privilege_direction;
@@ -113,17 +111,95 @@ enum {
   PROP_EDGE_OVERSCROLL_STYLE,
   PROP_EDGE_PRIVILEGE,
   PROP_EDGE_PRIVILEGE_COLOR,
-  PROP_EDGE_THICKNESS,
-  PROP_EDGE_SPEED,
-  PROP_EDGE_PULSE_SPEED,
-  PROP_EDGE_PULSE_DEPTH,
-  PROP_EDGE_TAIL_LENGTH,
-  PROP_EDGE_BURST_COUNT,
+  /* Indexed tunables: global (N_TUNE_FIELDS values) */
+  PROP_EDGE_GLOBAL_BASE,
+  /* Per-preset tunables (N_PRESETS * N_TUNE_FIELDS values) */
+  PROP_EDGE_PRESET_BASE = PROP_EDGE_GLOBAL_BASE + N_TUNE_FIELDS,
+  /* Non-tunable edge props that remain explicit */
+  PROP_EDGE_BURST_COUNT = PROP_EDGE_PRESET_BASE + N_PRESETS * N_TUNE_FIELDS,
   PROP_EDGE_BURST_SPREAD,
   PROP_EDGE_PRIVILEGE_DIRECTION,
   LAST_PROP
 };
 static GParamSpec *pspecs[LAST_PROP] = { NULL, };
+
+/* Property name tables — keep in sync with TUNE_* indices and kgx-edge.c */
+static const char * const tune_names[N_TUNE_FIELDS] = {
+  "speed", "thickness", "tail-length", "pulse-depth", "pulse-speed",
+  "env-attack", "env-release", "release-mode", "shape"
+};
+static const char * const preset_suffixes[N_PRESETS] = {
+  "fireworks", "corners", "pulse-out", "rotate", "ping-pong"
+};
+
+/* Tunable field metadata for table-driven property installation */
+static const struct {
+  double dmin, dmax, global_default, preset_default;
+  int    imin, imax, iglobal_default, ipreset_default;
+  gboolean is_int;
+} tune_meta[N_TUNE_FIELDS] = {
+  [TUNE_SPEED]        = { 0.1, 3.0, 1.0, 1.0,  0, 0, 0, 0, FALSE },
+  [TUNE_THICKNESS]    = { 0,   0,   0,   0,    2, 40, 6, 20, TRUE },
+  [TUNE_TAIL_LENGTH]  = { 0.1, 3.0, 1.0, 0.9, 0, 0, 0, 0, FALSE },
+  [TUNE_PULSE_DEPTH]  = { 0.0, 1.0, 0.3, 0.5, 0, 0, 0, 0, FALSE },
+  [TUNE_PULSE_SPEED]  = { 0.1, 5.0, 1.0, 0.8, 0, 0, 0, 0, FALSE },
+  [TUNE_ENV_ATTACK]   = { 0.0, 0.5, 0.2, 0.2, 0, 0, 0, 0, FALSE },
+  [TUNE_ENV_RELEASE]  = { 0.0, 0.5, 0.3, 0.3, 0, 0, 0, 0, FALSE },
+  [TUNE_RELEASE_MODE] = { 0,   0,   0,   0,   0, 1, 0, 0, TRUE },
+  [TUNE_SHAPE]        = { 0,   0,   0,   0,   0, 3, 0, 0, TRUE },
+};
+
+/* ── Tunable field accessors ──────────────────────────────── */
+
+static inline double
+get_tunable_double_field (const KgxParticleTunables *t, int field)
+{
+  switch (field) {
+  case TUNE_SPEED:       return t->speed;
+  case TUNE_TAIL_LENGTH: return t->tail_length;
+  case TUNE_PULSE_DEPTH: return t->pulse_depth;
+  case TUNE_PULSE_SPEED: return t->pulse_speed;
+  case TUNE_ENV_ATTACK:  return t->env_attack;
+  case TUNE_ENV_RELEASE: return t->env_release;
+  default:               return 0.0;
+  }
+}
+
+static inline void
+set_tunable_double_field (KgxParticleTunables *t, int field, double v)
+{
+  switch (field) {
+  case TUNE_SPEED:       t->speed       = v; break;
+  case TUNE_TAIL_LENGTH: t->tail_length = v; break;
+  case TUNE_PULSE_DEPTH: t->pulse_depth = v; break;
+  case TUNE_PULSE_SPEED: t->pulse_speed = v; break;
+  case TUNE_ENV_ATTACK:  t->env_attack  = v; break;
+  case TUNE_ENV_RELEASE: t->env_release = v; break;
+  default: break;
+  }
+}
+
+static inline int
+get_tunable_int_field (const KgxParticleTunables *t, int field)
+{
+  switch (field) {
+  case TUNE_THICKNESS:    return t->thickness;
+  case TUNE_RELEASE_MODE: return t->release_mode;
+  case TUNE_SHAPE:        return t->shape;
+  default:                return 0;
+  }
+}
+
+static inline void
+set_tunable_int_field (KgxParticleTunables *t, int field, int v)
+{
+  switch (field) {
+  case TUNE_THICKNESS:    t->thickness    = v; break;
+  case TUNE_RELEASE_MODE: t->release_mode = v; break;
+  case TUNE_SHAPE:        t->shape        = v; break;
+  default: break;
+  }
+}
 
 
 static void
@@ -170,6 +246,53 @@ kgx_settings_set_property (GObject      *object,
                            GParamSpec   *pspec)
 {
   KgxSettings *self = KGX_SETTINGS (object);
+
+  /* ── Indexed tunable ranges ─────────────────────────────── */
+  if (property_id >= PROP_EDGE_PRESET_BASE &&
+      property_id < PROP_EDGE_PRESET_BASE + N_PRESETS * N_TUNE_FIELDS) {
+    int idx   = property_id - PROP_EDGE_PRESET_BASE;
+    int pi    = idx / N_TUNE_FIELDS;
+    int field = idx % N_TUNE_FIELDS;
+    KgxParticleTunables *t = &self->edge_preset[pi];
+    if (tune_meta[field].is_int) {
+      int nv = CLAMP (g_value_get_int (value),
+                       tune_meta[field].imin, tune_meta[field].imax);
+      if (nv != get_tunable_int_field (t, field)) {
+        set_tunable_int_field (t, field, nv);
+        g_object_notify_by_pspec (object, pspec);
+      }
+    } else {
+      double nv = CLAMP (g_value_get_double (value),
+                          tune_meta[field].dmin, tune_meta[field].dmax);
+      if (!G_APPROX_VALUE (get_tunable_double_field (t, field), nv, DBL_EPSILON)) {
+        set_tunable_double_field (t, field, nv);
+        g_object_notify_by_pspec (object, pspec);
+      }
+    }
+    return;
+  }
+
+  if (property_id >= PROP_EDGE_GLOBAL_BASE &&
+      property_id < PROP_EDGE_GLOBAL_BASE + N_TUNE_FIELDS) {
+    int field = property_id - PROP_EDGE_GLOBAL_BASE;
+    KgxParticleTunables *t = &self->edge_global;
+    if (tune_meta[field].is_int) {
+      int nv = CLAMP (g_value_get_int (value),
+                       tune_meta[field].imin, tune_meta[field].imax);
+      if (nv != get_tunable_int_field (t, field)) {
+        set_tunable_int_field (t, field, nv);
+        g_object_notify_by_pspec (object, pspec);
+      }
+    } else {
+      double nv = CLAMP (g_value_get_double (value),
+                          tune_meta[field].dmin, tune_meta[field].dmax);
+      if (!G_APPROX_VALUE (get_tunable_double_field (t, field), nv, DBL_EPSILON)) {
+        set_tunable_double_field (t, field, nv);
+        g_object_notify_by_pspec (object, pspec);
+      }
+    }
+    return;
+  }
 
   switch (property_id) {
     case PROP_FONT:
@@ -295,51 +418,6 @@ kgx_settings_set_property (GObject      *object,
       self->edge_privilege_color = g_value_dup_string (value);
       g_object_notify_by_pspec (object, pspec);
       break;
-    case PROP_EDGE_THICKNESS:
-      {
-        int new_value = CLAMP (g_value_get_int (value), 2, 20);
-        if (new_value != self->edge_thickness) {
-          self->edge_thickness = new_value;
-          g_object_notify_by_pspec (object, pspec);
-        }
-      }
-      break;
-    case PROP_EDGE_SPEED:
-      {
-        double new_value = CLAMP (g_value_get_double (value), 0.1, 3.0);
-        if (!G_APPROX_VALUE (self->edge_speed, new_value, DBL_EPSILON)) {
-          self->edge_speed = new_value;
-          g_object_notify_by_pspec (object, pspec);
-        }
-      }
-      break;
-    case PROP_EDGE_PULSE_SPEED:
-      {
-        double new_value = CLAMP (g_value_get_double (value), 0.1, 5.0);
-        if (!G_APPROX_VALUE (self->edge_pulse_speed, new_value, DBL_EPSILON)) {
-          self->edge_pulse_speed = new_value;
-          g_object_notify_by_pspec (object, pspec);
-        }
-      }
-      break;
-    case PROP_EDGE_PULSE_DEPTH:
-      {
-        double new_value = CLAMP (g_value_get_double (value), 0.0, 1.0);
-        if (!G_APPROX_VALUE (self->edge_pulse_depth, new_value, DBL_EPSILON)) {
-          self->edge_pulse_depth = new_value;
-          g_object_notify_by_pspec (object, pspec);
-        }
-      }
-      break;
-    case PROP_EDGE_TAIL_LENGTH:
-      {
-        double new_value = CLAMP (g_value_get_double (value), 0.1, 3.0);
-        if (!G_APPROX_VALUE (self->edge_tail_length, new_value, DBL_EPSILON)) {
-          self->edge_tail_length = new_value;
-          g_object_notify_by_pspec (object, pspec);
-        }
-      }
-      break;
     case PROP_EDGE_BURST_COUNT:
       {
         int new_value = CLAMP (g_value_get_int (value), 1, 8);
@@ -382,6 +460,31 @@ kgx_settings_get_property (GObject    *object,
                            GParamSpec *pspec)
 {
   KgxSettings *self = KGX_SETTINGS (object);
+
+  /* ── Indexed tunable ranges ─────────────────────────────── */
+  if (property_id >= PROP_EDGE_PRESET_BASE &&
+      property_id < PROP_EDGE_PRESET_BASE + N_PRESETS * N_TUNE_FIELDS) {
+    int idx   = property_id - PROP_EDGE_PRESET_BASE;
+    int pi    = idx / N_TUNE_FIELDS;
+    int field = idx % N_TUNE_FIELDS;
+    const KgxParticleTunables *t = &self->edge_preset[pi];
+    if (tune_meta[field].is_int)
+      g_value_set_int (value, get_tunable_int_field (t, field));
+    else
+      g_value_set_double (value, get_tunable_double_field (t, field));
+    return;
+  }
+
+  if (property_id >= PROP_EDGE_GLOBAL_BASE &&
+      property_id < PROP_EDGE_GLOBAL_BASE + N_TUNE_FIELDS) {
+    int field = property_id - PROP_EDGE_GLOBAL_BASE;
+    const KgxParticleTunables *t = &self->edge_global;
+    if (tune_meta[field].is_int)
+      g_value_set_int (value, get_tunable_int_field (t, field));
+    else
+      g_value_set_double (value, get_tunable_double_field (t, field));
+    return;
+  }
 
   switch (property_id) {
     case PROP_FONT:
@@ -458,21 +561,6 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_EDGE_PRIVILEGE_COLOR:
       g_value_set_string (value, self->edge_privilege_color ? self->edge_privilege_color : "#d940a6");
-      break;
-    case PROP_EDGE_THICKNESS:
-      g_value_set_int (value, self->edge_thickness);
-      break;
-    case PROP_EDGE_SPEED:
-      g_value_set_double (value, self->edge_speed);
-      break;
-    case PROP_EDGE_PULSE_SPEED:
-      g_value_set_double (value, self->edge_pulse_speed);
-      break;
-    case PROP_EDGE_PULSE_DEPTH:
-      g_value_set_double (value, self->edge_pulse_depth);
-      break;
-    case PROP_EDGE_TAIL_LENGTH:
-      g_value_set_double (value, self->edge_tail_length);
       break;
     case PROP_EDGE_BURST_COUNT:
       g_value_set_int (value, self->edge_burst_count);
@@ -661,30 +749,41 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                          "#d940a6",
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_EDGE_THICKNESS] =
-    g_param_spec_int ("edge-thickness", NULL, NULL,
-                      2, 20, 6,
-                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+  /* ── Global tunables (table-driven) ──────────────────────── */
+  for (int f = 0; f < N_TUNE_FIELDS; f++) {
+    int id = PROP_EDGE_GLOBAL_BASE + f;
+    char *name = g_strdup_printf ("edge-%s", tune_names[f]);
+    if (tune_meta[f].is_int)
+      pspecs[id] = g_param_spec_int (name, NULL, NULL,
+                                      tune_meta[f].imin, tune_meta[f].imax,
+                                      tune_meta[f].iglobal_default,
+                                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+    else
+      pspecs[id] = g_param_spec_double (name, NULL, NULL,
+                                         tune_meta[f].dmin, tune_meta[f].dmax,
+                                         tune_meta[f].global_default,
+                                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+    g_free (name);
+  }
 
-  pspecs[PROP_EDGE_SPEED] =
-    g_param_spec_double ("edge-speed", NULL, NULL,
-                         0.1, 3.0, 1.0,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
-  pspecs[PROP_EDGE_PULSE_SPEED] =
-    g_param_spec_double ("edge-pulse-speed", NULL, NULL,
-                         0.1, 5.0, 1.0,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
-  pspecs[PROP_EDGE_PULSE_DEPTH] =
-    g_param_spec_double ("edge-pulse-depth", NULL, NULL,
-                         0.0, 1.0, 0.3,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
-  pspecs[PROP_EDGE_TAIL_LENGTH] =
-    g_param_spec_double ("edge-tail-length", NULL, NULL,
-                         0.1, 3.0, 1.0,
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+  /* ── Per-preset tunables (table-driven) ────────────────── */
+  for (int p = 0; p < N_PRESETS; p++) {
+    for (int f = 0; f < N_TUNE_FIELDS; f++) {
+      int id = PROP_EDGE_PRESET_BASE + p * N_TUNE_FIELDS + f;
+      char *name = g_strdup_printf ("edge-%s-%s", tune_names[f], preset_suffixes[p]);
+      if (tune_meta[f].is_int)
+        pspecs[id] = g_param_spec_int (name, NULL, NULL,
+                                        tune_meta[f].imin, tune_meta[f].imax,
+                                        tune_meta[f].ipreset_default,
+                                        G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+      else
+        pspecs[id] = g_param_spec_double (name, NULL, NULL,
+                                           tune_meta[f].dmin, tune_meta[f].dmax,
+                                           tune_meta[f].preset_default,
+                                           G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+      g_free (name);
+    }
+  }
 
   pspecs[PROP_EDGE_BURST_COUNT] =
     g_param_spec_int ("edge-burst-count", NULL, NULL,
@@ -948,21 +1047,20 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "edge-privilege-color",
                    self, "edge-privilege-color",
                    G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-thickness",
-                   self, "edge-thickness",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-speed",
-                   self, "edge-speed",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-pulse-speed",
-                   self, "edge-pulse-speed",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-pulse-depth",
-                   self, "edge-pulse-depth",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-tail-length",
-                   self, "edge-tail-length",
-                   G_SETTINGS_BIND_DEFAULT);
+  /* Global tunables */
+  for (int f = 0; f < N_TUNE_FIELDS; f++) {
+    char *name = g_strdup_printf ("edge-%s", tune_names[f]);
+    g_settings_bind (self->settings, name, self, name, G_SETTINGS_BIND_DEFAULT);
+    g_free (name);
+  }
+  /* Per-preset tunables */
+  for (int p = 0; p < N_PRESETS; p++) {
+    for (int f = 0; f < N_TUNE_FIELDS; f++) {
+      char *name = g_strdup_printf ("edge-%s-%s", tune_names[f], preset_suffixes[p]);
+      g_settings_bind (self->settings, name, self, name, G_SETTINGS_BIND_DEFAULT);
+      g_free (name);
+    }
+  }
   g_settings_bind (self->settings, "edge-burst-count",
                    self, "edge-burst-count",
                    G_SETTINGS_BIND_DEFAULT);

@@ -83,6 +83,56 @@ struct _KgxSettingsPage {
   GtkWidget            *app_glass_pcolor_4, *app_glass_pcolor_5, *app_glass_pcolor_6, *app_glass_pcolor_7;
   GtkWidget            *app_glass_pcolor_8, *app_glass_pcolor_9, *app_glass_pcolor_10, *app_glass_pcolor_11;
   GtkWidget            *app_glass_pcolor_12, *app_glass_pcolor_13, *app_glass_pcolor_14;
+  GtkWidget            *edge_speed_fireworks;
+  GtkWidget            *edge_speed_corners;
+  GtkWidget            *edge_speed_pulse_out;
+  GtkWidget            *edge_speed_rotate;
+  GtkWidget            *edge_speed_ping_pong;
+  GtkWidget            *edge_thickness_fireworks;
+  GtkWidget            *edge_tail_length_fireworks;
+  GtkWidget            *edge_pulse_depth_fireworks;
+  GtkWidget            *edge_pulse_speed_fireworks;
+  GtkWidget            *edge_thickness_corners;
+  GtkWidget            *edge_tail_length_corners;
+  GtkWidget            *edge_pulse_depth_corners;
+  GtkWidget            *edge_pulse_speed_corners;
+  GtkWidget            *edge_thickness_pulse_out;
+  GtkWidget            *edge_tail_length_pulse_out;
+  GtkWidget            *edge_pulse_depth_pulse_out;
+  GtkWidget            *edge_pulse_speed_pulse_out;
+  GtkWidget            *edge_thickness_rotate;
+  GtkWidget            *edge_tail_length_rotate;
+  GtkWidget            *edge_pulse_depth_rotate;
+  GtkWidget            *edge_pulse_speed_rotate;
+  GtkWidget            *edge_thickness_ping_pong;
+  GtkWidget            *edge_tail_length_ping_pong;
+  GtkWidget            *edge_pulse_depth_ping_pong;
+  GtkWidget            *edge_pulse_speed_ping_pong;
+  /* Envelope + shape */
+  GtkWidget            *edge_env_attack;
+  GtkWidget            *edge_env_release;
+  GtkWidget            *edge_release_mode;
+  GtkWidget            *edge_shape;
+  GtkWidget            *edge_env_attack_fireworks;
+  GtkWidget            *edge_env_release_fireworks;
+  GtkWidget            *edge_release_mode_fireworks;
+  GtkWidget            *edge_shape_fireworks;
+  GtkWidget            *edge_env_attack_corners;
+  GtkWidget            *edge_env_release_corners;
+  GtkWidget            *edge_release_mode_corners;
+  GtkWidget            *edge_shape_corners;
+  GtkWidget            *edge_env_attack_pulse_out;
+  GtkWidget            *edge_env_release_pulse_out;
+  GtkWidget            *edge_release_mode_pulse_out;
+  GtkWidget            *edge_shape_pulse_out;
+  GtkWidget            *edge_env_attack_rotate;
+  GtkWidget            *edge_env_release_rotate;
+  GtkWidget            *edge_release_mode_rotate;
+  GtkWidget            *edge_shape_rotate;
+  GtkWidget            *edge_env_attack_ping_pong;
+  GtkWidget            *edge_env_release_ping_pong;
+  GtkWidget            *edge_release_mode_ping_pong;
+  GtkWidget            *edge_shape_ping_pong;
   GtkWidget            *logo_picture;
   GtkWidget            *page_title;
   AdwCarousel          *carousel;
@@ -96,6 +146,7 @@ G_DEFINE_TYPE (KgxSettingsPage, kgx_settings_page, ADW_TYPE_BIN)
 
 #define APP_GLASS_SLOTS 15
 static void app_glass_load (KgxSettingsPage *self);
+static void sync_all_shapes (KgxSettingsPage *self);
 static inline GtkWidget **app_glass_entries (KgxSettingsPage *self);
 static inline GtkWidget **app_glass_colors (KgxSettingsPage *self);
 static inline GtkWidget **app_glass_presets (KgxSettingsPage *self);
@@ -145,6 +196,20 @@ kgx_settings_page_dispose (GObject *object)
     }
   }
 
+  /* Disconnect shape button click handlers */
+  if (self->edge_shape)
+    g_signal_handlers_disconnect_by_data (self->edge_shape, self);
+  if (self->edge_shape_fireworks)
+    g_signal_handlers_disconnect_by_data (self->edge_shape_fireworks, self);
+  if (self->edge_shape_corners)
+    g_signal_handlers_disconnect_by_data (self->edge_shape_corners, self);
+  if (self->edge_shape_pulse_out)
+    g_signal_handlers_disconnect_by_data (self->edge_shape_pulse_out, self);
+  if (self->edge_shape_rotate)
+    g_signal_handlers_disconnect_by_data (self->edge_shape_rotate, self);
+  if (self->edge_shape_ping_pong)
+    g_signal_handlers_disconnect_by_data (self->edge_shape_ping_pong, self);
+
   /* settings_binds is a template child — disconnect but do NOT free */
   if (self->settings_binds) {
     g_binding_group_set_source (self->settings_binds, NULL);
@@ -169,6 +234,7 @@ kgx_settings_page_set_property (GObject      *object,
       if (g_set_object (&self->settings, g_value_get_object (value))) {
         g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_SETTINGS]);
         app_glass_load (self);
+        sync_all_shapes (self);
       }
       break;
     default:
@@ -344,6 +410,83 @@ opacity_percent_to_value (GBinding     *binding,
 }
 
 
+static gboolean
+int_to_bool (GBinding     *binding,
+             const GValue *from,
+             GValue       *to,
+             gpointer      user_data)
+{
+  g_value_set_boolean (to, g_value_get_int (from) != 0);
+  return TRUE;
+}
+
+
+static gboolean
+bool_to_int (GBinding     *binding,
+             const GValue *from,
+             GValue       *to,
+             gpointer      user_data)
+{
+  g_value_set_int (to, g_value_get_boolean (from) ? 1 : 0);
+  return TRUE;
+}
+
+
+static const char *shape_labels[] = { "\u25A0", "\u25CF", "\u25C6", "\u25B6" };
+
+
+static void
+shape_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *prop_name = g_object_get_data (G_OBJECT (button), "settings-prop");
+  if (!prop_name || !self->settings)
+    return;
+
+  int current = 0;
+  g_object_get (self->settings, prop_name, &current, NULL);
+  int next = (current + 1) % 4;
+  g_object_set (self->settings, prop_name, next, NULL);
+  gtk_button_set_label (button, shape_labels[next]);
+}
+
+
+static void
+setup_shape_button (KgxSettingsPage *self,
+                    GtkWidget       *button,
+                    const char      *settings_prop)
+{
+  g_object_set_data_full (G_OBJECT (button), "settings-prop",
+                          g_strdup (settings_prop), g_free);
+  g_signal_connect (button, "clicked",
+                    G_CALLBACK (shape_clicked_cb), self);
+}
+
+
+static void
+sync_shape_label (KgxSettingsPage *self,
+                  GtkWidget       *button,
+                  const char      *settings_prop)
+{
+  if (!self->settings)
+    return;
+  int current = 0;
+  g_object_get (self->settings, settings_prop, &current, NULL);
+  current = CLAMP (current, 0, 3);
+  gtk_button_set_label (GTK_BUTTON (button), shape_labels[current]);
+}
+
+
+static void
+sync_all_shapes (KgxSettingsPage *self)
+{
+  sync_shape_label (self, self->edge_shape, "edge-shape");
+  sync_shape_label (self, self->edge_shape_fireworks, "edge-shape-fireworks");
+  sync_shape_label (self, self->edge_shape_corners, "edge-shape-corners");
+  sync_shape_label (self, self->edge_shape_pulse_out, "edge-shape-pulse-out");
+  sync_shape_label (self, self->edge_shape_rotate, "edge-shape-rotate");
+  sync_shape_label (self, self->edge_shape_ping_pong, "edge-shape-ping-pong");
+}
 
 
 
@@ -467,6 +610,55 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_12);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_13);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_14);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_fireworks);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_corners);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_pulse_out);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_rotate);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_ping_pong);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_ping_pong);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
@@ -720,7 +912,6 @@ app_glass_load (KgxSettingsPage *self)
       KgxParticlePreset preset = KGX_PARTICLE_NONE;
       gboolean reverse = FALSE;
       GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
-
       gtk_editable_set_text (GTK_EDITABLE (entries[i]), (const char *) key);
       kgx_parse_process_config ((const char *) val,
                                  &glass_hex, &preset, &reverse, &particle_color);
@@ -955,6 +1146,105 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->edge_speed, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed-fireworks",
+                             self->edge_speed_fireworks, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed-corners",
+                             self->edge_speed_corners, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed-pulse-out",
+                             self->edge_speed_pulse_out, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed-rotate",
+                             self->edge_speed_rotate, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-speed-ping-pong",
+                             self->edge_speed_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  /* Per-preset thickness (int, direct bind) */
+  g_binding_group_bind (self->settings_binds, "edge-thickness-fireworks",
+                        self->edge_thickness_fireworks, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "edge-thickness-corners",
+                        self->edge_thickness_corners, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "edge-thickness-pulse-out",
+                        self->edge_thickness_pulse_out, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "edge-thickness-rotate",
+                        self->edge_thickness_rotate, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "edge-thickness-ping-pong",
+                        self->edge_thickness_ping_pong, "value",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  /* Per-preset tail-length (double, percent transform) */
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-fireworks",
+                             self->edge_tail_length_fireworks, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-corners",
+                             self->edge_tail_length_corners, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-pulse-out",
+                             self->edge_tail_length_pulse_out, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-rotate",
+                             self->edge_tail_length_rotate, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-ping-pong",
+                             self->edge_tail_length_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  /* Per-preset pulse-depth (double, percent transform) */
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-fireworks",
+                             self->edge_pulse_depth_fireworks, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-corners",
+                             self->edge_pulse_depth_corners, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-pulse-out",
+                             self->edge_pulse_depth_pulse_out, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-rotate",
+                             self->edge_pulse_depth_rotate, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-ping-pong",
+                             self->edge_pulse_depth_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  /* Per-preset pulse-speed (double, percent transform) */
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-fireworks",
+                             self->edge_pulse_speed_fireworks, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-corners",
+                             self->edge_pulse_speed_corners, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-pulse-out",
+                             self->edge_pulse_speed_pulse_out, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-rotate",
+                             self->edge_pulse_speed_rotate, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-ping-pong",
+                             self->edge_pulse_speed_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
   g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth",
                              self->edge_pulse_depth, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
@@ -974,4 +1264,90 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->edge_burst_spread, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent, percent_to_value, NULL, NULL);
+
+  /* Envelope attack (percent transform) */
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack",
+                             self->edge_env_attack, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-fireworks",
+                             self->edge_env_attack_fireworks, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-corners",
+                             self->edge_env_attack_corners, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-pulse-out",
+                             self->edge_env_attack_pulse_out, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-rotate",
+                             self->edge_env_attack_rotate, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-ping-pong",
+                             self->edge_env_attack_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+
+  /* Envelope release (percent transform) */
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release",
+                             self->edge_env_release, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release-fireworks",
+                             self->edge_env_release_fireworks, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release-corners",
+                             self->edge_env_release_corners, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release-pulse-out",
+                             self->edge_env_release_pulse_out, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release-rotate",
+                             self->edge_env_release_rotate, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-env-release-ping-pong",
+                             self->edge_env_release_ping_pong, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent, percent_to_value, NULL, NULL);
+
+  /* Release mode (int <-> toggle bool) */
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode",
+                             self->edge_release_mode, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-fireworks",
+                             self->edge_release_mode_fireworks, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-corners",
+                             self->edge_release_mode_corners, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-pulse-out",
+                             self->edge_release_mode_pulse_out, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-rotate",
+                             self->edge_release_mode_rotate, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-ping-pong",
+                             self->edge_release_mode_ping_pong, "active",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_bool, bool_to_int, NULL, NULL);
+
+  /* Shape buttons (cycle on click, no binding — manual sync) */
+  setup_shape_button (self, self->edge_shape, "edge-shape");
+  setup_shape_button (self, self->edge_shape_fireworks, "edge-shape-fireworks");
+  setup_shape_button (self, self->edge_shape_corners, "edge-shape-corners");
+  setup_shape_button (self, self->edge_shape_pulse_out, "edge-shape-pulse-out");
+  setup_shape_button (self, self->edge_shape_rotate, "edge-shape-rotate");
+  setup_shape_button (self, self->edge_shape_ping_pong, "edge-shape-ping-pong");
 }

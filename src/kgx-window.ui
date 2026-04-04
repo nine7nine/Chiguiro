@@ -269,6 +269,251 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+            <binding name="speed-fireworks">
+              <lookup name="edge-speed-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed-corners">
+              <lookup name="edge-speed-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed-pulse-out">
+              <lookup name="edge-speed-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed-rotate">
+              <lookup name="edge-speed-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed-ping-pong">
+              <lookup name="edge-speed-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-fireworks">
+              <lookup name="edge-thickness-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-fireworks">
+              <lookup name="edge-tail-length-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-fireworks">
+              <lookup name="edge-pulse-depth-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-fireworks">
+              <lookup name="edge-pulse-speed-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-corners">
+              <lookup name="edge-thickness-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-corners">
+              <lookup name="edge-tail-length-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-corners">
+              <lookup name="edge-pulse-depth-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-corners">
+              <lookup name="edge-pulse-speed-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-pulse-out">
+              <lookup name="edge-thickness-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-pulse-out">
+              <lookup name="edge-tail-length-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-pulse-out">
+              <lookup name="edge-pulse-depth-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-pulse-out">
+              <lookup name="edge-pulse-speed-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-rotate">
+              <lookup name="edge-thickness-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-rotate">
+              <lookup name="edge-tail-length-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-rotate">
+              <lookup name="edge-pulse-depth-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-rotate">
+              <lookup name="edge-pulse-speed-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-ping-pong">
+              <lookup name="edge-thickness-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-ping-pong">
+              <lookup name="edge-tail-length-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-ping-pong">
+              <lookup name="edge-pulse-depth-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-ping-pong">
+              <lookup name="edge-pulse-speed-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack">
+              <lookup name="edge-env-attack">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release">
+              <lookup name="edge-env-release">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode">
+              <lookup name="edge-release-mode">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-fireworks">
+              <lookup name="edge-env-attack-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-fireworks">
+              <lookup name="edge-env-release-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-fireworks">
+              <lookup name="edge-release-mode-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-corners">
+              <lookup name="edge-env-attack-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-corners">
+              <lookup name="edge-env-release-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-corners">
+              <lookup name="edge-release-mode-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-pulse-out">
+              <lookup name="edge-env-attack-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-pulse-out">
+              <lookup name="edge-env-release-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-pulse-out">
+              <lookup name="edge-release-mode-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-rotate">
+              <lookup name="edge-env-attack-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-rotate">
+              <lookup name="edge-env-release-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-rotate">
+              <lookup name="edge-release-mode-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-ping-pong">
+              <lookup name="edge-env-attack-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-ping-pong">
+              <lookup name="edge-env-release-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-ping-pong">
+              <lookup name="edge-release-mode-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape">
+              <lookup name="edge-shape">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-fireworks">
+              <lookup name="edge-shape-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-corners">
+              <lookup name="edge-shape-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-pulse-out">
+              <lookup name="edge-shape-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-rotate">
+              <lookup name="edge-shape-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-ping-pong">
+              <lookup name="edge-shape-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
           </object>
         </child>
       </object>
