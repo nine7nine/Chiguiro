@@ -70,23 +70,18 @@ struct _KgxSettingsPage {
   GtkWidget            *app_glass_0, *app_glass_1, *app_glass_2, *app_glass_3;
   GtkWidget            *app_glass_4, *app_glass_5, *app_glass_6, *app_glass_7;
   GtkWidget            *app_glass_8, *app_glass_9, *app_glass_10, *app_glass_11;
-  GtkWidget            *app_glass_12, *app_glass_13, *app_glass_14;
   GtkWidget            *app_glass_color_0, *app_glass_color_1, *app_glass_color_2, *app_glass_color_3;
   GtkWidget            *app_glass_color_4, *app_glass_color_5, *app_glass_color_6, *app_glass_color_7;
   GtkWidget            *app_glass_color_8, *app_glass_color_9, *app_glass_color_10, *app_glass_color_11;
-  GtkWidget            *app_glass_color_12, *app_glass_color_13, *app_glass_color_14;
   GtkWidget            *app_glass_preset_0, *app_glass_preset_1, *app_glass_preset_2, *app_glass_preset_3;
   GtkWidget            *app_glass_preset_4, *app_glass_preset_5, *app_glass_preset_6, *app_glass_preset_7;
   GtkWidget            *app_glass_preset_8, *app_glass_preset_9, *app_glass_preset_10, *app_glass_preset_11;
-  GtkWidget            *app_glass_preset_12, *app_glass_preset_13, *app_glass_preset_14;
   GtkWidget            *app_glass_reverse_0, *app_glass_reverse_1, *app_glass_reverse_2, *app_glass_reverse_3;
   GtkWidget            *app_glass_reverse_4, *app_glass_reverse_5, *app_glass_reverse_6, *app_glass_reverse_7;
   GtkWidget            *app_glass_reverse_8, *app_glass_reverse_9, *app_glass_reverse_10, *app_glass_reverse_11;
-  GtkWidget            *app_glass_reverse_12, *app_glass_reverse_13, *app_glass_reverse_14;
   GtkWidget            *app_glass_pcolor_0, *app_glass_pcolor_1, *app_glass_pcolor_2, *app_glass_pcolor_3;
   GtkWidget            *app_glass_pcolor_4, *app_glass_pcolor_5, *app_glass_pcolor_6, *app_glass_pcolor_7;
   GtkWidget            *app_glass_pcolor_8, *app_glass_pcolor_9, *app_glass_pcolor_10, *app_glass_pcolor_11;
-  GtkWidget            *app_glass_pcolor_12, *app_glass_pcolor_13, *app_glass_pcolor_14;
   GtkWidget            *edge_speed_fireworks;
   GtkWidget            *edge_speed_corners;
   GtkWidget            *edge_speed_pulse_out;
@@ -159,7 +154,7 @@ struct _KgxSettingsPage {
 
 G_DEFINE_TYPE (KgxSettingsPage, kgx_settings_page, ADW_TYPE_BIN)
 
-#define APP_GLASS_SLOTS 15
+#define APP_GLASS_SLOTS 12
 static void app_glass_load (KgxSettingsPage *self);
 static void sync_all_shapes (KgxSettingsPage *self);
 static inline GtkWidget **app_glass_entries (KgxSettingsPage *self);
@@ -601,16 +596,10 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_9);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_10);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_12);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_13);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_8);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_9);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_10);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_12);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_13);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_0);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_1);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_2);
@@ -623,9 +612,6 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_9);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_10);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_12);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_13);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_0);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_1);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_2);
@@ -638,9 +624,6 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_9);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_10);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_12);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_13);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_0);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_1);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_2);
@@ -653,9 +636,6 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_9);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_10);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_12);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_13);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_14);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_fireworks);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_corners);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_pulse_out);
@@ -780,8 +760,6 @@ app_glass_entries (KgxSettingsPage *self)
   arr[6] = self->app_glass_6;   arr[7] = self->app_glass_7;
   arr[8] = self->app_glass_8;   arr[9] = self->app_glass_9;
   arr[10] = self->app_glass_10; arr[11] = self->app_glass_11;
-  arr[12] = self->app_glass_12; arr[13] = self->app_glass_13;
-  arr[14] = self->app_glass_14;
   return arr;
 }
 
@@ -796,8 +774,6 @@ app_glass_colors (KgxSettingsPage *self)
   arr[6] = self->app_glass_color_6;   arr[7] = self->app_glass_color_7;
   arr[8] = self->app_glass_color_8;   arr[9] = self->app_glass_color_9;
   arr[10] = self->app_glass_color_10; arr[11] = self->app_glass_color_11;
-  arr[12] = self->app_glass_color_12; arr[13] = self->app_glass_color_13;
-  arr[14] = self->app_glass_color_14;
   return arr;
 }
 
@@ -812,8 +788,6 @@ app_glass_presets (KgxSettingsPage *self)
   arr[6] = self->app_glass_preset_6;   arr[7] = self->app_glass_preset_7;
   arr[8] = self->app_glass_preset_8;   arr[9] = self->app_glass_preset_9;
   arr[10] = self->app_glass_preset_10; arr[11] = self->app_glass_preset_11;
-  arr[12] = self->app_glass_preset_12; arr[13] = self->app_glass_preset_13;
-  arr[14] = self->app_glass_preset_14;
   return arr;
 }
 
@@ -828,8 +802,6 @@ app_glass_reverses (KgxSettingsPage *self)
   arr[6] = self->app_glass_reverse_6;   arr[7] = self->app_glass_reverse_7;
   arr[8] = self->app_glass_reverse_8;   arr[9] = self->app_glass_reverse_9;
   arr[10] = self->app_glass_reverse_10; arr[11] = self->app_glass_reverse_11;
-  arr[12] = self->app_glass_reverse_12; arr[13] = self->app_glass_reverse_13;
-  arr[14] = self->app_glass_reverse_14;
   return arr;
 }
 
@@ -844,8 +816,6 @@ app_glass_pcolors (KgxSettingsPage *self)
   arr[6] = self->app_glass_pcolor_6;   arr[7] = self->app_glass_pcolor_7;
   arr[8] = self->app_glass_pcolor_8;   arr[9] = self->app_glass_pcolor_9;
   arr[10] = self->app_glass_pcolor_10; arr[11] = self->app_glass_pcolor_11;
-  arr[12] = self->app_glass_pcolor_12; arr[13] = self->app_glass_pcolor_13;
-  arr[14] = self->app_glass_pcolor_14;
   return arr;
 }
 
@@ -864,9 +834,6 @@ static const GdkRGBA glass_default_colors[APP_GLASS_SLOTS] = {
   { 0.11f, 0.11f, 0.13f, 1.0f },  /* slate */
   { 0.12f, 0.13f, 0.11f, 1.0f },  /* moss */
   { 0.13f, 0.12f, 0.14f, 1.0f },  /* plum */
-  { 0.11f, 0.13f, 0.14f, 1.0f },  /* ocean */
-  { 0.14f, 0.13f, 0.11f, 1.0f },  /* amber */
-  { 0.12f, 0.11f, 0.13f, 1.0f },  /* dusk */
 };
 
 
