@@ -43,17 +43,8 @@
                     </property>
                   </object>
                 </child>
-                <child>
-                  <object class="GtkStackPage">
-                    <property name="name">settings</property>
-                    <property name="child">
-                      <object class="KgxSettingsPage" id="settings_page">
-                        <property name="settings" bind-source="KgxWindow" bind-property="settings"
-                          bind-flags="sync-create" />
-                      </object>
-                    </property>
-                  </object>
-                </child>
+                <!-- Settings page created lazily on first use to avoid
+                     icon lookup warnings during initial window show -->
               </object>
             </property>
             <child type="top">
