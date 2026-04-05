@@ -334,6 +334,28 @@ settings-page preferencesgroup > box > label {
   color: #50d070;
 }
 
+/* Per-column colors for cycling button tunables */
+.preset-row button.tune-gap       { color: #50d070; }  /* green */
+.preset-row button.tune-rls       { color: #e0a040; }  /* orange */
+.preset-row button.tune-shape     { color: #60b0e0; }  /* blue */
+.preset-row button.tune-curve     { color: #d070b0; }  /* pink */
+.preset-row button.tune-thk-rls   { color: #d0d050; }  /* yellow */
+
+/* Clickable page navigation dots */
+button.page-dot {
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 6px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.3);
+}
+button.page-dot:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+button.page-dot-active {
+  color: var(--accent-color, @accent_color);
+}
+
 .tune-header {
   color: var(--accent-color, @accent_color);
   font-size: small;

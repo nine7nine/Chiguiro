@@ -90,13 +90,14 @@
                 </style>
                 <attributes>
                   <attribute name="weight" value="bold" />
-                  <attribute name="scale" value="1.15" />
+                  <attribute name="scale" value="1.4" />
                 </attributes>
               </object>
             </child>
             <child>
-              <object class="AdwCarouselIndicatorDots">
-                <property name="carousel">carousel</property>
+              <object class="GtkBox" id="page_dots">
+                <property name="halign">center</property>
+                <property name="spacing">8</property>
               </object>
             </child>
           </object>
@@ -107,7 +108,7 @@
           <object class="AdwCarousel" id="carousel">
             <property name="hexpand">True</property>
             <property name="allow-mouse-drag">True</property>
-            <property name="allow-scroll-wheel">True</property>
+            <property name="allow-scroll-wheel">False</property>
             <property name="allow-long-swipes">True</property>
             <property name="spacing">0</property>
 
@@ -335,7 +336,28 @@
               </object>
             </child>
 
-            <!-- ── Page 2: Particles ── -->
+            <!-- ── Page 2: App Glass ── -->
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">900</property>
+                <property name="valign">start</property>
+                <property name="hexpand">True</property>
+                <property name="margin-top">8</property>
+                <property name="margin-bottom">12</property>
+                <property name="margin-start">24</property>
+                <property name="margin-end">24</property>
+                <property name="child">
+                  <object class="GtkGrid" id="app_glass_grid">
+                    <property name="row-spacing">4</property>
+                    <property name="column-spacing">6</property>
+                    <style><class name="preset-row"/></style>
+                    <!-- Indicator + process rows built programmatically -->
+                  </object>
+                </property>
+              </object>
+            </child>
+
+            <!-- ── Page 3: Particles ── -->
             <child>
               <object class="AdwClamp">
                 <property name="maximum-size">900</property>
@@ -372,44 +394,25 @@
                         <child><object class="GtkLabel"><property name="label" translatable="yes">Tunables</property><property name="xalign">0</property><style><class name="title-4"/></style><layout><property name="column">0</property><property name="row">0</property></layout></object></child>
                         <child><object class="GtkLabel"><property name="label">Spd</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">1</property><property name="row">0</property></layout></object></child>
                         <child><object class="GtkLabel"><property name="label">Thk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">2</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Tail</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">3</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">P.Dep</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">4</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">P.Spd</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">5</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Atk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">6</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Rel</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">7</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Rls</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">8</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label"></property><layout><property name="column">9</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Bst</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">10</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Spr</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">11</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">Crv</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">12</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">T.Atk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">13</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">T.Rel</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">14</property><property name="row">0</property></layout></object></child>
-                        <child><object class="GtkLabel"><property name="label">T.Crv</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">15</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Gap</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">3</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Tail</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">4</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">P.Dep</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">5</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">P.Spd</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">6</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Atk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">7</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Rel</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">8</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Rls</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">9</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label"></property><layout><property name="column">10</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Bst</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">11</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Spr</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">12</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">Crv</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">13</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">T.Atk</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">14</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">T.Rel</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">15</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">T.Rls</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">16</property><property name="row">0</property></layout></object></child>
+                        <child><object class="GtkLabel"><property name="label">T.Crv</property><property name="xalign">1</property><style><class name="tune-header"/></style><layout><property name="column">17</property><property name="row">0</property></layout></object></child>
                         <!-- Preset rows (1-7) built programmatically -->
                       </object>
                     </child>
 
-                  </object>
-                </property>
-              </object>
-            </child>
-
-            <!-- ── Page 3: App Glass ── -->
-            <child>
-              <object class="AdwClamp">
-                <property name="maximum-size">900</property>
-                <property name="valign">start</property>
-                <property name="hexpand">True</property>
-                <property name="margin-top">8</property>
-                <property name="margin-bottom">12</property>
-                <property name="margin-start">24</property>
-                <property name="margin-end">24</property>
-                <property name="child">
-                  <object class="GtkGrid" id="app_glass_grid">
-                    <property name="row-spacing">4</property>
-                    <property name="column-spacing">6</property>
-                    <style><class name="preset-row"/></style>
-                    <!-- Indicator + process rows built programmatically -->
                   </object>
                 </property>
               </object>
