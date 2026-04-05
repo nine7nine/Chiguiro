@@ -884,6 +884,13 @@ update_process_glass (KgxWindow *self)
         match = NULL;
     }
 
+    /* Nothing changed — don't interrupt running particle animations.
+     * The timer and idle callbacks re-enter here frequently; without
+     * this guard each re-entry kills and restarts the particle, which
+     * flips the alternating-mode toggle mid-animation. */
+    if (g_strcmp0 (match, priv->process_glass_override) == 0)
+      return G_SOURCE_REMOVE;
+
     /* Defer particle until glass transition completes — firing both on
      * the same frame causes a visible stall as particle snapshot and
      * glass CSS/VTE updates compete for the frame budget.

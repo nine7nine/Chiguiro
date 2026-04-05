@@ -89,6 +89,7 @@ struct _KgxEdge {
   int               process_speed_override;   /* 0 = use preset  */
   int               process_thk_override;     /* 0 = use preset  */
   gboolean          process_reverse_toggle;   /* for alternating mode */
+  int               process_reverse_mode;    /* 0=fwd, 1=rev, 2=alternate */
   AdwAnimation     *process_anim;
   double            process_progress;   /* -1 = idle, 0..1 = active */
   double            process_last_snapshot_progress; /* stall detection */
@@ -1820,10 +1821,15 @@ process_particle_done_cb (KgxEdge *self)
     return;
   }
 
-  /* Rotate and ping-pong loop continuously while active.
-   * Re-snapshot tunables so live changes take effect on the next cycle. */
+  /* Loop when: preset naturally loops (Rotate/Ping-Pong), OR alternating
+   * mode is active (any preset fires forward then reverse repeatedly). */
   if (self->process_preset == KGX_PARTICLE_ROTATE ||
-      self->process_preset == KGX_PARTICLE_PING_PONG) {
+      self->process_preset == KGX_PARTICLE_PING_PONG ||
+      self->process_reverse_mode == 2) {
+    /* Toggle direction each cycle in alternating mode */
+    if (self->process_reverse_mode == 2)
+      self->process_reverse = !self->process_reverse;
+
     self->process_tune_snap = *resolve_tunables (self, self->process_preset);
     /* Re-apply per-app overrides after re-snapshot */
     if (self->process_shape_override >= 0)
@@ -1889,6 +1895,7 @@ kgx_edge_set_process_particle (KgxEdge          *self,
   self->process_thk_override = thk_override;
 
   /* Resolve reverse mode: 0=forward, 1=reverse, 2=alternating */
+  self->process_reverse_mode = reverse;
   if (reverse == 2) {
     self->process_reverse = self->process_reverse_toggle;
     self->process_reverse_toggle = !self->process_reverse_toggle;
