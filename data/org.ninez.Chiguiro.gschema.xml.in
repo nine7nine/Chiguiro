@@ -62,13 +62,13 @@
       <default>true</default>
     </key>
     <key name="edge-overscroll-color" type="s">
-      <default>''</default>
+      <default>'#613583'</default>
     </key>
     <key name="edge-privilege" type="b">
-      <default>true</default>
+      <default>false</default>
     </key>
     <key name="edge-privilege-color" type="s">
-      <default>'#d940a6'</default>
+      <default>'#9a9996'</default>
     </key>
     <key name="edge-settings-animation" type="b">
       <default>true</default>
@@ -90,31 +90,31 @@
     </key>
     <key name="edge-thickness" type="i">
       <range min="2" max="40"/>
-      <default>20</default>
+      <default>25</default>
     </key>
     <key name="edge-speed" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.3</default>
+      <default>0.7</default>
     </key>
     <key name="edge-speed-fireworks" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.3</default>
+      <default>1.4</default>
     </key>
     <key name="edge-speed-corners" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.3</default>
+      <default>1.1</default>
     </key>
     <key name="edge-speed-pulse-out" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.3</default>
+      <default>1.0</default>
     </key>
     <key name="edge-speed-rotate" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.3</default>
+      <default>1.5</default>
     </key>
     <key name="edge-speed-ping-pong" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.3</default>
+      <default>0.5</default>
     </key>
     <key name="edge-thickness-fireworks" type="i">
       <range min="2" max="40"/>
@@ -126,11 +126,11 @@
     </key>
     <key name="edge-pulse-depth-fireworks" type="d">
       <range min="0.0" max="1.0"/>
-      <default>0.5</default>
+      <default>0.65</default>
     </key>
     <key name="edge-pulse-speed-fireworks" type="d">
       <range min="0.1" max="5.0"/>
-      <default>0.8</default>
+      <default>0.9</default>
     </key>
     <key name="edge-thickness-corners" type="i">
       <range min="2" max="40"/>
@@ -186,11 +186,11 @@
     </key>
     <key name="edge-tail-length-ping-pong" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.9</default>
+      <default>0.1</default>
     </key>
     <key name="edge-pulse-depth-ping-pong" type="d">
       <range min="0.0" max="1.0"/>
-      <default>0.5</default>
+      <default>0.45</default>
     </key>
     <key name="edge-pulse-speed-ping-pong" type="d">
       <range min="0.1" max="5.0"/>
@@ -202,15 +202,15 @@
     </key>
     <key name="edge-env-release" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.3</default>
+      <default>0.05</default>
     </key>
     <key name="edge-release-mode" type="i">
       <range min="0" max="1"/>
-      <default>0</default>
+      <default>1</default>
     </key>
     <key name="edge-shape" type="i">
       <range min="0" max="3"/>
-      <default>0</default>
+      <default>3</default>
     </key>
     <key name="edge-env-curve" type="i">
       <range min="1" max="3"/>
@@ -238,7 +238,7 @@
     </key>
     <key name="edge-release-mode-fireworks" type="i">
       <range min="0" max="1"/>
-      <default>0</default>
+      <default>1</default>
     </key>
     <key name="edge-shape-fireworks" type="i">
       <range min="0" max="3"/>
@@ -250,7 +250,7 @@
     </key>
     <key name="edge-thk-attack-fireworks" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.0</default>
+      <default>0.4</default>
     </key>
     <key name="edge-thk-release-fireworks" type="d">
       <range min="0.0" max="0.5"/>
@@ -294,15 +294,15 @@
     </key>
     <key name="edge-env-attack-pulse-out" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.2</default>
+      <default>0.0</default>
     </key>
     <key name="edge-env-release-pulse-out" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.3</default>
+      <default>0.1</default>
     </key>
     <key name="edge-release-mode-pulse-out" type="i">
       <range min="0" max="1"/>
-      <default>0</default>
+      <default>1</default>
     </key>
     <key name="edge-shape-pulse-out" type="i">
       <range min="0" max="3"/>
@@ -314,7 +314,7 @@
     </key>
     <key name="edge-thk-attack-pulse-out" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.0</default>
+      <default>0.5</default>
     </key>
     <key name="edge-thk-release-pulse-out" type="d">
       <range min="0.0" max="0.5"/>
@@ -346,11 +346,11 @@
     </key>
     <key name="edge-thk-attack-rotate" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.0</default>
+      <default>0.15</default>
     </key>
     <key name="edge-thk-release-rotate" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.0</default>
+      <default>0.3</default>
     </key>
     <key name="edge-thk-curve-rotate" type="i">
       <range min="1" max="3"/>
@@ -358,11 +358,11 @@
     </key>
     <key name="edge-env-attack-ping-pong" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.2</default>
+      <default>0.0</default>
     </key>
     <key name="edge-env-release-ping-pong" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.3</default>
+      <default>0.0</default>
     </key>
     <key name="edge-release-mode-ping-pong" type="i">
       <range min="0" max="1"/>
@@ -370,7 +370,7 @@
     </key>
     <key name="edge-shape-ping-pong" type="i">
       <range min="0" max="3"/>
-      <default>0</default>
+      <default>1</default>
     </key>
     <key name="edge-env-curve-ping-pong" type="i">
       <range min="1" max="3"/>
@@ -390,11 +390,11 @@
     </key>
     <key name="edge-speed-ambient" type="d">
       <range min="0.1" max="3.0"/>
-      <default>1.0</default>
+      <default>0.3</default>
     </key>
     <key name="edge-thickness-ambient" type="i">
       <range min="2" max="40"/>
-      <default>20</default>
+      <default>30</default>
     </key>
     <key name="edge-tail-length-ambient" type="d">
       <range min="0.1" max="3.0"/>
@@ -402,11 +402,11 @@
     </key>
     <key name="edge-pulse-depth-ambient" type="d">
       <range min="0.0" max="1.0"/>
-      <default>0.5</default>
+      <default>1.0</default>
     </key>
     <key name="edge-pulse-speed-ambient" type="d">
       <range min="0.1" max="5.0"/>
-      <default>0.8</default>
+      <default>2.1</default>
     </key>
     <key name="edge-env-attack-ambient" type="d">
       <range min="0.0" max="0.5"/>
@@ -414,7 +414,7 @@
     </key>
     <key name="edge-env-release-ambient" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.3</default>
+      <default>0.5</default>
     </key>
     <key name="edge-release-mode-ambient" type="i">
       <range min="0" max="1"/>
@@ -426,11 +426,11 @@
     </key>
     <key name="edge-env-curve-ambient" type="i">
       <range min="1" max="3"/>
-      <default>2</default>
+      <default>1</default>
     </key>
     <key name="edge-thk-attack-ambient" type="d">
       <range min="0.0" max="0.5"/>
-      <default>0.0</default>
+      <default>0.5</default>
     </key>
     <key name="edge-thk-release-ambient" type="d">
       <range min="0.0" max="0.5"/>
@@ -438,7 +438,7 @@
     </key>
     <key name="edge-thk-curve-ambient" type="i">
       <range min="1" max="3"/>
-      <default>2</default>
+      <default>3</default>
     </key>
     <key name="edge-burst-count-ambient" type="i">
       <range min="1" max="8"/>
@@ -446,19 +446,19 @@
     </key>
     <key name="edge-burst-spread-ambient" type="d">
       <range min="0.5" max="5.0"/>
-      <default>3.1</default>
+      <default>2.8</default>
     </key>
     <key name="edge-pulse-speed" type="d">
       <range min="0.1" max="5.0"/>
-      <default>0.8</default>
+      <default>0.3</default>
     </key>
     <key name="edge-pulse-depth" type="d">
       <range min="0.0" max="1.0"/>
-      <default>0.5</default>
+      <default>0.0</default>
     </key>
     <key name="edge-tail-length" type="d">
       <range min="0.1" max="3.0"/>
-      <default>0.9</default>
+      <default>0.7</default>
     </key>
     <key name="edge-burst-count" type="i">
       <range min="1" max="8"/>
@@ -466,14 +466,14 @@
     </key>
     <key name="edge-burst-spread" type="d">
       <range min="0.5" max="5.0"/>
-      <default>3.1</default>
+      <default>3.8</default>
     </key>
     <key name="edge-privilege-direction" type="i">
       <range min="0" max="1"/>
       <default>0</default>
     </key>
     <key name="process-glass-colors" type="a{ss}">
-      <default>{}</default>
+      <default>{'cpuz': '#211c26;pulse-out;0;#1a5fb4', 'claude': '#231e1c;pulse-out;0;#e66100', 'pwsh': '#0f1726;fireworks;1;#ffbe6f', 'su': '#16121b;rotate;0;#9a9996'}</default>
     </key>
     <key name="livery" type="s">
       <default>@KGX_LIVERY_UUID_KGX@</default>
