@@ -46,3 +46,12 @@ kgx_pids_get_running_pids (GPid     **pids,
 {
   return kgx_gtop_get_list (pids, n_pids);
 }
+
+
+KgxPidsResult
+kgx_pids_get_session_pids (GPid       session,
+                           GPid     **pids,
+                           size_t    *n_pids)
+{
+  return kgx_gtop_get_session_pids (session, pids, n_pids);
+}

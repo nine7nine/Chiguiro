@@ -21,6 +21,7 @@
 #include <gio/gio.h>
 
 #include "kgx-utils.h"
+#include "kgx-pids.h"
 
 #include "kgx-watcher.h"
 
@@ -87,50 +88,59 @@ process_watch_cleanup (ProcessWatch *watch)
 }
 
 
+struct SessionScan {
+  KgxWatcher *self;
+  GHashTable *live_pids;
+  GPtrArray  *dead_shells;
+};
+
+
 static gboolean
-handle_watch_iter (gpointer pid,
-                   gpointer val,
-                   gpointer user_data)
+scan_session (gpointer key,
+              gpointer val,
+              gpointer user_data)
 {
-  KgxProcess *process = val;
-  KgxWatcher *self = user_data;
-  GPid parent = kgx_process_get_parent (process);
-  ProcessWatch *watch = NULL;
+  struct SessionScan *data = user_data;
+  ProcessWatch *shell = val;
+  GPid shell_pid = GPOINTER_TO_INT (key);
+  g_autofree GPid *pids = NULL;
+  size_t n_pids;
 
-  watch = g_tree_lookup (self->watching, GINT_TO_POINTER (parent));
+  /* Shell's train was disposed — mark for removal */
+  if (G_UNLIKELY (shell->train == NULL)) {
+    g_ptr_array_add (data->dead_shells, key);
+    return FALSE;
+  }
 
-  // There are far more processes on the system than there are children
-  // of watches, thus lookup are unlikly
-  if (G_UNLIKELY (watch != NULL)) {
+  if (kgx_pids_get_session_pids (shell_pid, &pids, &n_pids) != KGX_PIDS_OK)
+    return FALSE;
 
-    /* If the page died we stop caring about its processes */
-    if (G_UNLIKELY (watch->train == NULL)) {
-      g_tree_remove (self->watching, GINT_TO_POINTER (parent));
-      g_tree_remove (self->children, pid);
+  for (size_t i = 0; i < n_pids; i++) {
+    g_hash_table_add (data->live_pids, GINT_TO_POINTER (pids[i]));
 
-      return FALSE;
+    /* Don't track the shell itself as a child */
+    if (pids[i] == shell_pid)
+      continue;
+
+    if (!g_tree_lookup (data->self->children, GINT_TO_POINTER (pids[i]))) {
+      KgxProcess *process = kgx_process_new (pids[i]);
+      ProcessWatch *child;
+
+      if (G_UNLIKELY (process == NULL))
+        continue;
+
+      child = process_watch_alloc ();
+      child->process = process;
+      g_set_weak_pointer (&child->train, shell->train);
+
+      g_debug ("watcher: Hello %i!", pids[i]);
+
+      g_tree_insert (data->self->children,
+                     GINT_TO_POINTER (pids[i]),
+                     child);
+
+      kgx_train_push_child (shell->train, process);
     }
-
-    if (!g_tree_lookup (self->children, pid)) {
-      ProcessWatch *child_watch = process_watch_alloc ();
-
-      child_watch->process = g_rc_box_acquire (process);
-      g_set_weak_pointer (&child_watch->train, watch->train);
-
-      g_debug ("watcher: Hello %i!", GPOINTER_TO_INT (pid));
-
-      g_tree_insert (self->children, pid, child_watch);
-
-      /* Also watch this child so its descendants are tracked. */
-      if (!g_tree_lookup (self->watching, pid)) {
-        ProcessWatch *descendant_watch = process_watch_alloc ();
-        descendant_watch->process = g_rc_box_acquire (process);
-        g_set_weak_pointer (&descendant_watch->train, watch->train);
-        g_tree_insert (self->watching, pid, descendant_watch);
-      }
-    }
-
-    kgx_train_push_child (watch->train, process);
   }
 
   return FALSE;
@@ -138,8 +148,8 @@ handle_watch_iter (gpointer pid,
 
 
 struct RemoveDead {
-  GTree     *plist;
-  GPtrArray *dead;
+  GHashTable *live_pids;
+  GPtrArray  *dead;
 };
 
 
@@ -151,7 +161,7 @@ remove_dead (gpointer pid,
   struct RemoveDead *data = user_data;
   ProcessWatch *watch = val;
 
-  if (!g_tree_lookup (data->plist, pid)) {
+  if (!g_hash_table_contains (data->live_pids, pid)) {
     g_debug ("watcher: %i marked as dead", GPOINTER_TO_INT (pid));
 
     if (G_LIKELY (watch->train)) {
@@ -165,28 +175,70 @@ remove_dead (gpointer pid,
 }
 
 
+static gboolean watch (gpointer data);
+
+static void
+ensure_timeout (KgxWatcher *self)
+{
+  if (self->timeout != 0)
+    return;
+
+  if (g_tree_nnodes (self->watching) == 0)
+    return;
+
+  self->timeout = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE,
+                                      self->in_background ? 2000 : 500,
+                                      watch,
+                                      g_object_ref (self),
+                                      g_object_unref);
+  g_source_set_name_by_id (self->timeout, "[kgx] watcher");
+}
+
+
 static gboolean
 watch (gpointer data)
 {
   KgxWatcher *self = KGX_WATCHER (data);
-  g_autoptr (GTree) plist = NULL;
+  g_autoptr (GHashTable) live_pids = NULL;
+  struct SessionScan scan;
   struct RemoveDead dead;
 
-  plist = kgx_process_get_list ();
+  if (g_tree_nnodes (self->watching) == 0) {
+    self->timeout = 0;
+    return G_SOURCE_REMOVE;
+  }
 
-  g_tree_foreach (plist, handle_watch_iter, self);
+  live_pids = g_hash_table_new (NULL, NULL);
 
-  dead.plist = plist;
+  scan.self = self;
+  scan.live_pids = live_pids;
+  scan.dead_shells = g_ptr_array_new_full (1, NULL);
+
+  /* Query each shell's session for its child processes */
+  g_tree_foreach (self->watching, scan_session, &scan);
+
+  /* Remove shells whose trains have died */
+  for (guint i = 0; i < scan.dead_shells->len; i++)
+    g_tree_remove (self->watching, g_ptr_array_index (scan.dead_shells, i));
+  g_ptr_array_unref (scan.dead_shells);
+
+  /* Detect children that are no longer in any watched session */
+  dead.live_pids = live_pids;
   dead.dead = g_ptr_array_new_full (1, NULL);
 
   g_tree_foreach (self->children, remove_dead, &dead);
 
-  // We can't modify self->children whilst walking it
-  for (int i = 0; i < dead.dead->len; i++) {
+  /* Can't modify self->children whilst walking it */
+  for (guint i = 0; i < dead.dead->len; i++)
     g_tree_remove (self->children, g_ptr_array_index (dead.dead, i));
-  }
 
   g_ptr_array_unref (dead.dead);
+
+  /* Stop polling if all shells are gone */
+  if (g_tree_nnodes (self->watching) == 0) {
+    self->timeout = 0;
+    return G_SOURCE_REMOVE;
+  }
 
   return G_SOURCE_CONTINUE;
 }
@@ -203,15 +255,9 @@ update_watcher (KgxWatcher *self, gboolean in_background)
 
   g_debug ("watcher: in_background? %s", in_background ? "yes" : "no");
 
+  /* Reschedule with new interval if currently polling */
   g_clear_handle_id (&self->timeout, g_source_remove);
-
-  /* Slow down polling when in the background */
-  self->timeout = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE,
-                                      in_background ? 2000 : 500,
-                                      watch,
-                                      g_object_ref (self),
-                                      g_object_unref);
-  g_source_set_name_by_id (self->timeout, "[kgx] watcher");
+  ensure_timeout (self);
 
   return TRUE;
 }
@@ -314,4 +360,6 @@ kgx_watcher_watch (KgxWatcher *self,
   g_debug ("watcher: tracking %i", pid);
 
   g_tree_insert (self->watching, GINT_TO_POINTER (pid), watch);
+
+  ensure_timeout (self);
 }

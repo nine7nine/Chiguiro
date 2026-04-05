@@ -33,5 +33,8 @@ KgxPidsResult   kgx_gtop_get_cmdline           (GPid       pid,
                                                 GStrv     *args);
 KgxPidsResult   kgx_gtop_get_list              (GPid     **pids,
                                                 size_t    *n_pids);
+KgxPidsResult   kgx_gtop_get_session_pids      (GPid       session,
+                                                GPid     **pids,
+                                                size_t    *n_pids);
 
 G_END_DECLS

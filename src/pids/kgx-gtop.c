@@ -69,3 +69,25 @@ kgx_gtop_get_list (GPid **pids, size_t *n_pids)
 
   return KGX_PIDS_OK;
 }
+
+
+KgxPidsResult
+kgx_gtop_get_session_pids (GPid session, GPid **pids, size_t *n_pids)
+{
+  glibtop_proclist pid_list;
+  GPid *res = glibtop_get_proclist (&pid_list,
+                                    GLIBTOP_KERN_PROC_SESSION,
+                                    session);
+
+  if (G_UNLIKELY (res == NULL)) {
+    *pids = NULL;
+    *n_pids = 0;
+
+    return KGX_PIDS_ERR;
+  }
+
+  *pids = res;
+  *n_pids = pid_list.number;
+
+  return KGX_PIDS_OK;
+}
