@@ -91,7 +91,11 @@ struct _KgxWindowPrivate {
   gboolean              deferred_particle;
   KgxParticlePreset     deferred_preset;
   GdkRGBA               deferred_color;
-  gboolean              deferred_reverse;
+  int                   deferred_reverse;
+  int                   deferred_shape;
+  int                   deferred_gap;
+  int                   deferred_speed;
+  int                   deferred_thk;
 
   GSignalGroup         *tab_signals;
 
@@ -173,8 +177,7 @@ kgx_window_dispose (GObject *object)
 
   /* Stop all edge animations before parent disposes the widget tree. */
   if (priv->edge) {
-    kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL, FALSE);
-    kgx_edge_set_privileged (priv->edge, FALSE);
+    kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL, 0, -1, -1, 0, 0);
     kgx_edge_set_ambient (priv->edge, FALSE);
   }
 
@@ -744,7 +747,11 @@ glass_transition_done_cb (KgxWindow *self)
     kgx_edge_set_process_particle (priv->edge,
                                    priv->deferred_preset,
                                    &priv->deferred_color,
-                                   priv->deferred_reverse);
+                                   priv->deferred_reverse,
+                                   priv->deferred_shape,
+                                   priv->deferred_gap,
+                                   priv->deferred_speed,
+                                   priv->deferred_thk);
   }
 }
 
@@ -859,11 +866,13 @@ update_process_glass (KgxWindow *self)
   {
     g_autofree char *glass_hex = NULL;
     KgxParticlePreset preset = KGX_PARTICLE_NONE;
-    gboolean reverse = FALSE;
+    int reverse = 0;
     GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
+    int shape_override = -1, gap_override = -1, speed_override = 0, thk_override = 0;
     if (match) {
       kgx_parse_process_config (match, &glass_hex, &preset, &reverse,
-                                &particle_color);
+                                &particle_color, &shape_override, &gap_override,
+                                &speed_override, &thk_override);
     }
 
     /* Determine target glass color. */
@@ -881,13 +890,17 @@ update_process_glass (KgxWindow *self)
      * Stop the old particle immediately so it doesn't keep rendering
      * during the transition. */
     kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
-                                   FALSE);
+                                   0, -1, -1, 0, 0);
     if (preset != KGX_PARTICLE_NONE) {
       priv->deferred_particle = TRUE;
       priv->deferred_preset = preset;
       priv->deferred_color = particle_color;
       priv->deferred_color.alpha = 1.0f;
       priv->deferred_reverse = reverse;
+      priv->deferred_shape = shape_override;
+      priv->deferred_gap = gap_override;
+      priv->deferred_speed = speed_override;
+      priv->deferred_thk = thk_override;
     } else {
       priv->deferred_particle = FALSE;
     }
@@ -922,7 +935,11 @@ update_process_glass (KgxWindow *self)
       kgx_edge_set_process_particle (priv->edge,
                                      priv->deferred_preset,
                                      &priv->deferred_color,
-                                     priv->deferred_reverse);
+                                     priv->deferred_reverse,
+                                     priv->deferred_shape,
+                                     priv->deferred_gap,
+                                     priv->deferred_speed,
+                                     priv->deferred_thk);
     }
     return G_SOURCE_REMOVE;
   }
@@ -996,10 +1013,8 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
 
   if (status & KGX_PRIVILEGED) {
     gtk_widget_add_css_class (GTK_WIDGET (self), KGX_WINDOW_STYLE_ROOT);
-    kgx_edge_set_privileged (priv->edge, TRUE);
   } else {
     gtk_widget_remove_css_class (GTK_WIDGET (self), KGX_WINDOW_STYLE_ROOT);
-    kgx_edge_set_privileged (priv->edge, FALSE);
   }
 
   /* Track the active tab for child process changes. */

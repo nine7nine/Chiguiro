@@ -37,15 +37,14 @@ struct _KgxEdge {
   /* ── configurable properties ───────────────────────────── */
   gboolean        overscroll_enabled;
   char           *overscroll_color;     /* hex string, empty = accent */
-  gboolean        privilege_enabled;
-  char           *privilege_color;      /* hex string */
   double          burst_spread;         /* multiplier on burst stagger */
   int             burst_count;          /* how many fire per cycle (1-MAX_BURSTS) */
-  int             overscroll_style;     /* 0 = center, 1 = corner */
-  int             privilege_direction;  /* 0 = clockwise, 1 = counter-clockwise */
+  int             overscroll_style;     /* 0 = scroll1, 1 = scroll2 */
+  int             overscroll_reverse;        /* 0=forward, 1=reverse, 2=alternating */
+  gboolean        overscroll_reverse_toggle; /* for alternating mode */
 
   /* ── particle tunables ────────────────────────────────── */
-  KgxParticleTunables global;           /* overscroll / privilege fallback */
+  KgxParticleTunables global;           /* overscroll fallback */
   KgxParticleTunables preset[N_PRESETS]; /* indexed by KgxParticlePreset - 1 */
 
   /* ── overscroll state ──────────────────────────────────── */
@@ -56,16 +55,10 @@ struct _KgxEdge {
   /* ── ambient (settings page) configuration ─────────────── */
   gboolean        ambient_enabled;     /* edge-settings-animation GSettings */
 
-  /* ── privilege preset configuration ──────────────────────── */
-  int             privilege_preset;    /* edge-privilege-preset (KgxParticlePreset) */
-
-  /* ── firework / privilege mode ───────────────────────────── */
-  gboolean        privileged;
+  /* ── firework / burst mode ────────────────────────────────── */
   gboolean        ambient_active;      /* settings page is currently open */
-  gboolean        firework_privilege;  /* privilege triggered (FIREWORKS preset) */
 #define MAX_BURSTS 8
-#define firework_active(s) ((s)->firework_privilege || \
-                            (s)->process_preset == KGX_PARTICLE_FIREWORKS || \
+#define firework_active(s) ((s)->process_preset == KGX_PARTICLE_FIREWORKS || \
                             (s)->process_preset == KGX_PARTICLE_AMBIENT)
 
   guint           firework_timeout;
@@ -91,6 +84,11 @@ struct _KgxEdge {
   KgxParticlePreset process_preset;
   GdkRGBA           process_color;
   gboolean          process_reverse;
+  int               process_shape_override;   /* -1 = use preset */
+  int               process_gap_override;     /* -1 = use preset */
+  int               process_speed_override;   /* 0 = use preset  */
+  int               process_thk_override;     /* 0 = use preset  */
+  gboolean          process_reverse_toggle;   /* for alternating mode */
   AdwAnimation     *process_anim;
   double            process_progress;   /* -1 = idle, 0..1 = active */
   double            process_last_snapshot_progress; /* stall detection */
@@ -102,17 +100,25 @@ struct _KgxEdge {
   gboolean          pending_change;
   KgxParticlePreset pending_preset;
   GdkRGBA           pending_color;
-  gboolean          pending_reverse;
+  int               pending_reverse;
+  int               pending_shape_override;
+  int               pending_gap_override;
+  int               pending_speed_override;
+  int               pending_thk_override;
 
-  /* ── stashed process state (saved when ambient/privilege takes over) ── */
+  /* ── stashed process state (saved when ambient takes over) ── */
   KgxParticlePreset stashed_preset;
   GdkRGBA           stashed_color;
-  gboolean          stashed_reverse;
+  int               stashed_reverse;
+  int               stashed_shape_override;
+  int               stashed_gap_override;
+  int               stashed_speed_override;
+  int               stashed_thk_override;
   gboolean          has_stashed;
 
   /* ── snapshotted tunables (captured at animation start) ──── */
   KgxParticleTunables process_tune_snap; /* for process_anim in-flight   */
-  KgxParticleTunables burst_tune_snap;   /* for firework/privilege bursts */
+  KgxParticleTunables burst_tune_snap;   /* for firework bursts           */
   KgxParticleTunables ambient_tune_snap; /* for ambient bursts            */
 
   /* ── cached pre-built paths for shaped particles ─────────── */
@@ -122,8 +128,6 @@ struct _KgxEdge {
   /* ── cached parsed colors (invalidated on property change) ── */
   GdkRGBA             overscroll_rgba;
   gboolean            overscroll_rgba_valid;
-  GdkRGBA             privilege_rgba;
-  gboolean            privilege_rgba_valid;
 };
 
 
@@ -131,13 +135,10 @@ enum {
   PROP_0,
   PROP_OVERSCROLL_ENABLED,
   PROP_OVERSCROLL_COLOR,
-  PROP_PRIVILEGE_ENABLED,
-  PROP_PRIVILEGE_COLOR,
   PROP_OVERSCROLL_STYLE,
+  PROP_OVERSCROLL_REVERSE,
   PROP_BURST_SPREAD,
   PROP_BURST_COUNT,
-  PROP_PRIVILEGE_DIRECTION,
-  PROP_PRIVILEGE_PRESET,
   PROP_AMBIENT_ENABLED,
   PROP_AMBIENT_BURST_COUNT,
   PROP_AMBIENT_BURST_SPREAD,
@@ -153,10 +154,10 @@ static GParamSpec *edge_pspecs[LAST_PROP] = { NULL, };
 static const char * const tune_names[N_TUNE_FIELDS] = {
   "speed", "thickness", "tail-length", "pulse-depth", "pulse-speed",
   "env-attack", "env-release", "release-mode", "shape",
-  "env-curve", "thk-attack", "thk-release", "thk-curve"
+  "env-curve", "gap", "thk-attack", "thk-release", "thk-release-mode", "thk-curve"
 };
 static const char * const preset_suffixes[N_PRESETS] = {
-  "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient"
+  "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient", "scroll2"
 };
 
 
@@ -168,7 +169,7 @@ G_DEFINE_FINAL_TYPE (KgxEdge, kgx_edge, GTK_TYPE_WIDGET)
 static inline const KgxParticleTunables *
 resolve_tunables (KgxEdge *self, KgxParticlePreset preset)
 {
-  if (preset >= KGX_PARTICLE_FIREWORKS && preset <= KGX_PARTICLE_AMBIENT)
+  if (preset >= KGX_PARTICLE_FIREWORKS && preset <= KGX_PARTICLE_SCROLL2)
     return &self->preset[preset - 1];
   return &self->global;
 }
@@ -346,14 +347,42 @@ draw_segment (GtkSnapshot                *snapshot,
               GskPath                    *unit_triangle,
               GskPath                    *unit_diamond)
 {
-  double blk   = (double) tune->thickness;
-  if (tune->thk_attack > 0.0 || tune->thk_release > 0.0) {
-    float thk_env = thickness_envelope (phase, tune->thk_attack,
-                                        tune->thk_release, tune->thk_curve);
-    blk *= thk_env;
-    if (blk < 1.0) blk = 1.0;
+  double base_blk = (double) tune->thickness;
+  double blk      = base_blk;
+
+  /* Thickness attack (all blocks grow from 0). */
+  float thk_attack_env = 1.0f;
+  if (tune->thk_attack > 0.0)
+    thk_attack_env = thickness_envelope (phase, tune->thk_attack, 0.0, tune->thk_curve);
+
+  /* R = uniform shrink (all blocks together, original behavior).
+   * S/G = per-block (head stays, tail changes) — computed in the loop. */
+  float thk_release_factor = 0.0f;  /* per-block factor for S/G modes */
+  if (tune->thk_release_mode == KGX_RELEASE_RETRACT) {
+    /* Uniform: apply full envelope including release to all blocks. */
+    blk *= thickness_envelope (phase, tune->thk_attack, tune->thk_release, tune->thk_curve);
+  } else {
+    blk *= thk_attack_env;
+    /* Per-block release factor for S/G modes. */
+    if ((tune->thk_release_mode == KGX_RELEASE_SPREAD ||
+         tune->thk_release_mode == KGX_RELEASE_GROW) &&
+        tune->thk_release > 0.0 && phase > 1.0 - tune->thk_release) {
+      thk_release_factor = (float)((phase - (1.0 - tune->thk_release)) / tune->thk_release);
+    }
   }
-  double gap   = blk;
+  if (blk < 1.0) blk = 1.0;
+
+  /* Gap between blocks: 0 = gapped (default), 1 = solid (no gap). */
+  double gap   = tune->gap ? 0.0 : base_blk;
+
+  /* SPREAD release mode: increase gap between blocks during release phase,
+   * pushing tail blocks away from the head. */
+  if (tune->release_mode == KGX_RELEASE_SPREAD &&
+      tune->env_release > 0.0 && phase > 1.0 - tune->env_release) {
+    double rt = (phase - (1.0 - tune->env_release)) / tune->env_release;
+    gap *= (1.0 + rt * 3.0);
+  }
+
   double step  = blk + gap;
   int    blocks = (int)(seg_len / step);
 
@@ -372,6 +401,18 @@ draw_segment (GtkSnapshot                *snapshot,
     }
     /* Head (s=0) is bright, tail (high s) fades out. */
     float  t = (float) s * inv_blocks;
+
+    /* Per-block thickness: head stays full, tail shrinks/grows during release.
+     * thk_release_factor is 0 outside release phase, ramps 0→1 during release. */
+    double block_blk = blk;
+    if (thk_release_factor > 0.0f) {
+      if (tune->thk_release_mode == KGX_RELEASE_GROW)
+        block_blk = blk * (1.0 + (double)(t * thk_release_factor));
+      else /* RETRACT or SPREAD = shrink */
+        block_blk = blk * (1.0 - (double)(t * thk_release_factor));
+      if (block_blk < 1.0) block_blk = 1.0;
+    }
+
     /* Base fade: head bright, tail dims. */
     float  a = alpha * (1.0f - 0.7f * t);
     /* Pulsing shimmer on tail only — skip the leading block (s=0),
@@ -387,40 +428,41 @@ draw_segment (GtkSnapshot                *snapshot,
 
     c.alpha = a;
 
+    float bb = (float) block_blk;
     float tri_angle = 0;
     if (d < width) {
       /* Top edge — CW = right, CCW = left */
       px = (float) d;  py = 0;
-      bw = (float) blk;  bh = (float) blk;
+      bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 0 : 180;
     } else if (d < width + height) {
       /* Right edge — CW = down, CCW = up */
-      px = width - (float) blk;  py = (float)(d - width);
-      bw = (float) blk;  bh = (float) blk;
+      px = width - bb;  py = (float)(d - width);
+      bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 90 : 270;
     } else if (d < 2 * width + height) {
       /* Bottom edge — CW = left, CCW = right */
-      px = width - (float)(d - width - height) - (float) blk;
-      py = height - (float) blk;
-      bw = (float) blk;  bh = (float) blk;
+      px = width - (float)(d - width - height) - bb;
+      py = height - bb;
+      bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 180 : 0;
     } else {
       /* Left edge — CW = up, CCW = down */
       px = 0;
-      py = height - (float)(d - 2 * width - height) - (float) blk;
-      bw = (float) blk;  bh = (float) blk;
+      py = height - (float)(d - 2 * width - height) - bb;
+      bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 270 : 90;
     }
 
     switch (tune->shape) {
     case KGX_PARTICLE_SHAPE_CIRCLE:
-      append_circle (snapshot, px, py, (float) blk, &c);
+      append_circle (snapshot, px, py, bb, &c);
       break;
     case KGX_PARTICLE_SHAPE_DIAMOND:
-      append_diamond (snapshot, unit_diamond, px, py, (float) blk, &c);
+      append_diamond (snapshot, unit_diamond, px, py, bb, &c);
       break;
     case KGX_PARTICLE_SHAPE_TRIANGLE:
-      append_triangle (snapshot, unit_triangle, px, py, (float) blk, tri_angle, &c);
+      append_triangle (snapshot, unit_triangle, px, py, bb, tri_angle, &c);
       break;
     default: /* SQUARE */
       gtk_snapshot_append_color (snapshot, &c,
@@ -438,6 +480,7 @@ draw_overscroll (GtkSnapshot                *snapshot,
                  double                      progress,
                  GtkPositionType             edge,
                  int                         style,
+                 gboolean                    reverse,
                  float                       width,
                  float                       height,
                  double                      perim,
@@ -450,60 +493,72 @@ draw_overscroll (GtkSnapshot                *snapshot,
   float  a      = env * 0.9f;
 
   if (style == 1) {
-    /* Corner mode: burst from corner along two adjacent edges. */
-    double corner;
-    double h_head, v_head;
+    /* Scroll 2: solid bar along the active edge. */
+    float thk = (float) tune->thickness;
+    float thk_env_val = 1.0f;
+    if (tune->thk_attack > 0.0)
+      thk_env_val = thickness_envelope (progress, tune->thk_attack, 0.0, tune->thk_curve);
+    thk *= thk_env_val;
+    if (thk < 1.0f) thk = 1.0f;
 
-    if (edge == GTK_POS_BOTTOM) {
-      /* Bottom-right corner → left along bottom, up along right. */
-      corner = width + height;
-      h_head = fmod (corner + width * progress, perim);   /* left along bottom */
-      v_head = fmod (corner - height * progress + perim, perim); /* up along right */
-    } else {
-      /* Top-right corner → left along top, down along right. */
-      corner = width;
-      h_head = fmod (corner - width * progress + perim, perim);  /* left along top */
-      v_head = fmod (corner + height * progress, perim);  /* down along right */
-    }
-
-    /* Trail must oppose the head's travel direction:
-     * bottom: h_head moves CW (trail -1), v_head moves CCW (trail +1)
-     * top:    h_head moves CCW (trail +1), v_head moves CW (trail -1) */
-    {
-      int h_trail = (edge == GTK_POS_BOTTOM) ? -1 : +1;
-      int v_trail = (edge == GTK_POS_BOTTOM) ? +1 : -1;
-      draw_segment (snapshot, h_head, BASE_OVERSCROLL_SEG, a,
-                    width, height, perim, color, h_trail, tune, progress,
-                    unit_triangle, unit_diamond);
-      draw_segment (snapshot, v_head, BASE_OVERSCROLL_SEG, a,
-                    width, height, perim, color, v_trail, tune, progress,
-                    unit_triangle, unit_diamond);
-    }
-  } else {
-    /* Center mode: burst from center of edge, two snakes split outward. */
-    double center;
-    double left_head, right_head;
+    float bar_len = (float) width * envelope (progress, tune->env_attack, 0.0, tune->env_curve);
+    GdkRGBA c = *color;
+    c.alpha = a;
 
     if (edge == GTK_POS_TOP) {
-      center = width / 2.0;
+      float x = reverse ? width - bar_len : 0.0f;
+      gtk_snapshot_append_color (snapshot, &c,
+                                 &GRAPHENE_RECT_INIT (x, 0, bar_len, thk));
     } else {
-      center = width + height + width / 2.0;
+      float x = reverse ? width - bar_len : 0.0f;
+      gtk_snapshot_append_color (snapshot, &c,
+                                 &GRAPHENE_RECT_INIT (x, height - thk, bar_len, thk));
+    }
+  } else {
+    /* Scroll 1: corner burst along two adjacent edges. */
+    double corner;
+    double h_head, v_head;
+    int    h_trail, v_trail;
+
+    if (edge == GTK_POS_BOTTOM) {
+      if (reverse) {
+        corner = width + height + width;
+        h_head = fmod (corner - width * progress + perim, perim);
+        v_head = fmod (corner + height * progress, perim);
+        h_trail = +1;
+        v_trail = -1;
+      } else {
+        corner = width + height;
+        h_head = fmod (corner + width * progress, perim);
+        v_head = fmod (corner - height * progress + perim, perim);
+        h_trail = -1;
+        v_trail = +1;
+      }
+    } else {
+      if (reverse) {
+        corner = 0.0;
+        h_head = fmod (width * progress, perim);
+        v_head = fmod (perim - height * progress + perim, perim);
+        h_trail = -1;
+        v_trail = +1;
+      } else {
+        corner = width;
+        h_head = fmod (corner - width * progress + perim, perim);
+        v_head = fmod (corner + height * progress, perim);
+        h_trail = +1;
+        v_trail = -1;
+      }
     }
 
-    left_head  = fmod (center - (width / 2.0) * progress + perim, perim);
-    right_head = fmod (center + (width / 2.0) * progress, perim);
-
-    draw_segment (snapshot, left_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, perim, color, +1, tune, progress,
+    draw_segment (snapshot, h_head, BASE_OVERSCROLL_SEG, a,
+                  width, height, perim, color, h_trail, tune, progress,
                   unit_triangle, unit_diamond);
-    draw_segment (snapshot, right_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, perim, color, -1, tune, progress,
+    draw_segment (snapshot, v_head, BASE_OVERSCROLL_SEG, a,
+                  width, height, perim, color, v_trail, tune, progress,
                   unit_triangle, unit_diamond);
   }
 }
 
-
-/* ── privilege snake drawing ─────────────────────────────── */
 
 /* ── firework mode ───────────────────────────────────────── */
 
@@ -560,14 +615,9 @@ burst_fire (gpointer data)
 
   self->burst_head[i] = g_random_double () * perim;
 
-  /* Process firework uses the configured particle color.
-   * Privilege uses privilege color when ambient is inactive. */
+  /* Process firework uses the configured particle color. */
   if (self->process_preset == KGX_PARTICLE_FIREWORKS)
     self->burst_color[i] = self->process_color;
-  else if (self->privileged && self->privilege_enabled)
-    self->burst_color[i] = resolve_color_cached (self, self->privilege_color,
-                                                  &self->privilege_rgba,
-                                                  &self->privilege_rgba_valid);
   else
     self->burst_color[i] = random_muted_color ();
 
@@ -647,7 +697,7 @@ firework_schedule (KgxEdge *self)
 }
 
 
-/* ── ambient burst system (independent from firework/privilege) ── */
+/* ── ambient burst system (independent from firework) ── */
 
 static void
 ambient_burst_value_cb (double value, BurstData *bd)
@@ -690,7 +740,7 @@ ambient_burst_fire (gpointer data)
 
   /* Snapshot ambient tunables at burst-fire time. */
   {
-    const KgxParticleTunables *bt = &self->preset[N_PRESETS - 1]; /* ambient tunables */
+    const KgxParticleTunables *bt = &self->preset[KGX_PARTICLE_AMBIENT - 1]; /* ambient tunables */
     self->ambient_tune_snap = *bt;
     adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
                                       (guint)(800.0 / bt->speed));
@@ -741,7 +791,7 @@ ambient_schedule (KgxEdge *self)
   if (self->ambient_timeout)
     return;
 
-  const KgxParticleTunables *ft = &self->preset[N_PRESETS - 1]; /* ambient tunables */
+  const KgxParticleTunables *ft = &self->preset[KGX_PARTICLE_AMBIENT - 1]; /* ambient tunables */
   double spd = ft->speed;
   int lo = (int)(600 * self->ambient_burst_spread / spd);
   int hi = (int)(1200 * self->ambient_burst_spread / spd);
@@ -788,12 +838,18 @@ kgx_edge_snapshot (GtkWidget   *widget,
                                           &self->overscroll_rgba,
                                           &self->overscroll_rgba_valid);
 
+    const KgxParticleTunables *os_tune =
+      (self->overscroll_style == 1) ? resolve_tunables (self, KGX_PARTICLE_SCROLL2)
+                                    : &self->global;
     draw_overscroll (snapshot, self->overscroll_progress,
                      self->overscroll_edge, self->overscroll_style,
-                     width, height, perim, &color, &self->global, tri, dia);
+                     (self->overscroll_reverse == 2)
+                       ? self->overscroll_reverse_toggle
+                       : (self->overscroll_reverse == 1),
+                     width, height, perim, &color, os_tune, tri, dia);
   }
 
-  /* Firework / privilege decoration — staggered center-bursts.
+  /* Firework decoration — staggered center-bursts.
    * When process_reverse + FIREWORKS: implode (converge to center).
    * Uses snapshotted tunables captured at burst-fire time. */
   {
@@ -827,7 +883,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
     }
   }
 
-  /* Ambient burst decoration — independent from privilege/process fireworks.
+  /* Ambient burst decoration — independent from process fireworks.
    * Uses snapshotted tunables captured at ambient-burst-fire time.
    * Keep rendering if any burst is still in-flight even after ambient_active
    * is cleared — this gives a graceful fade-out when leaving settings. */
@@ -896,10 +952,13 @@ kgx_edge_snapshot (GtkWidget   *widget,
     double tail_env;
     if (self->process_preset == KGX_PARTICLE_ROTATE)
       tail_env = 1.0;
-    else if (pt->release_mode == KGX_RELEASE_RETRACT)
-      tail_env = envelope (p, pt->env_attack, pt->env_release, pt->env_curve);
-    else
-      tail_env = envelope (p, pt->env_attack, 0.0, pt->env_curve);  /* uniform: attack only */
+    else if (pt->release_mode == KGX_RELEASE_RETRACT) {
+      /* Retract faster than alpha fades so the pull-back is visible.
+       * Use concave curve (fast drop) regardless of user curve setting. */
+      float raw = envelope (p, pt->env_attack, pt->env_release, 1);
+      tail_env = (double)(raw * raw);  /* squared for aggressive retraction */
+    } else
+      tail_env = envelope (p, pt->env_attack, 0.0, pt->env_curve);  /* uniform/spread/grow: attack only */
     double seg = seg_full * tail_env;
 
     switch (self->process_preset) {
@@ -947,9 +1006,12 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double eased    = 1.0 - (1.0 - half_p) * (1.0 - half_p) * (1.0 - half_p);
       float  lap_env  = envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve);
       float  lap_a    = lap_env * 0.8f;
-      double lap_tail = (pt->release_mode == KGX_RELEASE_RETRACT)
-                          ? envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve)
-                          : envelope (half_p, pt->env_attack, 0.0, pt->env_curve);
+      double lap_tail;
+      if (pt->release_mode == KGX_RELEASE_RETRACT) {
+        float raw = envelope (half_p, pt->env_attack, pt->env_release, 1);
+        lap_tail = (double)(raw * raw);
+      } else
+        lap_tail = envelope (half_p, pt->env_attack, 0.0, pt->env_curve);
       double lap_seg  = seg_full * lap_tail;
 
       double travel = (perim / 2.0) * eased;
@@ -969,9 +1031,12 @@ kgx_edge_snapshot (GtkWidget   *widget,
       gboolean returning = (p >= 0.5);
       float  pp_env = envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve);
       float  pp_a   = pp_env * 0.9f;
-      double pp_tail = (pt->release_mode == KGX_RELEASE_RETRACT)
-                         ? envelope (half_p, pt->env_attack, pt->env_release, pt->env_curve)
-                         : envelope (half_p, pt->env_attack, 0.0, pt->env_curve);
+      double pp_tail;
+      if (pt->release_mode == KGX_RELEASE_RETRACT) {
+        float raw = envelope (half_p, pt->env_attack, pt->env_release, 1);
+        pp_tail = (double)(raw * raw);
+      } else
+        pp_tail = envelope (half_p, pt->env_attack, 0.0, pt->env_curve);
       double pp_seg = BASE_OVERSCROLL_SEG * pp_tail;
 
       double travel = (double) width * half_p;
@@ -1068,11 +1133,15 @@ kgx_edge_set_property (GObject      *object,
     if (field == TUNE_THICKNESS)
       self->preset[pi].thickness = CLAMP (g_value_get_int (value), 2, 40);
     else if (field == TUNE_RELEASE_MODE)
-      self->preset[pi].release_mode = CLAMP (g_value_get_int (value), 0, 1);
+      self->preset[pi].release_mode = CLAMP (g_value_get_int (value), 0, 3);
     else if (field == TUNE_SHAPE)
       self->preset[pi].shape = CLAMP (g_value_get_int (value), 0, 3);
     else if (field == TUNE_ENV_CURVE)
       self->preset[pi].env_curve = CLAMP (g_value_get_int (value), 1, 3);
+    else if (field == TUNE_GAP)
+      self->preset[pi].gap = CLAMP (g_value_get_int (value), 0, 1);
+    else if (field == TUNE_THK_RELEASE_MODE)
+      self->preset[pi].thk_release_mode = CLAMP (g_value_get_int (value), 0, 3);
     else if (field == TUNE_THK_CURVE)
       self->preset[pi].thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     else
@@ -1090,11 +1159,15 @@ kgx_edge_set_property (GObject      *object,
     if (field == TUNE_THICKNESS) {
       self->global.thickness = g_value_get_int (value);
     } else if (field == TUNE_RELEASE_MODE) {
-      self->global.release_mode = CLAMP (g_value_get_int (value), 0, 1);
+      self->global.release_mode = CLAMP (g_value_get_int (value), 0, 3);
     } else if (field == TUNE_SHAPE) {
       self->global.shape = CLAMP (g_value_get_int (value), 0, 3);
     } else if (field == TUNE_ENV_CURVE) {
       self->global.env_curve = CLAMP (g_value_get_int (value), 1, 3);
+    } else if (field == TUNE_GAP) {
+      self->global.gap = CLAMP (g_value_get_int (value), 0, 1);
+    } else if (field == TUNE_THK_RELEASE_MODE) {
+      self->global.thk_release_mode = CLAMP (g_value_get_int (value), 0, 3);
     } else if (field == TUNE_THK_CURVE) {
       self->global.thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     } else if (field == TUNE_SPEED) {
@@ -1130,31 +1203,17 @@ kgx_edge_set_property (GObject      *object,
       self->overscroll_rgba_valid = FALSE;
       gtk_widget_queue_draw (GTK_WIDGET (self));
       break;
-    case PROP_PRIVILEGE_ENABLED:
-      self->privilege_enabled = g_value_get_boolean (value);
-      gtk_widget_queue_draw (GTK_WIDGET (self));
-      break;
-    case PROP_PRIVILEGE_COLOR:
-      g_free (self->privilege_color);
-      self->privilege_color = g_value_dup_string (value);
-      self->privilege_rgba_valid = FALSE;
-      gtk_widget_queue_draw (GTK_WIDGET (self));
-      break;
     case PROP_OVERSCROLL_STYLE:
       self->overscroll_style = g_value_get_int (value);
+      break;
+    case PROP_OVERSCROLL_REVERSE:
+      self->overscroll_reverse = g_value_get_int (value);
       break;
     case PROP_BURST_SPREAD:
       self->burst_spread = g_value_get_double (value);
       break;
     case PROP_BURST_COUNT:
       self->burst_count = CLAMP (g_value_get_int (value), 1, MAX_BURSTS);
-      break;
-    case PROP_PRIVILEGE_DIRECTION:
-      self->privilege_direction = g_value_get_int (value);
-      gtk_widget_queue_draw (GTK_WIDGET (self));
-      break;
-    case PROP_PRIVILEGE_PRESET:
-      self->privilege_preset = CLAMP (g_value_get_int (value), 1, 5);
       break;
     case PROP_AMBIENT_ENABLED:
       {
@@ -1235,26 +1294,17 @@ kgx_edge_get_property (GObject    *object,
     case PROP_OVERSCROLL_COLOR:
       g_value_set_string (value, self->overscroll_color ? self->overscroll_color : "");
       break;
-    case PROP_PRIVILEGE_ENABLED:
-      g_value_set_boolean (value, self->privilege_enabled);
-      break;
-    case PROP_PRIVILEGE_COLOR:
-      g_value_set_string (value, self->privilege_color ? self->privilege_color : "#d940a6");
-      break;
     case PROP_OVERSCROLL_STYLE:
       g_value_set_int (value, self->overscroll_style);
+      break;
+    case PROP_OVERSCROLL_REVERSE:
+      g_value_set_int (value, self->overscroll_reverse);
       break;
     case PROP_BURST_SPREAD:
       g_value_set_double (value, self->burst_spread);
       break;
     case PROP_BURST_COUNT:
       g_value_set_int (value, self->burst_count);
-      break;
-    case PROP_PRIVILEGE_DIRECTION:
-      g_value_set_int (value, self->privilege_direction);
-      break;
-    case PROP_PRIVILEGE_PRESET:
-      g_value_set_int (value, self->privilege_preset);
       break;
     case PROP_AMBIENT_ENABLED:
       g_value_set_boolean (value, self->ambient_enabled);
@@ -1291,7 +1341,6 @@ kgx_edge_dispose (GObject *object)
   for (int i = 0; i < MAX_BURSTS; i++)
     g_clear_object (&self->ambient_anim[i]);
   g_clear_pointer (&self->overscroll_color, g_free);
-  g_clear_pointer (&self->privilege_color, g_free);
   g_clear_pointer (&self->unit_triangle, gsk_path_unref);
   g_clear_pointer (&self->unit_diamond, gsk_path_unref);
 
@@ -1343,16 +1392,12 @@ kgx_edge_class_init (KgxEdgeClass *klass)
     g_param_spec_string ("overscroll-color", NULL, NULL, "",
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
-  edge_pspecs[PROP_PRIVILEGE_ENABLED] =
-    g_param_spec_boolean ("privilege-enabled", NULL, NULL, TRUE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-
-  edge_pspecs[PROP_PRIVILEGE_COLOR] =
-    g_param_spec_string ("privilege-color", NULL, NULL, "#d940a6",
-                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-
   edge_pspecs[PROP_OVERSCROLL_STYLE] =
     g_param_spec_int ("overscroll-style", NULL, NULL, 0, 1, 0,
+                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  edge_pspecs[PROP_OVERSCROLL_REVERSE] =
+    g_param_spec_int ("overscroll-reverse", NULL, NULL, 0, 2, 0,
                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   edge_pspecs[PROP_BURST_SPREAD] =
@@ -1361,14 +1406,6 @@ kgx_edge_class_init (KgxEdgeClass *klass)
 
   edge_pspecs[PROP_BURST_COUNT] =
     g_param_spec_int ("burst-count", NULL, NULL, 1, MAX_BURSTS, 4,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-
-  edge_pspecs[PROP_PRIVILEGE_DIRECTION] =
-    g_param_spec_int ("privilege-direction", NULL, NULL, 0, 1, 0,
-                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-
-  edge_pspecs[PROP_PRIVILEGE_PRESET] =
-    g_param_spec_int ("privilege-preset", NULL, NULL, 1, 5, 1,
                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   edge_pspecs[PROP_AMBIENT_ENABLED] =
@@ -1388,11 +1425,12 @@ kgx_edge_class_init (KgxEdgeClass *klass)
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /* ── global tunable property specs ─────────────────────── */
-  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape  ecurve thkatk thkrel thkcurve */
+  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape  ecurve thkatk thkrel gap  thkrmode thkcurve */
   {
-    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0 };
-    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0, 0, 0.5, 0.5, 0 };
-    static const double dbl_def[] = { 1.0, 0, 1.0, 0.3, 1.0, 0.2, 0.3, 0, 0, 0, 0.0, 0.0, 0 };
+    /*              spd  thk  tail pdep pspd atk  rel  rm sh crv gap  thka thkr thkrm thkc */
+    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0, 0 };
+    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0, 0, 2.0, 0.5, 0.5, 0, 0 };
+    static const double dbl_def[] = { 1.0, 0, 1.0, 0.3, 1.0, 0.2, 0.3, 0, 0, 0, 1.0, 0.0, 0.0, 0, 0 };
 
     for (int f = 0; f < N_TUNE_FIELDS; f++) {
       int id = PROP_GLOBAL_BASE + f;
@@ -1400,9 +1438,13 @@ kgx_edge_class_init (KgxEdgeClass *klass)
         edge_pspecs[id] =
           g_param_spec_int (tune_names[f], NULL, NULL, 2, 40, 10,
                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-      } else if (f == TUNE_RELEASE_MODE) {
+      } else if (f == TUNE_GAP) {
         edge_pspecs[id] =
           g_param_spec_int (tune_names[f], NULL, NULL, 0, 1, 0,
+                            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+      } else if (f == TUNE_RELEASE_MODE || f == TUNE_THK_RELEASE_MODE) {
+        edge_pspecs[id] =
+          g_param_spec_int (tune_names[f], NULL, NULL, 0, 3, 0,
                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
       } else if (f == TUNE_SHAPE) {
         edge_pspecs[id] =
@@ -1422,11 +1464,12 @@ kgx_edge_class_init (KgxEdgeClass *klass)
   }
 
   /* ── per-preset tunable property specs ─────────────────── */
-  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape  ecurve thkatk thkrel thkcurve */
+  /*              speed  thick  tail   pdep   pspd   atk    rel    rmode  shape  ecurve thkatk thkrel gap  thkrmode thkcurve */
   {
-    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0 };
-    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0, 0, 0.5, 0.5, 0 };
-    static const double dbl_def[] = { 1.0, 0, 0.9, 0.5, 0.8, 0.2, 0.3, 0, 0, 0, 0.0, 0.0, 0 };
+    /*              spd  thk  tail pdep pspd atk  rel  rm sh crv gap  thka thkr thkrm thkc */
+    static const double dbl_min[] = { 0.1, 0, 0.1, 0.0, 0.1, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0, 0 };
+    static const double dbl_max[] = { 3.0, 0, 3.0, 1.0, 5.0, 0.5, 0.5, 0, 0, 0, 2.0, 0.5, 0.5, 0, 0 };
+    static const double dbl_def[] = { 1.0, 0, 0.9, 0.5, 0.8, 0.2, 0.3, 0, 0, 0, 1.0, 0.0, 0.0, 0, 0 };
 
     for (int p = 0; p < N_PRESETS; p++) {
       for (int f = 0; f < N_TUNE_FIELDS; f++) {
@@ -1437,9 +1480,13 @@ kgx_edge_class_init (KgxEdgeClass *klass)
           edge_pspecs[id] =
             g_param_spec_int (name, NULL, NULL, 2, 40, 20,
                               G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
-        } else if (f == TUNE_RELEASE_MODE) {
+        } else if (f == TUNE_GAP) {
           edge_pspecs[id] =
             g_param_spec_int (name, NULL, NULL, 0, 1, 0,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+        } else if (f == TUNE_RELEASE_MODE || f == TUNE_THK_RELEASE_MODE) {
+          edge_pspecs[id] =
+            g_param_spec_int (name, NULL, NULL, 0, 3, 0,
                               G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
         } else if (f == TUNE_SHAPE) {
           edge_pspecs[id] =
@@ -1473,25 +1520,23 @@ kgx_edge_init (KgxEdge *self)
 
   /* Defaults */
   self->overscroll_enabled  = TRUE;
-  self->privilege_enabled   = TRUE;
-  self->privilege_color     = g_strdup ("#d940a6");
   self->overscroll_color    = g_strdup ("");
   self->burst_spread        = 3.1;
   self->burst_count         = 8;
   self->ambient_enabled     = TRUE;
   self->ambient_burst_count = 8;
   self->ambient_burst_spread = 3.1;
-  self->privilege_preset    = KGX_PARTICLE_FIREWORKS;
   self->overscroll_progress = -1.0;
   self->process_progress    = -1.0;
   self->process_preset      = KGX_PARTICLE_NONE;
 
-  /* Global tunables (used for overscroll / privilege fallback) */
+  /* Global tunables (used for overscroll fallback) */
   self->global = (KgxParticleTunables) {
     .speed = 0.3, .thickness = 20, .tail_length = 0.9,
     .pulse_depth = 0.5, .pulse_speed = 0.8,
     .env_attack = 0.2, .env_release = 0.3,
     .release_mode = KGX_RELEASE_UNIFORM,
+    .gap = 0,
     .env_curve = 2, .thk_attack = 0.0, .thk_release = 0.0, .thk_curve = 2,
   };
 
@@ -1500,7 +1545,7 @@ kgx_edge_init (KgxEdge *self)
     self->preset[i] = (KgxParticleTunables) {
       .speed = 1.0, .thickness = 20, .tail_length = 0.9,
       .pulse_depth = 0.5, .pulse_speed = 0.8,
-      .env_attack = 0.2, .env_release = 0.3,
+      .env_attack = 0.2, .env_release = 0.3, .gap = 0,
       .release_mode = KGX_RELEASE_UNIFORM,
       .env_curve = 2, .thk_attack = 0.0, .thk_release = 0.0, .thk_curve = 2,
     };
@@ -1542,7 +1587,7 @@ kgx_edge_init (KgxEdge *self)
   g_signal_connect_swapped (self->overscroll_anim, "done",
                             G_CALLBACK (overscroll_done_cb), self);
 
-  /* Burst animations for firework/privilege effect. */
+  /* Burst animations for firework effect. */
   for (int i = 0; i < MAX_BURSTS; i++) {
     BurstData *bd = &self->burst_data[i];
     bd->index = i;
@@ -1562,7 +1607,7 @@ kgx_edge_init (KgxEdge *self)
     self->burst_progress[i] = -1.0;
   }
 
-  /* Ambient burst animations — independent from firework/privilege. */
+  /* Ambient burst animations — independent from firework. */
   for (int i = 0; i < MAX_BURSTS; i++) {
     BurstData *abd = &self->ambient_burst_data[i];
     abd->index = i;
@@ -1604,71 +1649,12 @@ kgx_edge_fire_overscroll (KgxEdge         *self,
 
   self->overscroll_edge = edge;
 
+  /* Flip the alternating toggle before playing so this fire uses the new value */
+  if (self->overscroll_reverse == 2)
+    self->overscroll_reverse_toggle = !self->overscroll_reverse_toggle;
+
   adw_animation_reset (self->overscroll_anim);
   adw_animation_play (self->overscroll_anim);
-}
-
-
-void
-kgx_edge_set_privileged (KgxEdge  *self,
-                         gboolean  privileged)
-{
-  g_return_if_fail (KGX_IS_EDGE (self));
-
-  if (self->privileged == privileged)
-    return;
-
-  self->privileged = privileged;
-
-  if (!self->privilege_enabled)
-    return;
-
-  if (privileged) {
-    if (self->privilege_preset == KGX_PARTICLE_FIREWORKS) {
-      /* FIREWORKS preset — use the burst system (can coexist with process particles). */
-      self->firework_privilege = TRUE;
-      if (!self->firework_timeout)
-        self->firework_timeout = g_timeout_add (50, firework_fire, self);
-    } else if (!self->ambient_active) {
-      /* Non-FIREWORKS preset — take over the process particle system.
-       * Ambient has higher priority, so skip if settings page is open. */
-      self->stashed_preset  = self->process_preset;
-      self->stashed_color   = self->process_color;
-      self->stashed_reverse = self->process_reverse;
-      self->has_stashed     = TRUE;
-      GdkRGBA color;
-      if (self->privilege_color && self->privilege_color[0])
-        gdk_rgba_parse (&color, self->privilege_color);
-      else
-        color = (GdkRGBA) { 0.85f, 0.25f, 0.65f, 1.0f };
-      color.alpha = 1.0f;
-      kgx_edge_set_process_particle (self, self->privilege_preset,
-                                     &color, FALSE);
-    }
-  } else {
-    if (self->firework_privilege) {
-      /* Was using burst system — stop it. */
-      self->firework_privilege = FALSE;
-      if (self->process_preset != KGX_PARTICLE_FIREWORKS) {
-        if (self->firework_timeout) {
-          g_source_remove (self->firework_timeout);
-          self->firework_timeout = 0;
-        }
-        for (int i = 0; i < MAX_BURSTS; i++) {
-          if (self->burst_timeout[i]) {
-            g_source_remove (self->burst_timeout[i]);
-            self->burst_timeout[i] = 0;
-          }
-        }
-      }
-    } else if (self->has_stashed) {
-      /* Was using process particle system — restore stashed process state. */
-      self->has_stashed = FALSE;
-      kgx_edge_set_process_particle (self, self->stashed_preset,
-                                     &self->stashed_color,
-                                     self->stashed_reverse);
-    }
-  }
 }
 
 
@@ -1743,20 +1729,28 @@ void
 kgx_parse_process_config (const char        *value,
                            char             **glass_color,
                            KgxParticlePreset *preset,
-                           gboolean          *reverse,
-                           GdkRGBA           *particle_color)
+                           int               *reverse,
+                           GdkRGBA           *particle_color,
+                           int               *shape_override,
+                           int               *gap_override,
+                           int               *speed_override,
+                           int               *thk_override)
 {
   g_auto (GStrv) parts = NULL;
 
   if (glass_color)    *glass_color = NULL;
   if (preset)         *preset = KGX_PARTICLE_NONE;
-  if (reverse)        *reverse = FALSE;
+  if (reverse)        *reverse = 0;
   if (particle_color) *particle_color = (GdkRGBA) { 0.5f, 0.5f, 0.5f, 1.0f };
+  if (shape_override) *shape_override = -1;
+  if (gap_override)   *gap_override = -1;
+  if (speed_override) *speed_override = 0;
+  if (thk_override)   *thk_override = 0;
 
   if (!value || !value[0])
     return;
 
-  parts = g_strsplit (value, ";", 5);
+  parts = g_strsplit (value, ";", 9);
   int n = g_strv_length (parts);
 
   if (n >= 1 && glass_color)
@@ -1766,10 +1760,22 @@ kgx_parse_process_config (const char        *value,
     *preset = preset_from_string (parts[1]);
 
   if (n >= 3 && reverse)
-    *reverse = g_str_equal (parts[2], "1");
+    *reverse = atoi (parts[2]);
 
   if (n >= 4 && particle_color)
     gdk_rgba_parse (particle_color, parts[3]);
+
+  if (n >= 5 && shape_override)
+    *shape_override = atoi (parts[4]);
+
+  if (n >= 6 && gap_override)
+    *gap_override = atoi (parts[5]);
+
+  if (n >= 7 && speed_override)
+    *speed_override = atoi (parts[6]);
+
+  if (n >= 8 && thk_override)
+    *thk_override = atoi (parts[7]);
 }
 
 
@@ -1806,7 +1812,11 @@ process_particle_done_cb (KgxEdge *self)
     kgx_edge_set_process_particle (self,
                                    self->pending_preset,
                                    &self->pending_color,
-                                   self->pending_reverse);
+                                   self->pending_reverse,
+                                   self->pending_shape_override,
+                                   self->pending_gap_override,
+                                   self->pending_speed_override,
+                                   self->pending_thk_override);
     return;
   }
 
@@ -1815,6 +1825,15 @@ process_particle_done_cb (KgxEdge *self)
   if (self->process_preset == KGX_PARTICLE_ROTATE ||
       self->process_preset == KGX_PARTICLE_PING_PONG) {
     self->process_tune_snap = *resolve_tunables (self, self->process_preset);
+    /* Re-apply per-app overrides after re-snapshot */
+    if (self->process_shape_override >= 0)
+      self->process_tune_snap.shape = self->process_shape_override;
+    if (self->process_gap_override >= 0)
+      self->process_tune_snap.gap = self->process_gap_override;
+    if (self->process_speed_override > 0)
+      self->process_tune_snap.speed = self->process_speed_override / 100.0;
+    if (self->process_thk_override > 0)
+      self->process_tune_snap.thickness = self->process_thk_override;
     self->process_start_us = g_get_monotonic_time ();
     adw_animation_reset (self->process_anim);
     adw_animation_play (self->process_anim);
@@ -1830,7 +1849,11 @@ void
 kgx_edge_set_process_particle (KgxEdge          *self,
                                KgxParticlePreset  preset,
                                const GdkRGBA     *color,
-                               gboolean           reverse)
+                               int                reverse,
+                               int                shape_override,
+                               int                gap_override,
+                               int                speed_override,
+                               int                thk_override)
 {
   g_return_if_fail (KGX_IS_EDGE (self));
 
@@ -1847,6 +1870,10 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     self->pending_change = TRUE;
     self->pending_preset = preset;
     self->pending_reverse = reverse;
+    self->pending_shape_override = shape_override;
+    self->pending_gap_override = gap_override;
+    self->pending_speed_override = speed_override;
+    self->pending_thk_override = thk_override;
     if (color)
       self->pending_color = *color;
     else
@@ -1856,7 +1883,18 @@ kgx_edge_set_process_particle (KgxEdge          *self,
 
   self->pending_change = FALSE;
   self->process_preset = preset;
-  self->process_reverse = reverse;
+  self->process_shape_override = shape_override;
+  self->process_gap_override = gap_override;
+  self->process_speed_override = speed_override;
+  self->process_thk_override = thk_override;
+
+  /* Resolve reverse mode: 0=forward, 1=reverse, 2=alternating */
+  if (reverse == 2) {
+    self->process_reverse = self->process_reverse_toggle;
+    self->process_reverse_toggle = !self->process_reverse_toggle;
+  } else {
+    self->process_reverse = (reverse == 1);
+  }
 
   if (color)
     self->process_color = *color;
@@ -1866,16 +1904,25 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     self->process_start_us = 0;
     if (self->process_anim)
       adw_animation_reset (self->process_anim);
-    /* Stop firework cycle if it was running for a process FIREWORKS preset */
-    if (self->firework_timeout && !self->firework_privilege) {
+    /* Stop firework cycle and all in-flight bursts */
+    if (self->firework_timeout) {
       g_source_remove (self->firework_timeout);
       self->firework_timeout = 0;
+    }
+    for (int i = 0; i < MAX_BURSTS; i++) {
+      if (self->burst_timeout[i]) {
+        g_source_remove (self->burst_timeout[i]);
+        self->burst_timeout[i] = 0;
+      }
+      self->burst_progress[i] = -1.0;
+      if (self->burst_anim[i])
+        adw_animation_reset (self->burst_anim[i]);
     }
     gtk_widget_queue_draw (GTK_WIDGET (self));
     return;
   }
 
-  /* Fireworks and Ambient reuse the burst/privilege animation system */
+  /* Fireworks and Ambient reuse the burst animation system */
   if (preset == KGX_PARTICLE_FIREWORKS || preset == KGX_PARTICLE_AMBIENT) {
     if (gtk_widget_get_mapped (GTK_WIDGET (self)) && !self->firework_timeout) {
       self->burst_data[0].index = 0;
@@ -1901,6 +1948,16 @@ kgx_edge_set_process_particle (KgxEdge          *self,
   /* Snapshot tunables at animation start so in-flight rendering is
    * decoupled from live state.  Re-snapshotted on loop restart. */
   self->process_tune_snap = *resolve_tunables (self, preset);
+
+  /* Apply per-app overrides on top of the snapshot */
+  if (shape_override >= 0)
+    self->process_tune_snap.shape = shape_override;
+  if (gap_override >= 0)
+    self->process_tune_snap.gap = gap_override;
+  if (speed_override > 0)
+    self->process_tune_snap.speed = speed_override / 100.0;
+  if (thk_override > 0)
+    self->process_tune_snap.thickness = thk_override;
 
   /* Always update easing and duration — speed may have changed */
   adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),

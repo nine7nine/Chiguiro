@@ -63,9 +63,7 @@ struct _KgxSettings {
   gboolean              edge_overscroll;
   char                 *edge_overscroll_color;
   int                   edge_overscroll_style;
-  gboolean              edge_privilege;
-  char                 *edge_privilege_color;
-  int                   edge_privilege_preset;
+  int                   edge_overscroll_reverse;
   gboolean              edge_settings_animation;
   int                   edge_burst_count_ambient;
   double                edge_burst_spread_ambient;
@@ -73,8 +71,6 @@ struct _KgxSettings {
   KgxParticleTunables   edge_preset[N_PRESETS];
   int                   edge_burst_count;
   double                edge_burst_spread;
-  int                   edge_privilege_direction;
-
   GHashTable           *process_glass_colors;  /* string→string */
 
   KgxLiveryManager     *livery_manager;
@@ -113,9 +109,7 @@ enum {
   PROP_EDGE_OVERSCROLL,
   PROP_EDGE_OVERSCROLL_COLOR,
   PROP_EDGE_OVERSCROLL_STYLE,
-  PROP_EDGE_PRIVILEGE,
-  PROP_EDGE_PRIVILEGE_COLOR,
-  PROP_EDGE_PRIVILEGE_PRESET,
+  PROP_EDGE_OVERSCROLL_REVERSE,
   PROP_EDGE_SETTINGS_ANIMATION,
   PROP_EDGE_BURST_COUNT_AMBIENT,
   PROP_EDGE_BURST_SPREAD_AMBIENT,
@@ -126,7 +120,6 @@ enum {
   /* Non-tunable edge props that remain explicit */
   PROP_EDGE_BURST_COUNT = PROP_EDGE_PRESET_BASE + N_PRESETS * N_TUNE_FIELDS,
   PROP_EDGE_BURST_SPREAD,
-  PROP_EDGE_PRIVILEGE_DIRECTION,
   LAST_PROP
 };
 static GParamSpec *pspecs[LAST_PROP] = { NULL, };
@@ -135,10 +128,10 @@ static GParamSpec *pspecs[LAST_PROP] = { NULL, };
 static const char * const tune_names[N_TUNE_FIELDS] = {
   "speed", "thickness", "tail-length", "pulse-depth", "pulse-speed",
   "env-attack", "env-release", "release-mode", "shape",
-  "env-curve", "thk-attack", "thk-release", "thk-curve"
+  "env-curve", "gap", "thk-attack", "thk-release", "thk-release-mode", "thk-curve"
 };
 static const char * const preset_suffixes[N_PRESETS] = {
-  "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient"
+  "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient", "scroll2"
 };
 
 /* Tunable field metadata for table-driven property installation */
@@ -154,11 +147,13 @@ static const struct {
   [TUNE_PULSE_SPEED]  = { 0.1, 5.0, 1.0, 0.8, 0, 0, 0, 0, FALSE },
   [TUNE_ENV_ATTACK]   = { 0.0, 0.5, 0.2, 0.2, 0, 0, 0, 0, FALSE },
   [TUNE_ENV_RELEASE]  = { 0.0, 0.5, 0.3, 0.3, 0, 0, 0, 0, FALSE },
-  [TUNE_RELEASE_MODE] = { 0,   0,   0,   0,   0, 1, 0, 0, TRUE },
+  [TUNE_RELEASE_MODE] = { 0,   0,   0,   0,   0, 3, 0, 0, TRUE },
   [TUNE_SHAPE]        = { 0,   0,   0,   0,   0, 3, 0, 0, TRUE },
   [TUNE_ENV_CURVE]    = { 0,   0,   0,   0,   1, 3, 2, 2, TRUE },
+  [TUNE_GAP]          = { 0,   0,   0,   0,   0, 1, 0, 0, TRUE },
   [TUNE_THK_ATTACK]   = { 0.0, 0.5, 0.0, 0.0, 0, 0, 0, 0, FALSE },
   [TUNE_THK_RELEASE]  = { 0.0, 0.5, 0.0, 0.0, 0, 0, 0, 0, FALSE },
+  [TUNE_THK_RELEASE_MODE] = { 0, 0, 0, 0,    0, 3, 0, 0, TRUE },
   [TUNE_THK_CURVE]    = { 0,   0,   0,   0,   1, 3, 2, 2, TRUE },
 };
 
@@ -200,11 +195,13 @@ static inline int
 get_tunable_int_field (const KgxParticleTunables *t, int field)
 {
   switch (field) {
-  case TUNE_THICKNESS:    return t->thickness;
-  case TUNE_RELEASE_MODE: return t->release_mode;
-  case TUNE_SHAPE:        return t->shape;
-  case TUNE_ENV_CURVE:    return t->env_curve;
-  case TUNE_THK_CURVE:    return t->thk_curve;
+  case TUNE_THICKNESS:        return t->thickness;
+  case TUNE_RELEASE_MODE:     return t->release_mode;
+  case TUNE_SHAPE:            return t->shape;
+  case TUNE_ENV_CURVE:        return t->env_curve;
+  case TUNE_GAP:              return t->gap;
+  case TUNE_THK_RELEASE_MODE: return t->thk_release_mode;
+  case TUNE_THK_CURVE:        return t->thk_curve;
   default:                return 0;
   }
 }
@@ -213,11 +210,13 @@ static inline void
 set_tunable_int_field (KgxParticleTunables *t, int field, int v)
 {
   switch (field) {
-  case TUNE_THICKNESS:    t->thickness    = v; break;
-  case TUNE_RELEASE_MODE: t->release_mode = v; break;
-  case TUNE_SHAPE:        t->shape        = v; break;
-  case TUNE_ENV_CURVE:    t->env_curve    = v; break;
-  case TUNE_THK_CURVE:    t->thk_curve    = v; break;
+  case TUNE_THICKNESS:        t->thickness        = v; break;
+  case TUNE_RELEASE_MODE:     t->release_mode     = v; break;
+  case TUNE_SHAPE:            t->shape            = v; break;
+  case TUNE_ENV_CURVE:        t->env_curve        = v; break;
+  case TUNE_GAP:              t->gap              = v; break;
+  case TUNE_THK_RELEASE_MODE: t->thk_release_mode = v; break;
+  case TUNE_THK_CURVE:        t->thk_curve        = v; break;
   default: break;
   }
 }
@@ -237,7 +236,6 @@ kgx_settings_dispose (GObject *object)
   g_clear_pointer (&self->glass_color, g_free);
   g_clear_pointer (&self->accent_color, g_free);
   g_clear_pointer (&self->edge_overscroll_color, g_free);
-  g_clear_pointer (&self->edge_privilege_color, g_free);
 
   G_OBJECT_CLASS (kgx_settings_parent_class)->dispose (object);
 }
@@ -431,19 +429,11 @@ kgx_settings_set_property (GObject      *object,
         }
       }
       break;
-    case PROP_EDGE_PRIVILEGE:
-      kgx_set_boolean_prop (object, pspec, &self->edge_privilege, value);
-      break;
-    case PROP_EDGE_PRIVILEGE_COLOR:
-      g_free (self->edge_privilege_color);
-      self->edge_privilege_color = g_value_dup_string (value);
-      g_object_notify_by_pspec (object, pspec);
-      break;
-    case PROP_EDGE_PRIVILEGE_PRESET:
+    case PROP_EDGE_OVERSCROLL_REVERSE:
       {
-        int new_value = CLAMP (g_value_get_int (value), 1, 5);
-        if (new_value != self->edge_privilege_preset) {
-          self->edge_privilege_preset = new_value;
+        int new_value = CLAMP (g_value_get_int (value), 0, 2);
+        if (new_value != self->edge_overscroll_reverse) {
+          self->edge_overscroll_reverse = new_value;
           g_object_notify_by_pspec (object, pspec);
         }
       }
@@ -483,15 +473,6 @@ kgx_settings_set_property (GObject      *object,
         double new_value = CLAMP (g_value_get_double (value), 0.5, 5.0);
         if (!G_APPROX_VALUE (self->edge_burst_spread, new_value, DBL_EPSILON)) {
           self->edge_burst_spread = new_value;
-          g_object_notify_by_pspec (object, pspec);
-        }
-      }
-      break;
-    case PROP_EDGE_PRIVILEGE_DIRECTION:
-      {
-        int new_value = CLAMP (g_value_get_int (value), 0, 1);
-        if (new_value != self->edge_privilege_direction) {
-          self->edge_privilege_direction = new_value;
           g_object_notify_by_pspec (object, pspec);
         }
       }
@@ -607,14 +588,8 @@ kgx_settings_get_property (GObject    *object,
     case PROP_EDGE_OVERSCROLL_STYLE:
       g_value_set_int (value, self->edge_overscroll_style);
       break;
-    case PROP_EDGE_PRIVILEGE:
-      g_value_set_boolean (value, self->edge_privilege);
-      break;
-    case PROP_EDGE_PRIVILEGE_COLOR:
-      g_value_set_string (value, self->edge_privilege_color ? self->edge_privilege_color : "#d940a6");
-      break;
-    case PROP_EDGE_PRIVILEGE_PRESET:
-      g_value_set_int (value, self->edge_privilege_preset);
+    case PROP_EDGE_OVERSCROLL_REVERSE:
+      g_value_set_int (value, self->edge_overscroll_reverse);
       break;
     case PROP_EDGE_SETTINGS_ANIMATION:
       g_value_set_boolean (value, self->edge_settings_animation);
@@ -630,9 +605,6 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_EDGE_BURST_SPREAD:
       g_value_set_double (value, self->edge_burst_spread);
-      break;
-    case PROP_EDGE_PRIVILEGE_DIRECTION:
-      g_value_set_int (value, self->edge_privilege_direction);
       break;
     KGX_INVALID_PROP (object, property_id, pspec);
   }
@@ -802,19 +774,9 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                       0, 1, 0,
                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_EDGE_PRIVILEGE] =
-    g_param_spec_boolean ("edge-privilege", NULL, NULL,
-                          TRUE,
-                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
-
-  pspecs[PROP_EDGE_PRIVILEGE_COLOR] =
-    g_param_spec_string ("edge-privilege-color", NULL, NULL,
-                         "#d940a6",
-                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
-  pspecs[PROP_EDGE_PRIVILEGE_PRESET] =
-    g_param_spec_int ("edge-privilege-preset", NULL, NULL,
-                      1, 5, 1,
+  pspecs[PROP_EDGE_OVERSCROLL_REVERSE] =
+    g_param_spec_int ("edge-overscroll-reverse", NULL, NULL,
+                      0, 2, 0,
                       G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   pspecs[PROP_EDGE_SETTINGS_ANIMATION] =
@@ -881,11 +843,6 @@ kgx_settings_class_init (KgxSettingsClass *klass)
     g_param_spec_double ("edge-burst-spread", NULL, NULL,
                          0.5, 5.0, 1.0,
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
-
-  pspecs[PROP_EDGE_PRIVILEGE_DIRECTION] =
-    g_param_spec_int ("edge-privilege-direction", NULL, NULL,
-                      0, 1, 0,
-                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
 
@@ -1128,14 +1085,8 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "edge-overscroll-style",
                    self, "edge-overscroll-style",
                    G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-privilege",
-                   self, "edge-privilege",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-privilege-color",
-                   self, "edge-privilege-color",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-privilege-preset",
-                   self, "edge-privilege-preset",
+  g_settings_bind (self->settings, "edge-overscroll-reverse",
+                   self, "edge-overscroll-reverse",
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "edge-settings-animation",
                    self, "edge-settings-animation",
@@ -1165,9 +1116,6 @@ kgx_settings_init (KgxSettings *self)
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "edge-burst-spread",
                    self, "edge-burst-spread",
-                   G_SETTINGS_BIND_DEFAULT);
-  g_settings_bind (self->settings, "edge-privilege-direction",
-                   self, "edge-privilege-direction",
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind_with_mapping (self->settings, "custom-liveries",
                                 self->livery_manager, "custom-liveries",
@@ -1413,12 +1361,33 @@ const char *
 kgx_settings_lookup_process_color (KgxSettings *self,
                                    const char  *process_name)
 {
+  GHashTableIter iter;
+  gpointer key, val;
+
   g_return_val_if_fail (KGX_IS_SETTINGS (self), NULL);
 
   if (!self->process_glass_colors || !process_name)
     return NULL;
 
-  return g_hash_table_lookup (self->process_glass_colors, process_name);
+  /* Try exact match first (fast path). */
+  val = g_hash_table_lookup (self->process_glass_colors, process_name);
+  if (val)
+    return val;
+
+  /* Check comma-separated keys (e.g. "su, sudo" matches "su" or "sudo"). */
+  g_hash_table_iter_init (&iter, self->process_glass_colors);
+  while (g_hash_table_iter_next (&iter, &key, &val)) {
+    if (strchr ((const char *) key, ',')) {
+      g_auto (GStrv) parts = g_strsplit ((const char *) key, ",", -1);
+      for (int i = 0; parts[i]; i++) {
+        g_strstrip (parts[i]);
+        if (g_str_equal (parts[i], process_name))
+          return val;
+      }
+    }
+  }
+
+  return NULL;
 }
 
 

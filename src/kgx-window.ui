@@ -215,18 +215,8 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
-            <binding name="privilege-enabled">
-              <lookup name="edge-privilege">
-                <lookup name="settings">KgxWindow</lookup>
-              </lookup>
-            </binding>
-            <binding name="privilege-color">
-              <lookup name="edge-privilege-color">
-                <lookup name="settings">KgxWindow</lookup>
-              </lookup>
-            </binding>
-            <binding name="privilege-preset">
-              <lookup name="edge-privilege-preset">
+            <binding name="overscroll-reverse">
+              <lookup name="edge-overscroll-reverse">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
@@ -530,8 +520,18 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+            <binding name="gap">
+              <lookup name="edge-gap">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
             <binding name="env-curve-fireworks">
               <lookup name="edge-env-curve-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="gap-fireworks">
+              <lookup name="edge-gap-fireworks">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
@@ -540,8 +540,18 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+            <binding name="gap-corners">
+              <lookup name="edge-gap-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
             <binding name="env-curve-pulse-out">
               <lookup name="edge-env-curve-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="gap-pulse-out">
+              <lookup name="edge-gap-pulse-out">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
@@ -550,8 +560,18 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+            <binding name="gap-rotate">
+              <lookup name="edge-gap-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
             <binding name="env-curve-ping-pong">
               <lookup name="edge-env-curve-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="gap-ping-pong">
+              <lookup name="edge-gap-ping-pong">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
@@ -602,6 +622,11 @@
             </binding>
             <binding name="env-curve-ambient">
               <lookup name="edge-env-curve-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="gap-ambient">
+              <lookup name="edge-gap-ambient">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
@@ -675,6 +700,41 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+            <binding name="thk-release-mode">
+              <lookup name="edge-thk-release-mode">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-fireworks">
+              <lookup name="edge-thk-release-mode-fireworks">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-corners">
+              <lookup name="edge-thk-release-mode-corners">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-pulse-out">
+              <lookup name="edge-thk-release-mode-pulse-out">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-rotate">
+              <lookup name="edge-thk-release-mode-rotate">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-ping-pong">
+              <lookup name="edge-thk-release-mode-ping-pong">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-ambient">
+              <lookup name="edge-thk-release-mode-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
             <binding name="thk-curve">
               <lookup name="edge-thk-curve">
                 <lookup name="settings">KgxWindow</lookup>
@@ -707,6 +767,81 @@
             </binding>
             <binding name="thk-curve-ambient">
               <lookup name="edge-thk-curve-ambient">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="speed-scroll2">
+              <lookup name="edge-speed-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thickness-scroll2">
+              <lookup name="edge-thickness-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="tail-length-scroll2">
+              <lookup name="edge-tail-length-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-depth-scroll2">
+              <lookup name="edge-pulse-depth-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="pulse-speed-scroll2">
+              <lookup name="edge-pulse-speed-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-attack-scroll2">
+              <lookup name="edge-env-attack-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-release-scroll2">
+              <lookup name="edge-env-release-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="release-mode-scroll2">
+              <lookup name="edge-release-mode-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="shape-scroll2">
+              <lookup name="edge-shape-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="env-curve-scroll2">
+              <lookup name="edge-env-curve-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="gap-scroll2">
+              <lookup name="edge-gap-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-attack-scroll2">
+              <lookup name="edge-thk-attack-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-scroll2">
+              <lookup name="edge-thk-release-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-release-mode-scroll2">
+              <lookup name="edge-thk-release-mode-scroll2">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="thk-curve-scroll2">
+              <lookup name="edge-thk-curve-scroll2">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>

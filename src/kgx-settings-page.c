@@ -37,11 +37,11 @@ enum {
   COL_SPEED, COL_THICKNESS, COL_TAIL, COL_PULSE_DEPTH, COL_PULSE_SPEED,
   COL_ENV_ATTACK, COL_ENV_RELEASE, COL_RELEASE_MODE, COL_SHAPE,
   COL_BURST_COUNT, COL_BURST_SPREAD,
-  COL_ENV_CURVE, COL_THK_ATTACK, COL_THK_RELEASE, COL_THK_CURVE,
+  COL_ENV_CURVE, COL_GAP, COL_THK_ATTACK, COL_THK_RELEASE, COL_THK_RELEASE_MODE, COL_THK_CURVE,
   N_TUNE_COLS
 };
 
-typedef enum { BIND_DIRECT, BIND_PERCENT, BIND_INT_BOOL, BIND_SHAPE } BindKind;
+typedef enum { BIND_DIRECT, BIND_PERCENT, BIND_INT_BOOL, BIND_SHAPE, BIND_RELEASE_MODE, BIND_THK_RELEASE_MODE, BIND_GAP, BIND_CURVE } BindKind;
 typedef enum { WID_SPIN, WID_TOGGLE, WID_BUTTON } WidgetKind;
 
 typedef struct {
@@ -58,22 +58,24 @@ typedef struct {
 static const TuneColDesc tune_cols[N_TUNE_COLS] = {
   [COL_SPEED]        = {  1, WID_SPIN,   BIND_PERCENT,  "speed",        1, 10, 300, 10, NULL,               FALSE },
   [COL_THICKNESS]    = {  2, WID_SPIN,   BIND_DIRECT,   "thickness",    0,  2,  40,  1, NULL,               FALSE },
-  [COL_TAIL]         = {  3, WID_SPIN,   BIND_PERCENT,  "tail-length",  0, 10, 300, 10, NULL,               FALSE },
-  [COL_PULSE_DEPTH]  = {  4, WID_SPIN,   BIND_PERCENT,  "pulse-depth",  0,  0, 100,  5, NULL,               FALSE },
-  [COL_PULSE_SPEED]  = {  5, WID_SPIN,   BIND_PERCENT,  "pulse-speed",  1, 10, 500, 10, NULL,               FALSE },
-  [COL_ENV_ATTACK]   = {  6, WID_SPIN,   BIND_PERCENT,  "env-attack",   0,  0,  50,  5, "Attack",           FALSE },
-  [COL_ENV_RELEASE]  = {  7, WID_SPIN,   BIND_PERCENT,  "env-release",  0,  0,  50,  5, "Release",          FALSE },
-  [COL_RELEASE_MODE] = {  8, WID_TOGGLE, BIND_INT_BOOL, "release-mode", 0,  0,   0,  0, "Tail retraction on release", FALSE },
-  [COL_SHAPE]        = {  9, WID_BUTTON, BIND_SHAPE,    "shape",        0,  0,   0,  0, "Particle shape",   FALSE },
-  [COL_BURST_COUNT]  = { 10, WID_SPIN,   BIND_DIRECT,   "burst-count",  0,  1,   8,  1, "Burst Count",      TRUE },
-  [COL_BURST_SPREAD] = { 11, WID_SPIN,   BIND_PERCENT,  "burst-spread", 0, 50, 500, 10, "Burst Spread",     TRUE },
-  [COL_ENV_CURVE]    = { 12, WID_SPIN,   BIND_DIRECT,   "env-curve",    0,  1,   3,  1, "Envelope Curve",   FALSE },
-  [COL_THK_ATTACK]   = { 13, WID_SPIN,   BIND_PERCENT,  "thk-attack",   0,  0,  50,  5, "Thickness Attack", FALSE },
-  [COL_THK_RELEASE]  = { 14, WID_SPIN,   BIND_PERCENT,  "thk-release",  0,  0,  50,  5, "Thickness Release",FALSE },
-  [COL_THK_CURVE]    = { 15, WID_SPIN,   BIND_DIRECT,   "thk-curve",    0,  1,   3,  1, "Thickness Curve",  FALSE },
+  [COL_GAP]          = {  3, WID_BUTTON, BIND_GAP,      "gap",          0,  0,   0,  0, "Block gap",        FALSE },
+  [COL_TAIL]         = {  4, WID_SPIN,   BIND_PERCENT,  "tail-length",  0, 10, 300, 10, NULL,               FALSE },
+  [COL_PULSE_DEPTH]  = {  5, WID_SPIN,   BIND_PERCENT,  "pulse-depth",  0,  0, 100,  5, NULL,               FALSE },
+  [COL_PULSE_SPEED]  = {  6, WID_SPIN,   BIND_PERCENT,  "pulse-speed",  1, 10, 500, 10, NULL,               FALSE },
+  [COL_ENV_ATTACK]   = {  7, WID_SPIN,   BIND_PERCENT,  "env-attack",   0,  0,  50,  5, "Attack",           FALSE },
+  [COL_ENV_RELEASE]  = {  8, WID_SPIN,   BIND_PERCENT,  "env-release",  0,  0,  50,  5, "Release",          FALSE },
+  [COL_RELEASE_MODE] = {  9, WID_BUTTON, BIND_RELEASE_MODE, "release-mode", 0,  0,   0,  0, "Release mode: U/R/S", FALSE },
+  [COL_SHAPE]        = { 10, WID_BUTTON, BIND_SHAPE,    "shape",        0,  0,   0,  0, "Particle shape",   FALSE },
+  [COL_BURST_COUNT]  = { 11, WID_SPIN,   BIND_DIRECT,   "burst-count",  0,  1,   8,  1, "Burst Count",      TRUE },
+  [COL_BURST_SPREAD] = { 12, WID_SPIN,   BIND_PERCENT,  "burst-spread", 0, 50, 500, 10, "Burst Spread",     TRUE },
+  [COL_ENV_CURVE]    = { 13, WID_BUTTON, BIND_CURVE,    "env-curve",    0,  0,   0,  0, "Envelope Curve",   FALSE },
+  [COL_THK_ATTACK]   = { 14, WID_SPIN,   BIND_PERCENT,  "thk-attack",   0,  0,  50,  5, "Thickness Attack", FALSE },
+  [COL_THK_RELEASE]  = { 15, WID_SPIN,   BIND_PERCENT,  "thk-release",  0,  0,  50,  5, "Thickness Release",FALSE },
+  [COL_THK_RELEASE_MODE] = { 16, WID_BUTTON, BIND_THK_RELEASE_MODE, "thk-release-mode", 0, 0, 0, 0, "Thickness release mode", FALSE },
+  [COL_THK_CURVE]    = { 17, WID_BUTTON, BIND_CURVE,    "thk-curve",    0,  0,   0,  0, "Thickness Curve",  FALSE },
 };
 
-#define N_PRESET_ROWS 7
+#define N_PRESET_ROWS 8
 
 typedef struct {
   const char *display_name;
@@ -86,10 +88,11 @@ static const PresetRowDesc preset_rows[N_PRESET_ROWS] = {
   { "Ambient",    "preset-ambient",    "ambient",   TRUE  },
   { "Corners",    "preset-corners",    "corners",   FALSE },
   { "Fireworks",  "preset-fireworks",  "fireworks", TRUE  },
-  { "Overscroll", "preset-overscroll",  NULL,        FALSE },
   { "Ping-Pong",  "preset-ping-pong",  "ping-pong", FALSE },
   { "Pulse Out",  "preset-pulse-out",  "pulse-out", FALSE },
   { "Rotate",     "preset-rotate",     "rotate",    FALSE },
+  { "Scroll 1",   "preset-overscroll",  NULL,        FALSE },
+  { "Scroll 2",   "preset-scroll2",    "scroll2",   FALSE },
 };
 
 #define APP_GLASS_SLOTS 12
@@ -115,9 +118,8 @@ struct _KgxSettingsPage {
   GtkWidget            *scrollback;
   GtkWidget            *overscroll_switch;
   GtkWidget            *overscroll_color_btn;
-  GtkWidget            *privilege_switch;
-  GtkWidget            *privilege_color_btn;
-  GtkWidget            *privilege_preset_btn;
+  GtkWidget            *overscroll_preset_btn;
+  GtkWidget            *overscroll_reverse_btn;
   GtkWidget            *ambient_switch;
   GtkWidget            *tunables_grid;
   GtkWidget            *tune_widgets[N_PRESET_ROWS][N_TUNE_COLS];
@@ -129,8 +131,15 @@ struct _KgxSettingsPage {
   GtkWidget            *ag_presets[APP_GLASS_SLOTS];
   GtkWidget            *ag_reverses[APP_GLASS_SLOTS];
   GtkWidget            *ag_pcolors[APP_GLASS_SLOTS];
+  GtkWidget            *ag_shapes[APP_GLASS_SLOTS];
+  GtkWidget            *ag_gaps[APP_GLASS_SLOTS];
+  GtkWidget            *ag_speeds[APP_GLASS_SLOTS];
+  GtkWidget            *ag_thks[APP_GLASS_SLOTS];
   GtkWidget            *logo_picture;
+  GtkWidget            *version_label;
   GtkWidget            *page_title;
+  GtkWidget            *page_dots;
+  GtkWidget            *dot_buttons[4];
   AdwCarousel          *carousel;
   KgxSprite            *sprite;
 
@@ -141,7 +150,11 @@ struct _KgxSettingsPage {
 G_DEFINE_TYPE (KgxSettingsPage, kgx_settings_page, ADW_TYPE_BIN)
 
 static void app_glass_load (KgxSettingsPage *self);
+static void app_glass_save (KgxSettingsPage *self);
 static void sync_all_shapes (KgxSettingsPage *self);
+static void sync_all_release_modes (KgxSettingsPage *self);
+static void sync_all_gaps (KgxSettingsPage *self);
+static void sync_all_curves (KgxSettingsPage *self);
 
 
 enum {
@@ -176,13 +189,30 @@ kgx_settings_page_dispose (GObject *object)
     if (self->ag_colors[i])   g_signal_handlers_disconnect_by_data (self->ag_colors[i], self);
     if (self->ag_presets[i])  g_signal_handlers_disconnect_by_data (self->ag_presets[i], self);
     if (self->ag_reverses[i]) g_signal_handlers_disconnect_by_data (self->ag_reverses[i], self);
+    if (self->ag_shapes[i])   g_signal_handlers_disconnect_by_data (self->ag_shapes[i], self);
+    if (self->ag_gaps[i])     g_signal_handlers_disconnect_by_data (self->ag_gaps[i], self);
+    if (self->ag_speeds[i])   g_signal_handlers_disconnect_by_data (self->ag_speeds[i], self);
+    if (self->ag_thks[i])     g_signal_handlers_disconnect_by_data (self->ag_thks[i], self);
     if (self->ag_pcolors[i])  g_signal_handlers_disconnect_by_data (self->ag_pcolors[i], self);
   }
 
-  /* Disconnect shape button click handlers */
+  if (self->overscroll_reverse_btn)
+    g_signal_handlers_disconnect_by_data (self->overscroll_reverse_btn, self);
+
+  /* Disconnect shape and release mode button click handlers */
   for (int r = 0; r < N_PRESET_ROWS; r++) {
     if (self->tune_widgets[r][COL_SHAPE])
       g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_SHAPE], self);
+    if (self->tune_widgets[r][COL_RELEASE_MODE])
+      g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_RELEASE_MODE], self);
+    if (self->tune_widgets[r][COL_THK_RELEASE_MODE])
+      g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_THK_RELEASE_MODE], self);
+    if (self->tune_widgets[r][COL_GAP])
+      g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_GAP], self);
+    if (self->tune_widgets[r][COL_ENV_CURVE])
+      g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_ENV_CURVE], self);
+    if (self->tune_widgets[r][COL_THK_CURVE])
+      g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_THK_CURVE], self);
   }
 
   /* settings_binds is a template child — disconnect but do NOT free */
@@ -210,6 +240,9 @@ kgx_settings_page_set_property (GObject      *object,
         g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_SETTINGS]);
         app_glass_load (self);
         sync_all_shapes (self);
+        sync_all_release_modes (self);
+        sync_all_gaps (self);
+        sync_all_curves (self);
       }
       break;
     default:
@@ -517,6 +550,210 @@ sync_all_shapes (KgxSettingsPage *self)
 }
 
 
+/* --- Release mode cycling buttons --- */
+/* Rls cycles U/R/S (3), T.Rls cycles U/R/S/G (4). */
+
+static const char *release_mode_labels[] = { "U", "R", "S", "G" };
+
+
+static void
+release_mode_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *prop_name = g_object_get_data (G_OBJECT (button), "settings-prop");
+  int n_modes = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button), "n-modes"));
+  int current = 0, next;
+  if (!prop_name || !self->settings || n_modes < 2)
+    return;
+
+  g_object_get (self->settings, prop_name, &current, NULL);
+  next = (current + 1) % n_modes;
+  g_object_set (self->settings, prop_name, next, NULL);
+  gtk_button_set_label (button, release_mode_labels[next]);
+}
+
+
+static void
+setup_release_mode_button (KgxSettingsPage *self,
+                           GtkWidget       *button,
+                           const char      *settings_prop,
+                           int              n_modes)
+{
+  g_object_set_data_full (G_OBJECT (button), "settings-prop",
+                          g_strdup (settings_prop), g_free);
+  g_object_set_data (G_OBJECT (button), "n-modes", GINT_TO_POINTER (n_modes));
+  g_signal_connect (button, "clicked",
+                    G_CALLBACK (release_mode_clicked_cb), self);
+}
+
+
+static void
+sync_release_mode_label (KgxSettingsPage *self,
+                         GtkWidget       *button,
+                         const char      *settings_prop)
+{
+  int current = 0;
+  if (!self->settings)
+    return;
+  g_object_get (self->settings, settings_prop, &current, NULL);
+  current = CLAMP (current, 0, 3);
+  gtk_button_set_label (GTK_BUTTON (button), release_mode_labels[current]);
+}
+
+
+static void
+sync_all_release_modes (KgxSettingsPage *self)
+{
+  static const int release_cols[] = { COL_RELEASE_MODE, COL_THK_RELEASE_MODE };
+  static const char *release_fields[] = { "release-mode", "thk-release-mode" };
+
+  for (int ci = 0; ci < (int) G_N_ELEMENTS (release_cols); ci++) {
+    int col = release_cols[ci];
+    for (int r = 0; r < N_PRESET_ROWS; r++) {
+      GtkWidget *w = self->tune_widgets[r][col];
+      if (!w)
+        continue;
+      const PresetRowDesc *pr = &preset_rows[r];
+      char prop[64];
+      if (pr->settings_suffix)
+        g_snprintf (prop, sizeof prop, "edge-%s-%s", release_fields[ci], pr->settings_suffix);
+      else
+        g_snprintf (prop, sizeof prop, "edge-%s", release_fields[ci]);
+      sync_release_mode_label (self, w, prop);
+    }
+  }
+}
+
+
+/* --- Gap cycling button: ▦ (gapped) / ▬ (solid) --- */
+
+static const char *gap_labels[] = { "\u25A1", "\u25A0" };  /* 0=□ gapped, 1=■ solid */
+
+static void
+gap_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *prop_name = g_object_get_data (G_OBJECT (button), "settings-prop");
+  gint current = 0, next;
+  if (!prop_name || !self->settings)
+    return;
+
+  g_object_get (self->settings, prop_name, &current, NULL);
+  next = current ? 0 : 1;
+  g_object_set (self->settings, prop_name, next, NULL);
+  gtk_button_set_label (button, gap_labels[next]);
+}
+
+static void
+setup_gap_button (KgxSettingsPage *self,
+                  GtkWidget       *button,
+                  const char      *settings_prop)
+{
+  g_object_set_data_full (G_OBJECT (button), "settings-prop",
+                          g_strdup (settings_prop), g_free);
+  g_signal_connect (button, "clicked",
+                    G_CALLBACK (gap_clicked_cb), self);
+}
+
+static void
+sync_gap_label (KgxSettingsPage *self,
+                GtkWidget       *button,
+                const char      *settings_prop)
+{
+  int current = 0;
+  if (!self->settings)
+    return;
+  g_object_get (self->settings, settings_prop, &current, NULL);
+  current = CLAMP (current, 0, 1);
+  gtk_button_set_label (GTK_BUTTON (button), gap_labels[current]);
+}
+
+static void
+sync_all_gaps (KgxSettingsPage *self)
+{
+  for (int r = 0; r < N_PRESET_ROWS; r++) {
+    GtkWidget *w = self->tune_widgets[r][COL_GAP];
+    if (!w)
+      continue;
+    const PresetRowDesc *pr = &preset_rows[r];
+    char prop[64];
+    if (pr->settings_suffix)
+      g_snprintf (prop, sizeof prop, "edge-gap-%s", pr->settings_suffix);
+    else
+      g_snprintf (prop, sizeof prop, "edge-gap");
+    sync_gap_label (self, w, prop);
+  }
+}
+
+
+/* --- Curve cycling button: ∪ (concave/1) / ╱ (linear/2) / ∩ (convex/3) --- */
+
+static const char *curve_labels[] = { "(", "(", "/", ")" };
+/* Index 0 unused (values are 1-based): 1=( concave, 2=/ linear, 3=) convex */
+
+static void
+curve_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *prop_name = g_object_get_data (G_OBJECT (button), "settings-prop");
+  gint current = 1, next;
+  if (!prop_name || !self->settings)
+    return;
+
+  g_object_get (self->settings, prop_name, &current, NULL);
+  next = (current % 3) + 1;  /* cycle 1→2→3→1 */
+  g_object_set (self->settings, prop_name, next, NULL);
+  gtk_button_set_label (button, curve_labels[next]);
+}
+
+static void
+setup_curve_button (KgxSettingsPage *self,
+                    GtkWidget       *button,
+                    const char      *settings_prop)
+{
+  g_object_set_data_full (G_OBJECT (button), "settings-prop",
+                          g_strdup (settings_prop), g_free);
+  g_signal_connect (button, "clicked",
+                    G_CALLBACK (curve_clicked_cb), self);
+}
+
+static void
+sync_curve_label (KgxSettingsPage *self,
+                  GtkWidget       *button,
+                  const char      *settings_prop)
+{
+  gint current = 2;
+  if (!self->settings)
+    return;
+  g_object_get (self->settings, settings_prop, &current, NULL);
+  current = CLAMP (current, 1, 3);
+  gtk_button_set_label (GTK_BUTTON (button), curve_labels[current]);
+}
+
+static void
+sync_all_curves (KgxSettingsPage *self)
+{
+  static const int curve_cols[] = { COL_ENV_CURVE, COL_THK_CURVE };
+  static const char *curve_fields[] = { "env-curve", "thk-curve" };
+
+  for (int ci = 0; ci < (int) G_N_ELEMENTS (curve_cols); ci++) {
+    int col = curve_cols[ci];
+    for (int r = 0; r < N_PRESET_ROWS; r++) {
+      GtkWidget *w = self->tune_widgets[r][col];
+      if (!w)
+        continue;
+      const PresetRowDesc *pr = &preset_rows[r];
+      char prop[64];
+      if (pr->settings_suffix)
+        g_snprintf (prop, sizeof prop, "edge-%s-%s", curve_fields[ci], pr->settings_suffix);
+      else
+        g_snprintf (prop, sizeof prop, "edge-%s", curve_fields[ci]);
+      sync_curve_label (self, w, prop);
+    }
+  }
+}
+
+
 static void
 build_tunables_grid (KgxSettingsPage *self)
 {
@@ -553,12 +790,6 @@ build_tunables_grid (KgxSettingsPage *self)
         break;
       }
       case WID_TOGGLE:
-        w = gtk_toggle_button_new ();
-        gtk_button_set_label (GTK_BUTTON (w), "R");
-        gtk_widget_add_css_class (w, "flat");
-        gtk_widget_add_css_class (w, "release-toggle");
-        if (td->tooltip)
-          gtk_widget_set_tooltip_text (w, td->tooltip);
         break;
       case WID_BUTTON:
         w = gtk_button_new_with_label ("\u25A0");
@@ -623,6 +854,23 @@ bind_tunables (KgxSettingsPage *self)
         break;
       case BIND_SHAPE:
         setup_shape_button (self, w, key);
+        gtk_widget_add_css_class (w, "tune-shape");
+        break;
+      case BIND_RELEASE_MODE:
+        setup_release_mode_button (self, w, key, 3);  /* U/R/S */
+        gtk_widget_add_css_class (w, "tune-rls");
+        break;
+      case BIND_THK_RELEASE_MODE:
+        setup_release_mode_button (self, w, key, 4);  /* U/R/S/G */
+        gtk_widget_add_css_class (w, "tune-thk-rls");
+        break;
+      case BIND_GAP:
+        setup_gap_button (self, w, key);
+        gtk_widget_add_css_class (w, "tune-gap");
+        break;
+      case BIND_CURVE:
+        setup_curve_button (self, w, key);
+        gtk_widget_add_css_class (w, "tune-curve");
         break;
       default:
         break;
@@ -632,7 +880,72 @@ bind_tunables (KgxSettingsPage *self)
 }
 
 
-/* App Glass grid columns: Name(0) Glass(1) Preset(2) Rev(3) Particle(4) Switch(5) */
+/* --- Reverse direction cycling button (▶/◀) --- */
+
+static const char *reverse_labels[] = { "\u25B6", "\u25C0", "\u25C6" };  /* ▶ ◀ ◆ */
+
+static void
+reverse_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *current = gtk_button_get_label (button);
+  int cur = 0;
+  if (current && g_str_equal (current, reverse_labels[1])) cur = 1;
+  else if (current && g_str_equal (current, reverse_labels[2])) cur = 2;
+  int next = (cur + 1) % 3;
+  gtk_button_set_label (button, reverse_labels[next]);
+  app_glass_save (self);
+}
+
+
+/* --- Per-app shape override cycling button --- */
+static const char *app_shape_labels[] = { "\u2014", "\u25A0", "\u25CF", "\u25C6", "\u25B6" };
+/* —(default/-1), ■(0), ●(1), ◆(2), ▶(3) */
+
+static void
+app_shape_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *current = gtk_button_get_label (button);
+  int cur = 0;
+  for (int k = 1; k < (int) G_N_ELEMENTS (app_shape_labels); k++) {
+    if (current && g_str_equal (current, app_shape_labels[k])) { cur = k; break; }
+  }
+  int next = (cur + 1) % (int) G_N_ELEMENTS (app_shape_labels);
+  gtk_button_set_label (button, app_shape_labels[next]);
+  app_glass_save (self);
+}
+
+
+/* --- Per-app gap override cycling button --- */
+static const char *app_gap_labels[] = { "\u2014", "\u25A1", "\u25A0" };
+/* —(default/-1), □(0=gapped), ■(1=solid) */
+
+static void
+app_gap_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  const char *current = gtk_button_get_label (button);
+  int cur = 0;
+  for (int k = 1; k < (int) G_N_ELEMENTS (app_gap_labels); k++) {
+    if (current && g_str_equal (current, app_gap_labels[k])) { cur = k; break; }
+  }
+  int next = (cur + 1) % (int) G_N_ELEMENTS (app_gap_labels);
+  gtk_button_set_label (button, app_gap_labels[next]);
+  app_glass_save (self);
+}
+
+
+/* --- Spin button value-changed handler for app glass overrides --- */
+static void
+app_glass_spin_changed (GtkSpinButton   *spin,
+                        KgxSettingsPage *self)
+{
+  app_glass_save (self);
+}
+
+
+/* App Glass grid columns: Name(0) Glass(1) Preset(2) Rev(3) Shape(4) Gap(5) Spd(6) Thk(7) P.Clr(8) Switch(9) */
 
 static GtkWidget *
 make_color_btn (void)
@@ -647,6 +960,20 @@ make_color_btn (void)
 }
 
 static void
+overscroll_reverse_clicked_cb (GtkButton *button, gpointer user_data)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
+  static const char *labels[] = { "\u25B6", "\u25C0", "\u21C6" };  /* ▶ ◀ ⇆ */
+  int cur = 0;
+  if (self->settings)
+    g_object_get (self->settings, "edge-overscroll-reverse", &cur, NULL);
+  int next = (cur + 1) % 3;
+  gtk_button_set_label (button, labels[next]);
+  if (self->settings)
+    g_object_set (self->settings, "edge-overscroll-reverse", next, NULL);
+}
+
+static void
 build_app_glass_grid (KgxSettingsPage *self)
 {
   GtkGrid *grid = GTK_GRID (self->app_glass_grid);
@@ -655,7 +982,9 @@ build_app_glass_grid (KgxSettingsPage *self)
   /* --- Row 0: Column headers --- */
   {
     static const struct { int col; const char *text; } hdrs[] = {
-      { 1, "Glass" }, { 2, "Preset" }, { 3, "Rev" }, { 4, "P.Clr" },
+      { 1, "Glass" }, { 2, "Preset" }, { 3, "Rev" },
+      { 4, "Shape" }, { 5, "Gap" }, { 6, "Spd" }, { 7, "Thk" },
+      { 8, "P.Clr" },
     };
     GtkWidget *title = gtk_label_new ("App Glass");
     gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
@@ -682,45 +1011,36 @@ build_app_glass_grid (KgxSettingsPage *self)
     self->overscroll_color_btn = make_color_btn ();
     gtk_grid_attach (grid, self->overscroll_color_btn, 1, row, 1, 1);
 
+    self->overscroll_preset_btn = gtk_drop_down_new (NULL, NULL);
+    gtk_widget_set_valign (self->overscroll_preset_btn, GTK_ALIGN_CENTER);
+    gtk_widget_add_css_class (self->overscroll_preset_btn, "glass-preset");
+    gtk_grid_attach (grid, self->overscroll_preset_btn, 2, row, 1, 1);
+
+    self->overscroll_reverse_btn = gtk_button_new_with_label ("\u25B6");
+    gtk_widget_set_valign (self->overscroll_reverse_btn, GTK_ALIGN_CENTER);
+    gtk_widget_set_tooltip_text (self->overscroll_reverse_btn, "Reverse direction");
+    gtk_widget_add_css_class (self->overscroll_reverse_btn, "glass-reverse");
+    gtk_widget_add_css_class (self->overscroll_reverse_btn, "flat");
+    gtk_grid_attach (grid, self->overscroll_reverse_btn, 3, row, 1, 1);
+
     self->overscroll_switch = gtk_switch_new ();
     gtk_widget_set_valign (self->overscroll_switch, GTK_ALIGN_CENTER);
-    gtk_grid_attach (grid, self->overscroll_switch, 5, row, 1, 1);
+    gtk_grid_attach (grid, self->overscroll_switch, 9, row, 1, 1);
     row++;
   }
 
-  /* --- Row 1: Privilege indicator --- */
-  {
-    GtkWidget *label = gtk_label_new ("Privilege");
-    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-    gtk_widget_add_css_class (label, "glass-entry");
-    gtk_grid_attach (grid, label, 0, row, 1, 1);
-
-    self->privilege_color_btn = make_color_btn ();
-    gtk_grid_attach (grid, self->privilege_color_btn, 1, row, 1, 1);
-
-    self->privilege_preset_btn = gtk_drop_down_new (NULL, NULL);
-    gtk_widget_set_valign (self->privilege_preset_btn, GTK_ALIGN_CENTER);
-    gtk_widget_add_css_class (self->privilege_preset_btn, "glass-preset");
-    gtk_grid_attach (grid, self->privilege_preset_btn, 2, row, 1, 1);
-
-    self->privilege_switch = gtk_switch_new ();
-    gtk_widget_set_valign (self->privilege_switch, GTK_ALIGN_CENTER);
-    gtk_grid_attach (grid, self->privilege_switch, 5, row, 1, 1);
-    row++;
-  }
-
-  /* --- Row 2: separator spanning all columns --- */
+  /* --- Row 1: separator spanning all columns --- */
   {
     GtkWidget *sep = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
     gtk_widget_set_margin_top (sep, 4);
     gtk_widget_set_margin_bottom (sep, 4);
-    gtk_grid_attach (grid, sep, 0, row, 6, 1);
+    gtk_grid_attach (grid, sep, 0, row, 10, 1);
     row++;
   }
 
   /* --- Rows 3..14: process slots 0..11 --- */
   for (int i = 0; i < APP_GLASS_SLOTS; i++, row++) {
-    GtkWidget *entry, *rev, *img;
+    GtkWidget *entry, *rev;
 
     entry = gtk_entry_new ();
     gtk_entry_set_placeholder_text (GTK_ENTRY (entry), "process name");
@@ -737,19 +1057,57 @@ build_app_glass_grid (KgxSettingsPage *self)
     gtk_widget_add_css_class (self->ag_presets[i], "glass-preset");
     gtk_grid_attach (grid, self->ag_presets[i], 2, row, 1, 1);
 
-    rev = gtk_toggle_button_new ();
+    rev = gtk_button_new_with_label ("\u25B6");
     gtk_widget_set_valign (rev, GTK_ALIGN_CENTER);
-    gtk_widget_set_tooltip_text (rev, "Reverse");
-    img = gtk_image_new_from_icon_name ("object-flip-horizontal-symbolic");
-    gtk_image_set_pixel_size (GTK_IMAGE (img), 16);
-    gtk_button_set_child (GTK_BUTTON (rev), img);
+    gtk_widget_set_tooltip_text (rev, "Reverse direction");
     gtk_widget_add_css_class (rev, "glass-reverse");
     gtk_widget_add_css_class (rev, "flat");
+    g_object_set_data (G_OBJECT (rev), "slot-index", GINT_TO_POINTER (i));
     self->ag_reverses[i] = rev;
     gtk_grid_attach (grid, rev, 3, row, 1, 1);
 
+    /* Shape override */
+    {
+      GtkWidget *shp = gtk_button_new_with_label ("\u2014");
+      gtk_widget_add_css_class (shp, "flat");
+      gtk_widget_add_css_class (shp, "tune-shape");
+      gtk_widget_set_tooltip_text (shp, "Shape override");
+      self->ag_shapes[i] = shp;
+      gtk_grid_attach (grid, shp, 4, row, 1, 1);
+    }
+
+    /* Gap override */
+    {
+      GtkWidget *gp = gtk_button_new_with_label ("\u2014");
+      gtk_widget_add_css_class (gp, "flat");
+      gtk_widget_add_css_class (gp, "tune-gap");
+      gtk_widget_set_tooltip_text (gp, "Gap override");
+      self->ag_gaps[i] = gp;
+      gtk_grid_attach (grid, gp, 5, row, 1, 1);
+    }
+
+    /* Speed override */
+    {
+      GtkAdjustment *spd_adj = gtk_adjustment_new (0, 0, 300, 10, 0, 0);
+      GtkWidget *spd = gtk_spin_button_new (spd_adj, 1.0, 0);
+      gtk_editable_set_alignment (GTK_EDITABLE (spd), 1.0);
+      gtk_widget_set_tooltip_text (spd, "Speed override (0=default)");
+      self->ag_speeds[i] = spd;
+      gtk_grid_attach (grid, spd, 6, row, 1, 1);
+    }
+
+    /* Thickness override */
+    {
+      GtkAdjustment *thk_adj = gtk_adjustment_new (0, 0, 40, 1, 0, 0);
+      GtkWidget *thk = gtk_spin_button_new (thk_adj, 1.0, 0);
+      gtk_editable_set_alignment (GTK_EDITABLE (thk), 1.0);
+      gtk_widget_set_tooltip_text (thk, "Thickness override (0=default)");
+      self->ag_thks[i] = thk;
+      gtk_grid_attach (grid, thk, 7, row, 1, 1);
+    }
+
     self->ag_pcolors[i] = make_color_btn ();
-    gtk_grid_attach (grid, self->ag_pcolors[i], 4, row, 1, 1);
+    gtk_grid_attach (grid, self->ag_pcolors[i], 8, row, 1, 1);
   }
 }
 
@@ -792,7 +1150,9 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, tunables_grid);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_grid);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, version_label);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_dots);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
 
   gtk_widget_class_bind_template_callback (widget_class, font_as_attributes);
@@ -879,18 +1239,42 @@ app_glass_save (KgxSettingsPage *self)
       const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (
                                GTK_COLOR_DIALOG_BUTTON (self->ag_colors[i]));
       guint preset_idx = gtk_drop_down_get_selected (GTK_DROP_DOWN (self->ag_presets[i]));
-      gboolean rev = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->ag_reverses[i]));
+
+      /* Reverse: ▶=0, ◀=1, ◆=2 */
+      const char *rev_label = gtk_button_get_label (GTK_BUTTON (self->ag_reverses[i]));
+      int rev = 0;
+      if (rev_label && g_str_equal (rev_label, reverse_labels[1])) rev = 1;
+      else if (rev_label && g_str_equal (rev_label, reverse_labels[2])) rev = 2;
+
       const GdkRGBA *pc = gtk_color_dialog_button_get_rgba (
                              GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[i]));
+
+      /* Shape: —=-1, ■=0, ●=1, ◆=2, ▶=3 */
+      const char *shp_label = gtk_button_get_label (GTK_BUTTON (self->ag_shapes[i]));
+      int shape = -1;
+      for (int k = 1; k < (int) G_N_ELEMENTS (app_shape_labels); k++) {
+        if (shp_label && g_str_equal (shp_label, app_shape_labels[k])) { shape = k - 1; break; }
+      }
+
+      /* Gap: —=-1, □=0, ■=1 */
+      const char *gap_label = gtk_button_get_label (GTK_BUTTON (self->ag_gaps[i]));
+      int gap = -1;
+      for (int k = 1; k < (int) G_N_ELEMENTS (app_gap_labels); k++) {
+        if (gap_label && g_str_equal (gap_label, app_gap_labels[k])) { gap = k - 1; break; }
+      }
+
+      int speed = (int) gtk_spin_button_get_value (GTK_SPIN_BUTTON (self->ag_speeds[i]));
+      int thk   = (int) gtk_spin_button_get_value (GTK_SPIN_BUTTON (self->ag_thks[i]));
 
       const char *preset_names[] = { "none", "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate" };
       const char *preset_str = (preset_idx < G_N_ELEMENTS (preset_names))
                                  ? preset_names[preset_idx] : "none";
 
-      char *value = g_strdup_printf ("#%02x%02x%02x;%s;%d;#%02x%02x%02x",
+      char *value = g_strdup_printf ("#%02x%02x%02x;%s;%d;#%02x%02x%02x;%d;%d;%d;%d",
         (int)(rgba->red * 255), (int)(rgba->green * 255), (int)(rgba->blue * 255),
-        preset_str, rev ? 1 : 0,
-        (int)(pc->red * 255), (int)(pc->green * 255), (int)(pc->blue * 255));
+        preset_str, rev,
+        (int)(pc->red * 255), (int)(pc->green * 255), (int)(pc->blue * 255),
+        shape, gap, speed, thk);
       g_hash_table_insert (ht, g_strdup (name), value);
     }
   }
@@ -943,7 +1327,11 @@ app_glass_load (KgxSettingsPage *self)
     gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_colors[j]),
                                       &glass_default_colors[j]);
     gtk_drop_down_set_selected (GTK_DROP_DOWN (self->ag_presets[j]), 0);
-    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->ag_reverses[j]), FALSE);
+    gtk_button_set_label (GTK_BUTTON (self->ag_reverses[j]), reverse_labels[0]);
+    gtk_button_set_label (GTK_BUTTON (self->ag_shapes[j]), "\u2014");
+    gtk_button_set_label (GTK_BUTTON (self->ag_gaps[j]), "\u2014");
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (self->ag_speeds[j]), 0);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (self->ag_thks[j]), 0);
     gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[j]),
                                       &glass_default_colors[j]);
   }
@@ -953,11 +1341,14 @@ app_glass_load (KgxSettingsPage *self)
     while (g_hash_table_iter_next (&iter, &key, &val) && i < APP_GLASS_SLOTS) {
       g_autofree char *glass_hex = NULL;
       KgxParticlePreset preset = KGX_PARTICLE_NONE;
-      gboolean reverse = FALSE;
+      int reverse = 0;
       GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
+      int shape_override = -1, gap_override = -1, speed_override = 0, thk_override = 0;
       gtk_editable_set_text (GTK_EDITABLE (self->ag_entries[i]), (const char *) key);
       kgx_parse_process_config ((const char *) val,
-                                 &glass_hex, &preset, &reverse, &particle_color);
+                                 &glass_hex, &preset, &reverse, &particle_color,
+                                 &shape_override, &gap_override,
+                                 &speed_override, &thk_override);
 
       if (glass_hex) {
         GdkRGBA rgba = { 0, 0, 0, 1 };
@@ -968,7 +1359,28 @@ app_glass_load (KgxSettingsPage *self)
 
       gtk_drop_down_set_selected (GTK_DROP_DOWN (self->ag_presets[i]),
                                    preset_string_to_index (kgx_particle_preset_to_string (preset)));
-      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->ag_reverses[i]), reverse);
+
+      /* Reverse: 0→▶, 1→◀, 2→◆ */
+      if (reverse >= 0 && reverse < (int) G_N_ELEMENTS (reverse_labels))
+        gtk_button_set_label (GTK_BUTTON (self->ag_reverses[i]), reverse_labels[reverse]);
+      else
+        gtk_button_set_label (GTK_BUTTON (self->ag_reverses[i]), reverse_labels[0]);
+
+      /* Shape: -1→—, 0→■, 1→●, 2→◆, 3→▶ */
+      if (shape_override >= 0 && shape_override + 1 < (int) G_N_ELEMENTS (app_shape_labels))
+        gtk_button_set_label (GTK_BUTTON (self->ag_shapes[i]), app_shape_labels[shape_override + 1]);
+      else
+        gtk_button_set_label (GTK_BUTTON (self->ag_shapes[i]), app_shape_labels[0]);
+
+      /* Gap: -1→—, 0→□, 1→■ */
+      if (gap_override >= 0 && gap_override + 1 < (int) G_N_ELEMENTS (app_gap_labels))
+        gtk_button_set_label (GTK_BUTTON (self->ag_gaps[i]), app_gap_labels[gap_override + 1]);
+      else
+        gtk_button_set_label (GTK_BUTTON (self->ag_gaps[i]), app_gap_labels[0]);
+
+      gtk_spin_button_set_value (GTK_SPIN_BUTTON (self->ag_speeds[i]), speed_override);
+      gtk_spin_button_set_value (GTK_SPIN_BUTTON (self->ag_thks[i]), thk_override);
+
       particle_color.alpha = 1.0f;
       gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[i]), &particle_color);
       i++;
@@ -999,7 +1411,7 @@ app_glass_color_changed (GObject          *button,
 
 
 static const char *page_titles[] = {
-  "· General ·", "· Particles ·", "· App Glass ·", "· Shortcuts ·"
+  "· General ·", "· App Glass ·", "· Particles ·", "· Shortcuts ·"
 };
 
 
@@ -1031,6 +1443,15 @@ carousel_scroll (GtkEventControllerScroll *controller,
 
 
 static void
+dot_clicked_cb (GtkButton *button, KgxSettingsPage *self)
+{
+  int page = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button), "page-index"));
+  GtkWidget *target = adw_carousel_get_nth_page (self->carousel, page);
+  adw_carousel_scroll_to (self->carousel, target, TRUE);
+}
+
+
+static void
 carousel_page_changed (AdwCarousel     *carousel,
                        guint            index,
                        KgxSettingsPage *self)
@@ -1039,6 +1460,16 @@ carousel_page_changed (AdwCarousel     *carousel,
 
   if (page < G_N_ELEMENTS (page_titles))
     gtk_label_set_label (GTK_LABEL (self->page_title), page_titles[page]);
+
+  /* Update dot highlights */
+  for (int i = 0; i < (int) G_N_ELEMENTS (page_titles); i++) {
+    if (self->dot_buttons[i]) {
+      if ((guint) i == page)
+        gtk_widget_add_css_class (self->dot_buttons[i], "page-dot-active");
+      else
+        gtk_widget_remove_css_class (self->dot_buttons[i], "page-dot-active");
+    }
+  }
 }
 
 
@@ -1051,8 +1482,28 @@ kgx_settings_page_init (KgxSettingsPage *self)
   self->app_glass_inhibit_save = TRUE;
 
   gtk_widget_init_template (GTK_WIDGET (self));
+
+  /* Set version label from build-time PACKAGE_VERSION */
+  {
+    g_autofree char *ver = g_strdup_printf ("v%s", PACKAGE_VERSION);
+    gtk_label_set_label (GTK_LABEL (self->version_label), ver);
+  }
+
   build_tunables_grid (self);
   build_app_glass_grid (self);
+
+  /* Build clickable page dots */
+  for (int i = 0; i < (int) G_N_ELEMENTS (page_titles); i++) {
+    GtkWidget *dot = gtk_button_new_with_label ("\u25CF");  /* ● */
+    gtk_widget_add_css_class (dot, "flat");
+    gtk_widget_add_css_class (dot, "page-dot");
+    if (i == 0)
+      gtk_widget_add_css_class (dot, "page-dot-active");
+    g_object_set_data (G_OBJECT (dot), "page-index", GINT_TO_POINTER (i));
+    g_signal_connect (dot, "clicked", G_CALLBACK (dot_clicked_cb), self);
+    gtk_box_append (GTK_BOX (self->page_dots), dot);
+    self->dot_buttons[i] = dot;
+  }
 
   g_signal_connect (self->carousel, "notify::position",
                     G_CALLBACK (carousel_page_changed), self);
@@ -1082,19 +1533,30 @@ kgx_settings_page_init (KgxSettingsPage *self)
                         G_CALLBACK (app_glass_color_changed), self);
       g_signal_connect (self->ag_presets[i], "notify::selected",
                         G_CALLBACK (app_glass_color_changed), self);
-      g_signal_connect (self->ag_reverses[i], "notify::active",
-                        G_CALLBACK (app_glass_color_changed), self);
+      g_signal_connect (self->ag_reverses[i], "clicked",
+                        G_CALLBACK (reverse_clicked_cb), self);
+      g_signal_connect (self->ag_shapes[i], "clicked",
+                        G_CALLBACK (app_shape_clicked_cb), self);
+      g_signal_connect (self->ag_gaps[i], "clicked",
+                        G_CALLBACK (app_gap_clicked_cb), self);
+      g_signal_connect (self->ag_speeds[i], "value-changed",
+                        G_CALLBACK (app_glass_spin_changed), self);
+      g_signal_connect (self->ag_thks[i], "value-changed",
+                        G_CALLBACK (app_glass_spin_changed), self);
       g_signal_connect (self->ag_pcolors[i], "notify::rgba",
                         G_CALLBACK (app_glass_color_changed), self);
     }
   }
 
-  /* Indicator preset dropdowns (no "none" — presets are 1-indexed). */
+  /* Overscroll preset dropdown and reverse button */
   {
-    const char *indicator_presets[] = { "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate", NULL };
-    GtkStringList *model = gtk_string_list_new (indicator_presets);
-    gtk_drop_down_set_model (GTK_DROP_DOWN (self->privilege_preset_btn), G_LIST_MODEL (model));
+    const char *overscroll_preset_names[] = { "Scroll 1", "Scroll 2", NULL };
+    GtkStringList *model = gtk_string_list_new (overscroll_preset_names);
+    gtk_drop_down_set_model (GTK_DROP_DOWN (self->overscroll_preset_btn), G_LIST_MODEL (model));
     g_object_unref (model);
+
+    g_signal_connect (self->overscroll_reverse_btn, "clicked",
+                      G_CALLBACK (overscroll_reverse_clicked_cb), self);
   }
 
   /* Capybara sprite animation — credit: https://rainloaf.itch.io/capybara-sprite-sheet */
@@ -1178,18 +1640,9 @@ kgx_settings_page_init (KgxSettingsPage *self)
                              self->overscroll_color_btn, "rgba",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              string_to_rgba, rgba_to_string, NULL, NULL);
-  g_binding_group_bind (self->settings_binds, "edge-privilege",
-                        self->privilege_switch, "active",
+  g_binding_group_bind (self->settings_binds, "edge-overscroll-style",
+                        self->overscroll_preset_btn, "selected",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind_full (self->settings_binds, "edge-privilege-color",
-                             self->privilege_color_btn, "rgba",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             string_to_rgba, rgba_to_string, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-privilege-preset",
-                             self->privilege_preset_btn, "selected",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             preset_int_to_selected, selected_to_preset_int,
-                             NULL, NULL);
   g_binding_group_bind (self->settings_binds, "edge-settings-animation",
                         self->ambient_switch, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
