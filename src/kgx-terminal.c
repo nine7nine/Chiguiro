@@ -209,12 +209,7 @@ process_bg_lerp_cb (double       value,
   c.alpha = 1.0f;
 
   if (self->palette) {
-    GdkRGBA fg;
-    const GdkRGBA *colours;
-    size_t n_colours;
-    GdkRGBA _bg;
-    kgx_palette_get_colours (self->palette, &fg, &_bg, &n_colours, &colours);
-    vte_terminal_set_colors (VTE_TERMINAL (self), &fg, &c, colours, n_colours);
+    vte_terminal_set_color_background (VTE_TERMINAL (self), &c);
     self->bg_current = c;
   }
 }
@@ -304,24 +299,17 @@ void
 kgx_terminal_apply_bg_immediate (KgxTerminal   *self,
                                  const GdkRGBA *bg)
 {
-  GdkRGBA fg, _bg, adjusted;
-  const GdkRGBA *colours;
-  size_t n_colours;
+  GdkRGBA adjusted;
 
   g_return_if_fail (KGX_IS_TERMINAL (self));
 
   if (!self->palette)
     return;
 
-  kgx_palette_get_colours (self->palette, &fg, &_bg, &n_colours, &colours);
-
   adjusted = *bg;
   adjusted.alpha = 1.0f;
 
-  /* Full palette rebuild ensures VTE composites the background identically
-   * to how CSS rgba() works on the glass chrome containers. */
-  vte_terminal_set_colors (VTE_TERMINAL (self), &fg, &adjusted,
-                           colours, n_colours);
+  vte_terminal_set_color_background (VTE_TERMINAL (self), &adjusted);
   self->bg_current = adjusted;
 }
 

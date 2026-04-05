@@ -1420,7 +1420,7 @@ kgx_window_init (KgxWindow *self)
 
   /* Safety-net timer for process glass — catches edge cases where
    * signal-driven updates miss (e.g. tab switch timing). */
-  priv->process_check_timer = g_timeout_add_seconds (5, process_check_tick, self);
+  priv->process_check_timer = g_timeout_add_seconds (30, process_check_tick, self);
 
   g_binding_group_bind_full (priv->surface_binds, "state",
                              self, "floating",
