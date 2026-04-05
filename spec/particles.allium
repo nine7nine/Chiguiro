@@ -3,7 +3,7 @@
 
 -- Scope: Edge particle animation system
 -- Includes: Particle entity (concurrent layer model), tunables,
---           overscroll/privilege/ambient rules, per-preset config
+--           overscroll/ambient rules, per-preset config
 -- Excludes:
 --   - Process glass colors and glass transitions (see window-glass.allium)
 --   - Window/tab lifecycle
@@ -15,15 +15,18 @@ use "./window-glass.allium" as glass
 -- Enumerations
 ------------------------------------------------------------
 
-enum ParticlePreset { fireworks | corners | pulse_out | rotate | ping_pong | ambient | none }
+enum ParticlePreset { none | fireworks | corners | pulse_out | rotate | ping_pong | ambient | scroll2 }
 
-enum ParticleShape { square | triangle | diamond | circle }
+enum ParticleShape { square | circle | diamond | triangle }
 
-enum ReleaseMode { hold | release }
+enum ReleaseMode { uniform | retract | spread | grow }
 
-enum BurstOrigin { center | corner }
+-- Reverse direction mode for animations.
+-- forward: normal direction. reverse: opposite direction.
+-- alternating: toggles direction each firing (diamond ◆ mode).
+enum ReverseMode { forward | reverse | alternating }
 
-enum CirculationDirection { clockwise | counter_clockwise }
+enum OverscrollStyle { scroll1 | scroll2 }
 
 enum Edge { top | bottom | left | right }
 
@@ -40,11 +43,13 @@ value ParticleTunables {
     pulse_speed: Decimal
     env_attack: Decimal
     env_release: Decimal
-    release_mode: ReleaseMode
+    release_mode: ReleaseMode      -- envelope release: uniform/retract/spread (3 modes)
     shape: ParticleShape
     env_curve: Integer
+    gap: Integer                   -- 0 = gapped (default), 1 = solid (no gap)
     thk_attack: Decimal
     thk_release: Decimal
+    thk_release_mode: ReleaseMode  -- per-block thickness release: uniform/retract/spread/grow (4 modes)
     thk_curve: Integer
 }
 
@@ -60,16 +65,22 @@ entity Particles {
     overscroll_active: Boolean
     overscroll_edge: Edge?
     overscroll_progress: Decimal?
-
-    -- Privilege layer (ambient burst cycle OR preset animation)
-    privilege_active: Boolean
-    privilege_preset: ParticlePreset
+    overscroll_style: OverscrollStyle    -- scroll1 = corner burst, scroll2 = full-bar
+    overscroll_reverse: ReverseMode      -- 0=forward, 1=reverse, 2=alternating (diamond ◆)
+    overscroll_reverse_toggle: Boolean   -- alternating mode flip-flop state
 
     -- Process layer (process-specific preset animation)
     process_active: Boolean
     process_preset: ParticlePreset
     process_color: Colour?
-    process_reverse: Boolean
+    process_reverse: Boolean             -- resolved direction for current cycle
+    process_reverse_toggle: Boolean      -- alternating mode flip-flop state
+
+    -- Per-app overrides (from process config, -1/0 = use preset default)
+    process_shape_override: Integer      -- -1 = use preset shape
+    process_gap_override: Integer        -- -1 = use preset gap
+    process_speed_override: Integer      -- 0 = use preset speed
+    process_thk_override: Integer        -- 0 = use preset thickness
 
     -- Settings ambient layer (independent burst cycle)
     ambient_active: Boolean
@@ -77,7 +88,7 @@ entity Particles {
     ambient_burst_count: Integer
 
     -- Derived
-    is_animating: overscroll_active or privilege_active or process_active or ambient_active
+    is_animating: overscroll_active or process_active or ambient_active
 }
 
 ------------------------------------------------------------
@@ -88,18 +99,13 @@ config {
     -- Particles: Overscroll
     overscroll_enabled: Boolean = true
     overscroll_color: String = "#613583"
-    overscroll_style: BurstOrigin = corner
-
-    -- Particles: Privilege
-    privilege_enabled: Boolean = false
-    privilege_color: String = "#9a9996"
-    privilege_direction: CirculationDirection = clockwise
-    privilege_preset: ParticlePreset = fireworks
+    overscroll_style: OverscrollStyle = scroll2
+    overscroll_reverse: ReverseMode = forward   -- int: 0=forward, 1=reverse, 2=alternating
 
     -- Particles: Settings Ambient
     settings_animation: Boolean = true
 
-    -- Particles: Global tunables (overscroll defaults)
+    -- Particles: Global tunables (overscroll / scroll1 defaults)
     thickness: Integer = 25
     speed: Decimal = 0.7
     tail_length: Decimal = 0.7
@@ -107,20 +113,23 @@ config {
     pulse_speed: Decimal = 0.3
     env_attack: Decimal = 0.2
     env_release: Decimal = 0.05
-    release_mode: ReleaseMode = release
-    shape: ParticleShape = circle
+    release_mode: ReleaseMode = retract
+    shape: ParticleShape = triangle
     env_curve: Integer = 2
+    gap: Integer = 0                            -- 0 = gapped (default), 1 = solid
     thk_attack: Decimal = 0.0
     thk_release: Decimal = 0.0
+    thk_release_mode: ReleaseMode = uniform
     thk_curve: Integer = 2
     burst_count: Integer = 8
     burst_spread: Decimal = 3.8
 
     -- Particles: Per-preset tunables override the globals above.
-    -- Each preset (fireworks, corners, pulse_out, rotate, ping_pong, ambient)
-    -- has its own speed, thickness, tail_length, pulse_depth, pulse_speed,
-    -- env_attack, env_release, release_mode, shape, env_curve, thk_attack,
-    -- thk_release, thk_curve. Ambient also has burst_count and burst_spread.
+    -- Each preset (fireworks, corners, pulse_out, rotate, ping_pong,
+    -- ambient, scroll2) has its own speed, thickness, tail_length,
+    -- pulse_depth, pulse_speed, env_attack, env_release, release_mode,
+    -- shape, env_curve, gap, thk_attack, thk_release, thk_release_mode,
+    -- thk_curve. Ambient also has burst_count and burst_spread.
     -- GSettings keys follow the pattern: edge-<field>-<preset>.
     -- See GSettings schema for per-preset defaults.
 }
@@ -140,47 +149,36 @@ rule OverscrollFired {
     -- Falls back to accent_color from glass config (see glass-system.allium)
     let color = if config.overscroll_color != "": config.overscroll_color else: config.accent_color
 
+    -- Resolve reverse mode: alternating flips the toggle before each fire
+    let effective_reverse = if config.overscroll_reverse = alternating:
+        particles.overscroll_reverse_toggle
+    else:
+        config.overscroll_reverse = reverse
+
     ensures: particles.overscroll_active = true
     ensures: particles.overscroll_edge = edge
+    ensures:
+        if config.overscroll_reverse = alternating:
+            particles.overscroll_reverse_toggle = not particles.overscroll_reverse_toggle
     ensures: OverscrollAnimation(
         particles: particles,
         edge: edge,
-        origin: config.overscroll_style,
+        style: config.overscroll_style,
+        reverse: effective_reverse,
         color: color
     )
 
     @guidance
-        -- Two snakes split from origin point and travel outward.
+        -- scroll1: Two snakes split from corner and travel outward
+        --   along two adjacent edges.
+        -- scroll2: Solid bar grows along the active edge from one
+        --   side to the other, with thickness envelope. Reverse
+        --   flips the growth direction.
+        -- alternating (diamond ◆ mode): toggles direction before each
+        --   fire, producing an alternating left/right pattern.
         -- Animation duration: 600ms / speed.
         -- Easing: ease-out-cubic.
         -- overscroll_active returns to false when animation completes.
-}
-
-rule PrivilegeActivated {
-    -- Active tab entered privileged (root) state
-    when: tab: glass/Tab.is_privileged becomes true
-
-    requires: config.privilege_enabled
-    requires: not tab.window.settings_visible
-
-    ensures: tab.window.particle_state.privilege_active = true
-    ensures: tab.window.particle_state.privilege_preset = config.privilege_preset
-
-    @guidance
-        -- When privilege_preset is fireworks, fires AmbientBurstCycle.
-        -- For other presets (corners, pulse-out, rotate, ping-pong),
-        -- takes over the process particle layer, stashing any current
-        -- process preset for restoration when privilege deactivates.
-}
-
-rule PrivilegeDeactivated {
-    when: tab: glass/Tab.is_privileged becomes false
-    requires: not tab.window.settings_visible
-
-    ensures: tab.window.particle_state.privilege_active = false
-
-    @guidance
-        -- Restores previously stashed process preset if one was active.
 }
 
 rule SettingsAmbientActivated {
@@ -197,7 +195,7 @@ rule SettingsAmbientActivated {
 
     @guidance
         -- Settings ambient uses an independent burst array, running
-        -- concurrently with privilege/process particles.
+        -- concurrently with process particles.
         -- Each burst picks its own random color from: magenta, blue,
         -- green, orange.
         -- Controlled by edge-settings-animation GSettings toggle.
@@ -213,7 +211,7 @@ rule AmbientBurstCycle {
     -- Fire a cycle of staggered bursts around the window perimeter
     when: AmbientBurstCycle(particles, color, direction)
 
-    requires: particles.privilege_active or particles.ambient_active
+    requires: particles.ambient_active
 
     ensures: particles.ambient_burst_count = config.burst_count
     ensures: BurstsScheduled(
@@ -231,6 +229,44 @@ rule AmbientBurstCycle {
         -- Bursts overlap, typically 3+ visible simultaneously.
 }
 
+rule TabSwitchParticleCleanup {
+    -- When the active tab changes, all process particle animations
+    -- and burst cycles must stop immediately. This includes:
+    --   1. Process particle animation (progress reset to -1)
+    --   2. All in-flight burst animations (progress reset to -1)
+    --   3. Burst schedule timeouts (cancelled)
+    --   4. Firework cycle timeout (cancelled)
+    -- Only overscroll and settings ambient are exempt — they are
+    -- window-level, not tab-level.
+    when: glass/TabActivated(tab)
+
+    ensures: tab.window.particle_state.process_active = false
+    ensures: for i in 0..MAX_BURSTS:
+        tab.window.particle_state.burst_progress[i] = -1.0
+    ensures: tab.window.particle_state.firework_timeout = null
+
+    @guidance
+        -- Triggered via status_changed → set_process_particle(NONE).
+        -- The NONE path must reset burst_progress, burst_anim, and
+        -- burst_timeout for ALL burst slots, not just the scheduler.
+        -- Without this, in-flight firework bursts render stale frames
+        -- after tab switch, causing visual artifacts and CPU waste.
+        --
+        -- EXCEPTIONS (these are NOT stopped by tab switch):
+        --
+        -- 1. Settings ambient: Tied to the settings page lifecycle,
+        --    not tab state. Ambient bursts start when settings opens
+        --    and stop when settings closes — with a graceful fade-out
+        --    (in-flight bursts finish naturally, no new ones fire).
+        --    Ambient may render concurrently with any tab's particles.
+        --
+        -- 2. Overscroll: Fires on scroll-past-bounds events and
+        --    renders on the edge that triggered it (top or bottom).
+        --    Overscroll is window-level, independent of which tab is
+        --    active. It can render simultaneously with process and
+        --    ambient particles on any edge.
+}
+
 ------------------------------------------------------------
 -- Invariants
 ------------------------------------------------------------
@@ -238,17 +274,27 @@ rule AmbientBurstCycle {
 @invariant OverscrollIndependent
     -- The overscroll layer fires independently of all other layers.
     -- Its activation depends only on config.overscroll_enabled and
-    -- the scroll-past-bounds event, never on the state of privilege,
-    -- process, or ambient layers.
+    -- the scroll-past-bounds event, never on the state of process
+    -- or ambient layers.
 
 @invariant AmbientIndependent
     -- The settings ambient burst array runs independently of the
-    -- privilege and process layers. Its activation depends only on
+    -- process layer. Its activation depends only on
     -- config.settings_animation and the settings page open/close
     -- lifecycle.
 
+@invariant BurstCleanupComplete
+    -- When process particles are set to NONE (stopped), ALL burst
+    -- state must be fully reset: progress values set to -1,
+    -- animations reset, and timeouts cancelled for every burst slot.
+    -- Partial cleanup (e.g. stopping the scheduler but leaving
+    -- in-flight animations) causes stale rendering after tab switch.
+    for p in Particles:
+        p.process_preset = none implies
+            (for i in 0..MAX_BURSTS: p.burst_progress[i] < 0.0)
+
 @invariant ConcurrentLayers
     -- Multiple layers can be active simultaneously. Overscroll,
-    -- privilege, process, and ambient animations may all run at the
-    -- same time without interference. Each layer manages its own
-    -- lifecycle and does not gate on or cancel other layers.
+    -- process, and ambient animations may all run at the same time
+    -- without interference. Each layer manages its own lifecycle
+    -- and does not gate on or cancel other layers.

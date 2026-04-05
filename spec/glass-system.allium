@@ -21,11 +21,19 @@ use "./particles.allium" as particles
 ------------------------------------------------------------
 
 value ProcessGlassConfig {
-    -- Extended config: "glasscolor;preset;reverse;particlecolor"
+    -- Extended config format (8 fields, semicolon-separated):
+    --   "#glasscolor;preset;reverse;#particlecolor;shape;gap;speed;thk"
+    -- Backward-compatible: plain "#hex" returns just the glass color.
+    -- Process name keys support comma-separated matching
+    --   (e.g. "su, sudo" matches either "su" or "sudo").
     glass_color: String?
     preset: particles/ParticlePreset
-    reverse: Boolean
+    reverse: Integer                -- 0=forward, 1=reverse, 2=alternating (diamond ◆)
     particle_color: core/Colour
+    shape_override: Integer         -- -1 = use preset default
+    gap_override: Integer           -- -1 = use preset default
+    speed_override: Integer         -- 0 = use preset default (percent scale: 70 = 0.7x)
+    thk_override: Integer           -- 0 = use preset default (pixel value)
 }
 
 ------------------------------------------------------------
@@ -65,7 +73,11 @@ entity GlassTransition {
     deferred_particle: Boolean
     deferred_preset: particles/ParticlePreset?
     deferred_color: core/Colour?
-    deferred_reverse: Boolean
+    deferred_reverse: Integer               -- 0=forward, 1=reverse, 2=alternating
+    deferred_shape: Integer                 -- per-app shape override (-1 = preset)
+    deferred_gap: Integer                   -- per-app gap override (-1 = preset)
+    deferred_speed: Integer                 -- per-app speed override (0 = preset)
+    deferred_thk: Integer                   -- per-app thickness override (0 = preset)
 }
 
 ------------------------------------------------------------
@@ -118,7 +130,11 @@ rule ProcessGlassCheck {
                 window: window,
                 preset: match.preset,
                 color: match.particle_color,
-                reverse: match.reverse
+                reverse: match.reverse,
+                shape: match.shape_override,
+                gap: match.gap_override,
+                speed: match.speed_override,
+                thk: match.thk_override
             )
         else:
             window.process_glass_active = false
@@ -128,6 +144,8 @@ rule ProcessGlassCheck {
         -- Signal-driven: fires on idle callbacks when the active tab or
         -- session children change, with a 30-second safety-net timer.
         -- Matches child process names against process_glass_colors map.
+        -- Process name keys support comma-separated matching
+        -- (e.g. "su, sudo" matches either name via exact match per part).
         -- Glass color applies to headerbar, tab bar, and scrollbar.
 }
 
@@ -146,7 +164,11 @@ rule StartGlassTransition {
             is_animating: true,
             cached_opacity: config.glass_opacity,
             deferred_particle: false,
-            deferred_reverse: false
+            deferred_reverse: 0,
+            deferred_shape: -1,
+            deferred_gap: -1,
+            deferred_speed: 0,
+            deferred_thk: 0
         )
 
     @guidance
@@ -195,7 +217,11 @@ rule GlassTransitionComplete {
             ParticleActivation(
                 preset: transition.deferred_preset,
                 color: transition.deferred_color,
-                reverse: transition.deferred_reverse
+                reverse: transition.deferred_reverse,
+                shape: transition.deferred_shape,
+                gap: transition.deferred_gap,
+                speed: transition.deferred_speed,
+                thk: transition.deferred_thk
             )
 
     @guidance

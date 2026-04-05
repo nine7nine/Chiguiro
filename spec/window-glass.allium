@@ -549,7 +549,13 @@ surface SettingsPage {
 
     context settings: core/Settings
 
+    -- Layout: AdwCarousel with 4 pages (General, App Glass, Particles,
+    -- Shortcuts). Clickable page dot buttons (● indicators) navigate
+    -- between pages. Active dot highlighted with .page-dot-active CSS.
+    -- Page title label updates on carousel position change.
+
     exposes:
+        -- Page 1: General
         settings.use_system_font
         settings.custom_font
         settings.font_scale
@@ -565,15 +571,28 @@ surface SettingsPage {
         settings.accent_color
         settings.restore_window_size
 
-        -- Particle settings
+        -- Page 2: App Glass
+        -- Per-process glass/particle config grid (APP_GLASS_SLOTS rows).
+        -- Each row: process name(s), glass color, preset, reverse mode,
+        -- particle color, shape override, gap override, speed override,
+        -- thickness override.
+        -- Process names support comma-separated matching.
+        -- Config format: "#glass;preset;reverse;#pcolor;shape;gap;speed;thk"
+
+        -- Page 3: Particles
         settings.overscroll_enabled
         settings.overscroll_color
-        settings.privilege_enabled
-        settings.privilege_color
+        settings.overscroll_style
+        settings.overscroll_reverse
         settings.settings_animation
-        -- Per-preset particle tunables (speed, thickness, envelope, etc.)
-        -- are exposed via a programmatic grid. See GSettings schema for
-        -- the full list of edge-* keys.
+        -- Per-preset particle tunables (speed, thickness, gap, tail,
+        -- pulse, envelope, release mode, shape, thickness envelope,
+        -- curve) exposed via a programmatic grid (N_PRESET_ROWS x
+        -- N_TUNE_COLS). Release mode cycles U/R/S (3 modes).
+        -- Thickness release mode cycles U/R/S/G (4 modes, includes grow).
+        -- See GSettings schema for the full list of edge-* keys.
+
+        -- Page 4: Shortcuts (keyboard shortcut reference)
 
     provides:
         ToggleSettingsPage(window)
