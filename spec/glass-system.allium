@@ -1,0 +1,364 @@
+-- allium: 3
+-- glass-system.allium
+
+-- Scope: Glass transition system — color transitions, CSS architecture,
+--        process-glass matching, and per-frame rendering contracts
+-- Includes: GlassTransition entity, CssArchitecture structure,
+--           process-glass rules, frame-sync contracts, tab-switch snap
+-- Excludes:
+--   - Particle animation mechanics (see particles.allium)
+--   - Window/tab lifecycle (see window-glass.allium)
+--   - Terminal core behavior (see terminal-core.allium)
+--   - Static glass container styling (CSS selectors are described
+--     structurally, not as implementation)
+
+use "./terminal-core.allium" as core
+use "./window-glass.allium" as glass
+use "./particles.allium" as particles
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value ProcessGlassConfig {
+    -- Extended config: "glasscolor;preset;reverse;particlecolor"
+    glass_color: String?
+    preset: particles/ParticlePreset
+    reverse: Boolean
+    particle_color: core/Colour
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    glass_opacity: Decimal = 0.94
+    glass_color: String = "#1b1b1f"
+    use_glass_bg: Boolean = true
+    accent_color: String = "#3584e4"
+    process_glass_colors: Map<String, ProcessGlassConfig> = {}
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity GlassTransition {
+    -- Observable state of a glass color transition in progress.
+    -- One per window; created when a transition starts, destroyed
+    -- when it completes.
+
+    glass_from: core/Colour
+    glass_to: core/Colour
+    glass_current: core/Colour
+
+    is_animating: Boolean
+
+    -- Opacity is captured once at transition start and held constant
+    -- for the entire transition. This prevents mid-animation settings
+    -- changes from producing visual discontinuities.
+    cached_opacity: Decimal
+
+    -- Particle firing is deferred until the glass transition completes,
+    -- preventing both animations from competing for frame budget.
+    deferred_particle: Boolean
+    deferred_preset: particles/ParticlePreset?
+    deferred_color: core/Colour?
+    deferred_reverse: Boolean
+}
+
+------------------------------------------------------------
+-- Structure: CssArchitecture
+------------------------------------------------------------
+
+-- The glass system uses two CSS providers at distinct priorities
+-- to separate concerns and minimise per-frame work.
+--
+-- glass_css: Static provider at priority APPLICATION+1.
+--   Rebuilt only on settings changes (glass_color, glass_opacity,
+--   accent_color, use_glass_bg). Contains:
+--     - Glass container backgrounds (rgba at configured opacity)
+--     - Transparent children (all widgets inside glass containers)
+--     - Accent color overrides (tab indicators, interactive highlights)
+--   Glass containers: headerbar, tabbar, settings-page, scrollbar,
+--   scrollbar trough.
+--
+-- override_css: Per-window provider at priority APPLICATION+2.
+--   Contains a single rgba rule targeting glass containers.
+--   Updated per-frame during transitions. RGB dedup prevents
+--   redundant reloads — the provider is only replaced when the
+--   interpolated RGB values actually differ from the previous frame.
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Process Glass Check ===
+
+rule ProcessGlassCheck {
+    -- Periodic check for process-specific glass colors
+    when: ProcessGlassCheck(window)
+
+    requires: window.pages.active_tab != null
+    requires: window.pages.active_tab.session != null
+
+    let session = window.pages.active_tab.session
+    let match = lookup_process_glass(session.children, config.process_glass_colors)
+
+    ensures:
+        if match != null:
+            window.process_glass_color = match.glass_color ?? config.glass_color
+            window.process_glass_active = true
+            StartGlassTransition(
+                window: window,
+                to_color: match.glass_color ?? config.glass_color
+            )
+            DeferredParticle(
+                window: window,
+                preset: match.preset,
+                color: match.particle_color,
+                reverse: match.reverse
+            )
+        else:
+            window.process_glass_active = false
+            window.process_glass_color = null
+
+    @guidance
+        -- Signal-driven: fires on idle callbacks when the active tab or
+        -- session children change, with a 30-second safety-net timer.
+        -- Matches child process names against process_glass_colors map.
+        -- Glass color applies to headerbar, tab bar, and scrollbar.
+}
+
+-- === Glass Transition Lifecycle ===
+
+rule StartGlassTransition {
+    -- Captures from/to colors, caches opacity and terminal reference,
+    -- resets RGB dedup state, begins per-frame animation
+    when: StartGlassTransition(window, to_color)
+
+    ensures:
+        GlassTransition.created(
+            glass_from: window.effective_glass_color,
+            glass_to: to_color,
+            glass_current: window.effective_glass_color,
+            is_animating: true,
+            cached_opacity: config.glass_opacity,
+            deferred_particle: false,
+            deferred_reverse: false
+        )
+
+    @guidance
+        -- Transition duration: 200ms with ADW_EASE_IN_OUT_CUBIC.
+        -- The cached terminal reference avoids per-frame property
+        -- lookups on the tab/pages chain.
+        -- RGB dedup state is reset so the first frame always applies.
+}
+
+rule GlassLerpFrame {
+    -- Per-frame interpolation during a glass transition
+    when: GlassLerpFrame(transition, progress)
+
+    requires: transition.is_animating
+
+    let lerped = lerp_colour(transition.glass_from, transition.glass_to, progress)
+
+    ensures: transition.glass_current = lerped
+    ensures: CssOverrideUpdated(color: lerped, opacity: transition.cached_opacity)
+    ensures:
+        if config.use_glass_bg:
+            TerminalBgUpdated(color: with_alpha(lerped, 1.0))
+
+    @guidance
+        -- CSS chrome and VTE terminal background are updated in the
+        -- same callback — never split across frames.
+        -- Uses vte_terminal_set_color_background (background colour
+        -- only) rather than vte_terminal_set_colors (full 16-color
+        -- palette rebuild). Keeps per-frame cost low enough for
+        -- smooth animation; the full palette is applied once at
+        -- transition end.
+        -- RGB dedup: CssOverrideUpdated is a no-op if the interpolated
+        -- RGB values are identical to the previous frame.
+}
+
+rule GlassTransitionComplete {
+    -- Transition finished: clear caches, fire deferred particle
+    when: GlassTransitionComplete(transition)
+
+    requires: transition.is_animating
+
+    ensures: transition.is_animating = false
+    ensures: transition.glass_current = transition.glass_to
+    ensures:
+        if transition.deferred_particle:
+            ParticleActivation(
+                preset: transition.deferred_preset,
+                color: transition.deferred_color,
+                reverse: transition.deferred_reverse
+            )
+
+    @guidance
+        -- Full palette rebuild (vte_terminal_set_colors) happens once
+        -- here, not per-frame.
+}
+
+-- === Tab Switch Snap ===
+
+rule TabSwitchBgSnap {
+    -- Snap the new terminal's background to the current glass color
+    when: glass/TabActivated(tab)
+
+    requires: tab.window.process_glass_active
+
+    let current = tab.window.effective_glass_color
+
+    ensures: TerminalBgSnapped(
+        terminal: tab.terminal,
+        color: with_alpha(current, 1.0)
+    )
+
+    @guidance
+        -- On tab switch, the new terminal is visible immediately but the
+        -- glass transition runs from an idle callback 1+ frames later.
+        -- Without this snap, the new terminal shows its stale bg_current
+        -- while the CSS chrome still shows the old glass color — a visible
+        -- two-color flicker. The snap eliminates this gap.
+        -- Uses vte_terminal_set_color_background for lightweight update.
+}
+
+-- === Settings Change ===
+
+rule GlassSettingsChanged {
+    -- Rebuilds the static glass_css provider on settings change
+    when: GlassSettingsChanged(window)
+
+    ensures: StaticGlassCssRebuilt(
+        window: window,
+        glass_color: config.glass_color,
+        glass_opacity: config.glass_opacity,
+        accent_color: config.accent_color,
+        use_glass_bg: config.use_glass_bg
+    )
+
+    @guidance
+        -- Only the static provider (glass_css at APPLICATION+1) is
+        -- rebuilt. The override provider is untouched unless a
+        -- transition is active.
+        -- Accent color, glass container backgrounds, and child
+        -- transparency rules are all part of this single rebuild.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant OpacityCaching {
+    -- Glass transition opacity is constant throughout its duration.
+    -- The cached value is captured at start and never re-read from
+    -- settings during the transition.
+    for t in GlassTransitions:
+        t.is_animating implies
+            t.cached_opacity = t.cached_opacity
+}
+
+invariant DeferredParticle {
+    -- Particle activation only defers while a transition is running.
+    -- If deferred_particle is set, a transition must be in progress.
+    for t in GlassTransitions:
+        t.deferred_particle implies t.is_animating
+}
+
+invariant NoAlphaCompounding {
+    -- Glass containers get exactly one rgba layer at the configured
+    -- opacity. All children inside glass containers are transparent.
+    -- Intermediate wrappers (toolbarview revealers, windowhandle, box),
+    -- children inside glass (tabs, tabbox, search entry, buttons),
+    -- settings page internals (rows, groups, spinbutton buttons), and
+    -- headerbar action buttons (except window controls) must all be
+    -- fully transparent.
+    for w in glass/Windows:
+        w.translucent implies
+            SingleLayerGlassAlpha(w)
+            and NoChildBackgroundsInGlassContainers(w)
+}
+
+invariant VteNoDoubleAlpha {
+    -- When use_glass_bg is enabled, terminal background alpha is 1.0
+    -- (not glass_opacity). The scrolled window's widget opacity already
+    -- provides transparency — double alpha would make the terminal
+    -- darker than the glass.
+    for w in glass/Windows:
+        config.use_glass_bg implies
+            TerminalBgAlphaIsOpaque(w)
+}
+
+invariant WindowShadowPreserved {
+    -- The window node's own box-shadow must not be cleared by glass
+    -- selectors. Overly broad selectors (e.g. .translucent.background
+    -- matching the window itself) would kill the compositor shadow.
+    for w in glass/Windows:
+        w.translucent implies
+            WindowNodeBoxShadowIntact(w)
+}
+
+invariant RgbDedup {
+    -- The override_css provider is only reloaded when interpolated
+    -- RGB values actually change from the previous frame. Identical
+    -- frames are skipped to avoid unnecessary CSS parsing.
+    for t in GlassTransitions:
+        t.is_animating implies
+            OverrideCssReloadedOnlyOnChange(t)
+}
+
+invariant TerminalCaching {
+    -- Per-frame glass code uses a cached terminal reference, not a
+    -- property lookup through the tab/pages/active_tab chain. The
+    -- reference is captured at transition start.
+    for t in GlassTransitions:
+        t.is_animating implies
+            UseCachedTerminalReference(t)
+}
+
+invariant TabSwitchSnap {
+    -- On tab activation, if a glass color is currently active, the
+    -- new terminal's background is snapped to glass_current before
+    -- the first frame renders. No stale background is ever visible.
+    for w in glass/Windows:
+        w.process_glass_active implies
+            NewTabBgMatchesGlassCurrent(w)
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract FrameSync {
+    -- Per-frame rendering contract for glass transitions.
+
+    @invariant CssAndVteSameCallback
+        -- CSS chrome update and VTE terminal background update happen
+        -- in the same tick callback, never split across frames.
+        -- Both GtkCssProvider reload and vte_terminal_set_color_background
+        -- execute within a single GdkFrameClock callback invocation.
+
+    @guidance
+        -- Splitting these updates across frames produces a visible
+        -- one-frame desync where the chrome shows the new color but
+        -- the terminal still shows the old one (or vice versa).
+}
+
+contract IdlePriority {
+    -- Scheduling contract for process glass idle callbacks.
+
+    @invariant HighIdleBeforeRedraw
+        -- Process glass idle runs at G_PRIORITY_HIGH_IDLE (before
+        -- GDK_PRIORITY_REDRAW). This ensures glass state is resolved
+        -- before the compositor requests the next frame, preventing
+        -- one-frame lag between process detection and visual update.
+
+    @guidance
+        -- G_PRIORITY_HIGH_IDLE = 100, GDK_PRIORITY_REDRAW = 120.
+        -- Any idle source scheduling glass work must use the higher
+        -- priority to land before the redraw cycle.
+}

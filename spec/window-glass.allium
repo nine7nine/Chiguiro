@@ -15,6 +15,7 @@
 -- that must be preserved.
 
 use "./terminal-core.allium" as core
+use "./glass-system.allium" as glass
 
 ------------------------------------------------------------
 -- Enumerations
@@ -317,41 +318,10 @@ rule WindowStatusChanged {
         -- playbox → blue accent, none → system accent.
 }
 
-------------------------------------------------------------
--- Rules — Glass Styling
-------------------------------------------------------------
-
-rule GlassStyleApplied {
-    when: GlassSettingChanged(window)
-
-    ensures: GlassStyleUpdated(window, window.glass_color, window.glass_opacity)
-
-    @guidance
-        -- Apply glass_color with glass_opacity as rgba background-color
-        -- to top-level glass containers ONLY: headerbar, tabbar,
-        -- settings-page, scrollbar.
-        -- All children inside these containers (tabs, revealers, tabbox,
-        -- search entry/buttons, preference rows/groups) MUST be set to
-        -- background-color: transparent to prevent alpha compounding.
-        -- The toolbarview > stack > revealer wrapping the header area
-        -- must also be transparent.
-        -- See invariant TransparencyNoAlphaCompounding.
-}
-
-rule AccentColorApplied {
-    when: AccentColorChanged(window)
-
-    ensures: AccentColorUpdated(window, window.accent_color)
-
-    @guidance
-        -- The accent color setting is always used as an override (no
-        -- "follow system" toggle). Applied to:
-        --   - Tab close button hover state
-        --   - Settings section titles
-        --   - Active tab indicator
-        --   - Any other interactive highlight elements
-        -- Parsed as a hex colour string into GdkRGBA.
-}
+-- Glass styling rules (GlassStyleApplied, AccentColorApplied) and
+-- behavioral contracts (FrameSync, IdlePriority) are specified in
+-- glass-system.allium. Glass settings changes, accent color application,
+-- and per-frame transition rendering are governed there.
 
 ------------------------------------------------------------
 -- Rules — Dynamic Tab Titles
@@ -506,43 +476,9 @@ invariant WindowSizePositive {
         or (w.width > 0 and w.height > 0)
 }
 
-invariant GlassSheet {
-    -- The window is a sheet of glass. The desktop wallpaper is visible
-    -- through every part of it. Any CSS change that introduces a
-    -- background-color, background-image, or box-shadow on a widget
-    -- risks breaking the glass by adding an opaque layer.
-    --
-    -- Only designated glass containers (headerbar, tabbar,
-    -- settings-page, scrollbar) may carry an rgba background — and
-    -- each container gets exactly ONE layer at the configured glass
-    -- opacity. Every other widget in the tree must be fully transparent:
-    --   - Intermediate wrappers (toolbarview revealers, windowhandle, box)
-    --   - Children inside glass (tabs, tabbox, search entry, buttons)
-    --   - Settings page internals (rows, groups, spinbutton buttons)
-    --   - Headerbar action buttons (except window controls close/min/max)
-    --
-    -- Alpha compounding is the primary threat: N nested layers at 0.9
-    -- alpha yield (1 - 0.1^N) effective opacity — three layers give
-    -- 0.999, visually indistinguishable from solid. Every new widget
-    -- that Adwaita styles with a default background must be explicitly
-    -- cleared to transparent.
-    --
-    -- The window node's own box-shadow must be preserved; overly broad
-    -- selectors (e.g. .translucent.background matching the window
-    -- itself) will kill the compositor shadow.
-    --
-    -- When use_glass_bg is enabled, the terminal VTE background uses
-    -- alpha 1.0 (not glass_opacity) because the scrolled window's
-    -- widget opacity already provides transparency — double alpha
-    -- would make the terminal darker than the glass.
-    for w in Windows:
-        w.translucent implies
-            SingleLayerGlassAlpha(w)
-            and NoIntermediateBackgrounds(w)
-            and NoChildBackgroundsInGlassContainers(w)
-            and WindowShadowPreserved(w)
-            and NoDoubleAlphaOnTerminal(w)
-}
+-- GlassSheet invariant decomposed into glass-system.allium:
+-- NoAlphaCompounding, VteNoDoubleAlpha, WindowShadowPreserved,
+-- with FrameSync and IdlePriority as behavioral contracts.
 
 ------------------------------------------------------------
 -- Actor Declarations

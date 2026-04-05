@@ -1,0 +1,254 @@
+-- allium: 3
+-- particles.allium
+
+-- Scope: Edge particle animation system
+-- Includes: Particle entity (concurrent layer model), tunables,
+--           overscroll/privilege/ambient rules, per-preset config
+-- Excludes:
+--   - Process glass colors and glass transitions (see window-glass.allium)
+--   - Window/tab lifecycle
+--   - Terminal core behavior
+
+use "./window-glass.allium" as glass
+
+------------------------------------------------------------
+-- Enumerations
+------------------------------------------------------------
+
+enum ParticlePreset { fireworks | corners | pulse_out | rotate | ping_pong | ambient | none }
+
+enum ParticleShape { square | triangle | diamond | circle }
+
+enum ReleaseMode { hold | release }
+
+enum BurstOrigin { center | corner }
+
+enum CirculationDirection { clockwise | counter_clockwise }
+
+enum Edge { top | bottom | left | right }
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value ParticleTunables {
+    -- Per-preset animation parameters (mirrors KgxParticleTunables struct)
+    speed: Decimal
+    thickness: Integer
+    tail_length: Decimal
+    pulse_depth: Decimal
+    pulse_speed: Decimal
+    env_attack: Decimal
+    env_release: Decimal
+    release_mode: ReleaseMode
+    shape: ParticleShape
+    env_curve: Integer
+    thk_attack: Decimal
+    thk_release: Decimal
+    thk_curve: Integer
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity Particles {
+    -- Edge particle animation state for a window
+    window: glass/Window
+
+    -- Overscroll layer (fires independently)
+    overscroll_active: Boolean
+    overscroll_edge: Edge?
+    overscroll_progress: Decimal?
+
+    -- Privilege layer (ambient burst cycle OR preset animation)
+    privilege_active: Boolean
+    privilege_preset: ParticlePreset
+
+    -- Process layer (process-specific preset animation)
+    process_active: Boolean
+    process_preset: ParticlePreset
+    process_color: Colour?
+    process_reverse: Boolean
+
+    -- Settings ambient layer (independent burst cycle)
+    ambient_active: Boolean
+    ambient_enabled: Boolean
+    ambient_burst_count: Integer
+
+    -- Derived
+    is_animating: overscroll_active or privilege_active or process_active or ambient_active
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- Particles: Overscroll
+    overscroll_enabled: Boolean = true
+    overscroll_color: String = "#613583"
+    overscroll_style: BurstOrigin = corner
+
+    -- Particles: Privilege
+    privilege_enabled: Boolean = false
+    privilege_color: String = "#9a9996"
+    privilege_direction: CirculationDirection = clockwise
+    privilege_preset: ParticlePreset = fireworks
+
+    -- Particles: Settings Ambient
+    settings_animation: Boolean = true
+
+    -- Particles: Global tunables (overscroll defaults)
+    thickness: Integer = 25
+    speed: Decimal = 0.7
+    tail_length: Decimal = 0.7
+    pulse_depth: Decimal = 0.0
+    pulse_speed: Decimal = 0.3
+    env_attack: Decimal = 0.2
+    env_release: Decimal = 0.05
+    release_mode: ReleaseMode = release
+    shape: ParticleShape = circle
+    env_curve: Integer = 2
+    thk_attack: Decimal = 0.0
+    thk_release: Decimal = 0.0
+    thk_curve: Integer = 2
+    burst_count: Integer = 8
+    burst_spread: Decimal = 3.8
+
+    -- Particles: Per-preset tunables override the globals above.
+    -- Each preset (fireworks, corners, pulse_out, rotate, ping_pong, ambient)
+    -- has its own speed, thickness, tail_length, pulse_depth, pulse_speed,
+    -- env_attack, env_release, release_mode, shape, env_curve, thk_attack,
+    -- thk_release, thk_curve. Ambient also has burst_count and burst_spread.
+    -- GSettings keys follow the pattern: edge-<field>-<preset>.
+    -- See GSettings schema for per-preset defaults.
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- === Particles ===
+
+rule OverscrollFired {
+    -- Terminal scrolled past bounds
+    when: OverscrollFired(particles, edge)
+
+    requires: config.overscroll_enabled
+
+    -- Falls back to accent_color from glass config (see glass-system.allium)
+    let color = if config.overscroll_color != "": config.overscroll_color else: config.accent_color
+
+    ensures: particles.overscroll_active = true
+    ensures: particles.overscroll_edge = edge
+    ensures: OverscrollAnimation(
+        particles: particles,
+        edge: edge,
+        origin: config.overscroll_style,
+        color: color
+    )
+
+    @guidance
+        -- Two snakes split from origin point and travel outward.
+        -- Animation duration: 600ms / speed.
+        -- Easing: ease-out-cubic.
+        -- overscroll_active returns to false when animation completes.
+}
+
+rule PrivilegeActivated {
+    -- Active tab entered privileged (root) state
+    when: tab: glass/Tab.is_privileged becomes true
+
+    requires: config.privilege_enabled
+    requires: not tab.window.settings_visible
+
+    ensures: tab.window.particle_state.privilege_active = true
+    ensures: tab.window.particle_state.privilege_preset = config.privilege_preset
+
+    @guidance
+        -- When privilege_preset is fireworks, fires AmbientBurstCycle.
+        -- For other presets (corners, pulse-out, rotate, ping-pong),
+        -- takes over the process particle layer, stashing any current
+        -- process preset for restoration when privilege deactivates.
+}
+
+rule PrivilegeDeactivated {
+    when: tab: glass/Tab.is_privileged becomes false
+    requires: not tab.window.settings_visible
+
+    ensures: tab.window.particle_state.privilege_active = false
+
+    @guidance
+        -- Restores previously stashed process preset if one was active.
+}
+
+rule SettingsAmbientActivated {
+    -- Settings page opened, decorative ambient particles begin
+    when: SettingsOpened(window)
+    requires: config.settings_animation
+
+    ensures: window.particle_state.ambient_active = true
+    ensures: AmbientBurstCycle(
+        particles: window.particle_state,
+        color: random_ambient_color(),
+        direction: clockwise
+    )
+
+    @guidance
+        -- Settings ambient uses an independent burst array, running
+        -- concurrently with privilege/process particles.
+        -- Each burst picks its own random color from: magenta, blue,
+        -- green, orange.
+        -- Controlled by edge-settings-animation GSettings toggle.
+}
+
+rule SettingsAmbientDeactivated {
+    when: SettingsClosed(window)
+
+    ensures: window.particle_state.ambient_active = false
+}
+
+rule AmbientBurstCycle {
+    -- Fire a cycle of staggered bursts around the window perimeter
+    when: AmbientBurstCycle(particles, color, direction)
+
+    requires: particles.privilege_active or particles.ambient_active
+
+    ensures: particles.ambient_burst_count = config.burst_count
+    ensures: BurstsScheduled(
+        particles: particles,
+        count: config.burst_count,
+        spread: config.burst_spread,
+        color: color
+    )
+
+    @guidance
+        -- First burst fires immediately.
+        -- Remaining bursts stagger with random delays: 150*i*spread to 600*i*spread ms.
+        -- Each burst animates for 800ms / speed with ease-out-cubic.
+        -- Next cycle auto-schedules after 600*spread to 1200*spread ms.
+        -- Bursts overlap, typically 3+ visible simultaneously.
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+@invariant OverscrollIndependent
+    -- The overscroll layer fires independently of all other layers.
+    -- Its activation depends only on config.overscroll_enabled and
+    -- the scroll-past-bounds event, never on the state of privilege,
+    -- process, or ambient layers.
+
+@invariant AmbientIndependent
+    -- The settings ambient burst array runs independently of the
+    -- privilege and process layers. Its activation depends only on
+    -- config.settings_animation and the settings page open/close
+    -- lifecycle.
+
+@invariant ConcurrentLayers
+    -- Multiple layers can be active simultaneously. Overscroll,
+    -- privilege, process, and ambient animations may all run at the
+    -- same time without interference. Each layer manages its own
+    -- lifecycle and does not gate on or cancel other layers.

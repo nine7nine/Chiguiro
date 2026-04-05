@@ -1,15 +1,21 @@
 -- allium: 3
 -- chiguiro.allium
 
--- Scope: Chiguiro terminal emulator domain behavior
+-- Scope: Chiguiro terminal emulator — umbrella spec
 -- Includes: Process management, color/theming, tab/window lifecycle,
---           settings, particles, close protection, app glass
+--           settings, close protection
+-- Sub-specs: glass-system (glass transitions, CSS, process glass),
+--            particles (presets, overscroll, privilege, ambient)
 -- Excludes:
 --   - GTK/GObject implementation (widgets, signals, bindings)
 --   - VTE terminal internals (PTY, escape sequences)
 --   - D-Bus FileManager1 integration
 --   - Hyperlink regex detection (implementation detail)
 --   - CSS styling mechanics
+--   - Glass transition system (see spec/glass-system.allium)
+
+use "spec/glass-system.allium" as glass
+use "spec/particles.allium" as particles
 
 ------------------------------------------------------------
 -- External Entities
@@ -38,14 +44,6 @@ value Colour {
     alpha: Decimal
 }
 
-value ProcessGlassConfig {
-    -- Extended config: "glasscolor;preset;reverse;particlecolor"
-    glass_color: String?
-    preset: ParticlePreset
-    reverse: Boolean
-    particle_color: Colour
-}
-
 value WindowGeometry {
     width: Integer
     height: Integer
@@ -60,17 +58,7 @@ enum ZoomDirection { zoom_in | zoom_out }
 
 enum CloseResult { close_anyway | cancelled }
 
-enum BurstOrigin { center | corner }
-
-enum CirculationDirection { clockwise | counter_clockwise }
-
-enum ParticlePreset { fireworks | corners | pulse_out | rotate | ping_pong | ambient | none }
-
-enum ParticleShape { square | triangle | diamond | circle }
-
-enum ReleaseMode { hold | release }
-
-enum Edge { top | bottom | left | right }
+-- Particle enums: see spec/particles.allium
 
 ------------------------------------------------------------
 -- Entities and Variants
@@ -193,36 +181,8 @@ entity Window {
     -- Process glass
     glass_color: Colour?
 
-    -- Particles
-    particle_state: Particles with window = this
-}
-
-entity Particles {
-    -- Edge particle animation state for a window
-    window: Window
-
-    -- Overscroll layer (fires independently)
-    overscroll_active: Boolean
-    overscroll_edge: Edge?
-    overscroll_progress: Decimal?
-
-    -- Privilege layer (ambient burst cycle OR preset animation)
-    privilege_active: Boolean
-    privilege_preset: ParticlePreset
-
-    -- Process layer (process-specific preset animation)
-    process_active: Boolean
-    process_preset: ParticlePreset
-    process_color: Colour?
-    process_reverse: Boolean
-
-    -- Settings ambient layer (independent burst cycle)
-    ambient_active: Boolean
-    ambient_enabled: Boolean
-    ambient_burst_count: Integer
-
-    -- Derived
-    is_animating: overscroll_active or privilege_active or process_active or ambient_active
+    -- Particles: see spec/particles.allium
+    particle_state: particles/Particles with window = this
 }
 
 entity LiveryManager {
@@ -272,53 +232,10 @@ config {
     transparency_enabled: Boolean = false
     transparency_level: Decimal = 0.04
 
-    -- App Glass
-    glass_opacity: Decimal = 0.94
-    glass_color: String = "#1b1b1f"
-    use_glass_bg: Boolean = true
-    accent_color: String = "#3584e4"
+    -- App Glass: see spec/glass-system.allium
 
-    -- Particles: Overscroll
-    overscroll_enabled: Boolean = true
-    overscroll_color: String = "#613583"
-    overscroll_style: BurstOrigin = corner
-
-    -- Particles: Privilege
-    privilege_enabled: Boolean = false
-    privilege_color: String = "#9a9996"
-    privilege_direction: CirculationDirection = clockwise
-    privilege_preset: ParticlePreset = fireworks
-
-    -- Particles: Settings Ambient
-    settings_animation: Boolean = true
-
-    -- Particles: Global tunables (overscroll defaults)
-    thickness: Integer = 25
-    speed: Decimal = 0.7
-    tail_length: Decimal = 0.7
-    pulse_depth: Decimal = 0.0
-    pulse_speed: Decimal = 0.3
-    env_attack: Decimal = 0.2
-    env_release: Decimal = 0.05
-    release_mode: ReleaseMode = release
-    shape: ParticleShape = circle
-    env_curve: Integer = 2
-    thk_attack: Decimal = 0.0
-    thk_release: Decimal = 0.0
-    thk_curve: Integer = 2
-    burst_count: Integer = 8
-    burst_spread: Decimal = 3.8
-
-    -- Particles: Per-preset tunables override the globals above.
-    -- Each preset (fireworks, corners, pulse_out, rotate, ping_pong, ambient)
-    -- has its own speed, thickness, tail_length, pulse_depth, pulse_speed,
-    -- env_attack, env_release, release_mode, shape, env_curve, thk_attack,
-    -- thk_release, thk_curve. Ambient also has burst_count and burst_spread.
-    -- GSettings keys follow the pattern: edge-<field>-<preset>.
-    -- See GSettings schema for per-preset defaults.
-
-    -- Process Glass
-    process_glass_colors: Map<String, ProcessGlassConfig> = {}
+    -- Particles: see spec/particles.allium
+    -- Process Glass: see spec/glass-system.allium
 }
 
 ------------------------------------------------------------
@@ -476,25 +393,7 @@ rule ActivateTab {
             if t != tab: t.is_active = false
 }
 
-rule TabSwitchBgSnap {
-    -- Snap the new terminal's background to the current glass color
-    when: ActivateTab(tab, window)
-
-    requires: window.glass_color != null
-
-    ensures: TerminalBgSnapped(
-        terminal: tab.terminal,
-        color: window.glass_color
-    )
-
-    @guidance
-        -- On tab switch, the new terminal is visible immediately but the
-        -- glass transition runs from an idle callback 1+ frames later.
-        -- Without this snap, the new terminal shows its stale bg_current
-        -- while the CSS chrome still shows the old glass color — a visible
-        -- two-color flicker. The snap eliminates this gap.
-        -- Uses vte_terminal_set_color_background for lightweight update.
-}
+-- TabSwitchBgSnap: moved to spec/glass-system.allium
 
 rule CloseTab {
     -- Close a single tab, with protection if processes are running
@@ -628,149 +527,8 @@ rule ImportLivery {
         -- and optional [Day] sections. UUID mismatches are warned.
 }
 
--- === App Glass (Process Glass) ===
-
-rule ProcessGlassCheck {
-    -- Periodic check for process-specific glass colors
-    when: ProcessGlassCheck(window)
-
-    requires: window.active_tab != null
-    requires: window.active_tab.train != null
-
-    let train = window.active_tab.train
-    let match = lookup_process_glass(train.children, config.process_glass_colors)
-
-    ensures:
-        if match != null:
-            window.glass_color = match.glass_color ?? default_glass_color
-            DeferredParticle(
-                window: window,
-                preset: match.preset,
-                color: match.particle_color,
-                reverse: match.reverse
-            )
-        else:
-            window.glass_color = null
-
-    @guidance
-        -- Signal-driven: fires on idle callbacks when the active tab or
-        -- train children change, with a 30-second safety-net timer.
-        -- Matches child process names against process_glass_colors map.
-        -- Glass color applies to headerbar, tab bar, and scrollbar.
-        -- Glass transition animates over 200ms with ADW_EASE_IN_OUT_CUBIC,
-        -- driving both CSS chrome and VTE terminal background in a unified
-        -- callback.
-        -- Particle activation is deferred until the glass transition
-        -- completes, preventing both animations from competing for frame
-        -- budget.
-        -- When use_glass_bg is enabled, terminal background also changes.
-        -- Per-frame VTE background updates during glass and process-bg
-        -- transitions use vte_terminal_set_color_background() (background
-        -- colour only) rather than vte_terminal_set_colors() (full 16-color
-        -- palette rebuild). This keeps per-frame cost low enough for smooth
-        -- animation; the full palette is applied once at transition end.
-}
-
--- === Particles ===
-
-rule OverscrollFired {
-    -- Terminal scrolled past bounds
-    when: OverscrollFired(particles, edge)
-
-    requires: config.overscroll_enabled
-
-    let color = if config.overscroll_color != "": config.overscroll_color else: config.accent_color
-
-    ensures: particles.overscroll_active = true
-    ensures: particles.overscroll_edge = edge
-    ensures: OverscrollAnimation(
-        particles: particles,
-        edge: edge,
-        origin: config.overscroll_style,
-        color: color
-    )
-
-    @guidance
-        -- Two snakes split from origin point and travel outward.
-        -- Animation duration: 600ms / speed.
-        -- Easing: ease-out-cubic.
-        -- overscroll_active returns to false when animation completes.
-}
-
-rule PrivilegeActivated {
-    -- Active tab entered privileged (root) state
-    when: tab: Tab.is_privileged becomes true
-
-    requires: config.privilege_enabled
-    requires: not tab.window.settings_visible
-
-    ensures: tab.window.particle_state.privilege_active = true
-    ensures: tab.window.particle_state.privilege_preset = config.privilege_preset
-
-    @guidance
-        -- When privilege_preset is fireworks, fires AmbientBurstCycle.
-        -- For other presets (corners, pulse-out, rotate, ping-pong),
-        -- takes over the process particle layer, stashing any current
-        -- process preset for restoration when privilege deactivates.
-}
-
-rule PrivilegeDeactivated {
-    when: tab: Tab.is_privileged becomes false
-    requires: not tab.window.settings_visible
-
-    ensures: tab.window.particle_state.privilege_active = false
-
-    @guidance
-        -- Restores previously stashed process preset if one was active.
-}
-
-rule SettingsAmbientActivated {
-    -- Settings page opened, decorative ambient particles begin
-    when: SettingsOpened(window)
-    requires: config.settings_animation
-
-    ensures: window.particle_state.ambient_active = true
-    ensures: AmbientBurstCycle(
-        particles: window.particle_state,
-        color: random_ambient_color(),
-        direction: clockwise
-    )
-
-    @guidance
-        -- Settings ambient uses an independent burst array, running
-        -- concurrently with privilege/process particles.
-        -- Each burst picks its own random color from: magenta, blue,
-        -- green, orange.
-        -- Controlled by edge-settings-animation GSettings toggle.
-}
-
-rule SettingsAmbientDeactivated {
-    when: SettingsClosed(window)
-
-    ensures: window.particle_state.ambient_active = false
-}
-
-rule AmbientBurstCycle {
-    -- Fire a cycle of staggered bursts around the window perimeter
-    when: AmbientBurstCycle(particles, color, direction)
-
-    requires: particles.privilege_active or particles.ambient_active
-
-    ensures: particles.ambient_burst_count = config.burst_count
-    ensures: BurstsScheduled(
-        particles: particles,
-        count: config.burst_count,
-        spread: config.burst_spread,
-        color: color
-    )
-
-    @guidance
-        -- First burst fires immediately.
-        -- Remaining bursts stagger with random delays: 150*i*spread to 600*i*spread ms.
-        -- Each burst animates for 800ms / speed with ease-out-cubic.
-        -- Next cycle auto-schedules after 600*spread to 1200*spread ms.
-        -- Bursts overlap, typically 3+ visible simultaneously.
-}
+-- Particles: see spec/particles.allium
+-- App Glass: see spec/glass-system.allium
 
 -- === Window Geometry ===
 
