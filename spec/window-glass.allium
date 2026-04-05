@@ -69,6 +69,7 @@ entity Window {
     translucent: Boolean
     fullscreened: Boolean
     floating: Boolean
+    settings_visible: Boolean
     is_active: Boolean
     width: Integer
     height: Integer
@@ -81,6 +82,13 @@ entity Window {
     glass_opacity: settings.glass_opacity
     glass_color: settings.glass_color
     accent_color: settings.accent_color
+
+    -- Process glass override (active when a process matches process_glass_colors)
+    process_glass_active: Boolean
+    process_glass_color: Colour?
+
+    -- Derived
+    effective_glass_color: if process_glass_active then process_glass_color else glass_color
 }
 
 entity Application {
@@ -621,10 +629,21 @@ surface SettingsPage {
         settings.accent_color
         settings.restore_window_size
 
+        -- Particle settings
+        settings.overscroll_enabled
+        settings.overscroll_color
+        settings.privilege_enabled
+        settings.privilege_color
+        settings.settings_animation
+        -- Per-preset particle tunables (speed, thickness, envelope, etc.)
+        -- are exposed via a programmatic grid. See GSettings schema for
+        -- the full list of edge-* keys.
+
     provides:
         ToggleSettingsPage(window)
         GlassSettingChanged(window)
         AccentColorChanged(window)
+        ParticleSettingChanged(window)
 
     @guarantee SettingsLive
         -- All setting changes take effect immediately without restart.
