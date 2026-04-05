@@ -31,6 +31,69 @@
 #include "kgx-settings-page.h"
 
 
+/* --- Tunables grid descriptors --- */
+
+enum {
+  COL_SPEED, COL_THICKNESS, COL_TAIL, COL_PULSE_DEPTH, COL_PULSE_SPEED,
+  COL_ENV_ATTACK, COL_ENV_RELEASE, COL_RELEASE_MODE, COL_SHAPE,
+  COL_BURST_COUNT, COL_BURST_SPREAD,
+  COL_ENV_CURVE, COL_THK_ATTACK, COL_THK_RELEASE, COL_THK_CURVE,
+  N_TUNE_COLS
+};
+
+typedef enum { BIND_DIRECT, BIND_PERCENT, BIND_INT_BOOL, BIND_SHAPE } BindKind;
+typedef enum { WID_SPIN, WID_TOGGLE, WID_BUTTON } WidgetKind;
+
+typedef struct {
+  int         grid_col;
+  WidgetKind  wkind;
+  BindKind    bkind;
+  const char *settings_field;
+  int         digits;
+  double      lower, upper, step;
+  const char *tooltip;
+  gboolean    burst_only;
+} TuneColDesc;
+
+static const TuneColDesc tune_cols[N_TUNE_COLS] = {
+  [COL_SPEED]        = {  1, WID_SPIN,   BIND_PERCENT,  "speed",        1, 10, 300, 10, NULL,               FALSE },
+  [COL_THICKNESS]    = {  2, WID_SPIN,   BIND_DIRECT,   "thickness",    0,  2,  40,  1, NULL,               FALSE },
+  [COL_TAIL]         = {  3, WID_SPIN,   BIND_PERCENT,  "tail-length",  0, 10, 300, 10, NULL,               FALSE },
+  [COL_PULSE_DEPTH]  = {  4, WID_SPIN,   BIND_PERCENT,  "pulse-depth",  0,  0, 100,  5, NULL,               FALSE },
+  [COL_PULSE_SPEED]  = {  5, WID_SPIN,   BIND_PERCENT,  "pulse-speed",  1, 10, 500, 10, NULL,               FALSE },
+  [COL_ENV_ATTACK]   = {  6, WID_SPIN,   BIND_PERCENT,  "env-attack",   0,  0,  50,  5, "Attack",           FALSE },
+  [COL_ENV_RELEASE]  = {  7, WID_SPIN,   BIND_PERCENT,  "env-release",  0,  0,  50,  5, "Release",          FALSE },
+  [COL_RELEASE_MODE] = {  8, WID_TOGGLE, BIND_INT_BOOL, "release-mode", 0,  0,   0,  0, "Tail retraction on release", FALSE },
+  [COL_SHAPE]        = {  9, WID_BUTTON, BIND_SHAPE,    "shape",        0,  0,   0,  0, "Particle shape",   FALSE },
+  [COL_BURST_COUNT]  = { 10, WID_SPIN,   BIND_DIRECT,   "burst-count",  0,  1,   8,  1, "Burst Count",      TRUE },
+  [COL_BURST_SPREAD] = { 11, WID_SPIN,   BIND_PERCENT,  "burst-spread", 0, 50, 500, 10, "Burst Spread",     TRUE },
+  [COL_ENV_CURVE]    = { 12, WID_SPIN,   BIND_DIRECT,   "env-curve",    0,  1,   3,  1, "Envelope Curve",   FALSE },
+  [COL_THK_ATTACK]   = { 13, WID_SPIN,   BIND_PERCENT,  "thk-attack",   0,  0,  50,  5, "Thickness Attack", FALSE },
+  [COL_THK_RELEASE]  = { 14, WID_SPIN,   BIND_PERCENT,  "thk-release",  0,  0,  50,  5, "Thickness Release",FALSE },
+  [COL_THK_CURVE]    = { 15, WID_SPIN,   BIND_DIRECT,   "thk-curve",    0,  1,   3,  1, "Thickness Curve",  FALSE },
+};
+
+#define N_PRESET_ROWS 7
+
+typedef struct {
+  const char *display_name;
+  const char *css_class;
+  const char *settings_suffix;  /* NULL for overscroll (global) */
+  gboolean    has_burst;
+} PresetRowDesc;
+
+static const PresetRowDesc preset_rows[N_PRESET_ROWS] = {
+  { "Ambient",    "preset-ambient",    "ambient",   TRUE  },
+  { "Corners",    "preset-corners",    "corners",   FALSE },
+  { "Fireworks",  "preset-fireworks",  "fireworks", TRUE  },
+  { "Overscroll", "preset-overscroll",  NULL,        FALSE },
+  { "Ping-Pong",  "preset-ping-pong",  "ping-pong", FALSE },
+  { "Pulse Out",  "preset-pulse-out",  "pulse-out", FALSE },
+  { "Rotate",     "preset-rotate",     "rotate",    FALSE },
+};
+
+#define APP_GLASS_SLOTS 12
+
 struct _KgxSettingsPage {
   AdwBin                parent_instance;
 
@@ -56,120 +119,16 @@ struct _KgxSettingsPage {
   GtkWidget            *privilege_color_btn;
   GtkWidget            *privilege_preset_btn;
   GtkWidget            *ambient_switch;
-  GtkWidget            *edge_thickness;
-  GtkWidget            *edge_speed;
-  GtkWidget            *edge_pulse_depth;
-  GtkWidget            *edge_tail_length;
-  GtkWidget            *edge_pulse_speed;
-  GtkWidget            *edge_burst_count;
-  GtkWidget            *edge_burst_spread;
+  GtkWidget            *tunables_grid;
+  GtkWidget            *tune_widgets[N_PRESET_ROWS][N_TUNE_COLS];
+  GtkWidget            *app_glass_grid;
   gboolean              app_glass_inhibit_save;
   guint                 app_glass_save_timeout;
-  GtkWidget            *app_glass_0, *app_glass_1, *app_glass_2, *app_glass_3;
-  GtkWidget            *app_glass_4, *app_glass_5, *app_glass_6, *app_glass_7;
-  GtkWidget            *app_glass_8, *app_glass_9, *app_glass_10, *app_glass_11;
-  GtkWidget            *app_glass_color_0, *app_glass_color_1, *app_glass_color_2, *app_glass_color_3;
-  GtkWidget            *app_glass_color_4, *app_glass_color_5, *app_glass_color_6, *app_glass_color_7;
-  GtkWidget            *app_glass_color_8, *app_glass_color_9, *app_glass_color_10, *app_glass_color_11;
-  GtkWidget            *app_glass_preset_0, *app_glass_preset_1, *app_glass_preset_2, *app_glass_preset_3;
-  GtkWidget            *app_glass_preset_4, *app_glass_preset_5, *app_glass_preset_6, *app_glass_preset_7;
-  GtkWidget            *app_glass_preset_8, *app_glass_preset_9, *app_glass_preset_10, *app_glass_preset_11;
-  GtkWidget            *app_glass_reverse_0, *app_glass_reverse_1, *app_glass_reverse_2, *app_glass_reverse_3;
-  GtkWidget            *app_glass_reverse_4, *app_glass_reverse_5, *app_glass_reverse_6, *app_glass_reverse_7;
-  GtkWidget            *app_glass_reverse_8, *app_glass_reverse_9, *app_glass_reverse_10, *app_glass_reverse_11;
-  GtkWidget            *app_glass_pcolor_0, *app_glass_pcolor_1, *app_glass_pcolor_2, *app_glass_pcolor_3;
-  GtkWidget            *app_glass_pcolor_4, *app_glass_pcolor_5, *app_glass_pcolor_6, *app_glass_pcolor_7;
-  GtkWidget            *app_glass_pcolor_8, *app_glass_pcolor_9, *app_glass_pcolor_10, *app_glass_pcolor_11;
-  GtkWidget            *edge_speed_fireworks;
-  GtkWidget            *edge_speed_corners;
-  GtkWidget            *edge_speed_pulse_out;
-  GtkWidget            *edge_speed_rotate;
-  GtkWidget            *edge_speed_ping_pong;
-  GtkWidget            *edge_thickness_fireworks;
-  GtkWidget            *edge_tail_length_fireworks;
-  GtkWidget            *edge_pulse_depth_fireworks;
-  GtkWidget            *edge_pulse_speed_fireworks;
-  GtkWidget            *edge_thickness_corners;
-  GtkWidget            *edge_tail_length_corners;
-  GtkWidget            *edge_pulse_depth_corners;
-  GtkWidget            *edge_pulse_speed_corners;
-  GtkWidget            *edge_thickness_pulse_out;
-  GtkWidget            *edge_tail_length_pulse_out;
-  GtkWidget            *edge_pulse_depth_pulse_out;
-  GtkWidget            *edge_pulse_speed_pulse_out;
-  GtkWidget            *edge_thickness_rotate;
-  GtkWidget            *edge_tail_length_rotate;
-  GtkWidget            *edge_pulse_depth_rotate;
-  GtkWidget            *edge_pulse_speed_rotate;
-  GtkWidget            *edge_thickness_ping_pong;
-  GtkWidget            *edge_tail_length_ping_pong;
-  GtkWidget            *edge_pulse_depth_ping_pong;
-  GtkWidget            *edge_pulse_speed_ping_pong;
-  /* Envelope + shape */
-  GtkWidget            *edge_env_attack;
-  GtkWidget            *edge_env_release;
-  GtkWidget            *edge_release_mode;
-  GtkWidget            *edge_shape;
-  GtkWidget            *edge_env_attack_fireworks;
-  GtkWidget            *edge_env_release_fireworks;
-  GtkWidget            *edge_release_mode_fireworks;
-  GtkWidget            *edge_shape_fireworks;
-  GtkWidget            *edge_env_attack_corners;
-  GtkWidget            *edge_env_release_corners;
-  GtkWidget            *edge_release_mode_corners;
-  GtkWidget            *edge_shape_corners;
-  GtkWidget            *edge_env_attack_pulse_out;
-  GtkWidget            *edge_env_release_pulse_out;
-  GtkWidget            *edge_release_mode_pulse_out;
-  GtkWidget            *edge_shape_pulse_out;
-  GtkWidget            *edge_env_attack_rotate;
-  GtkWidget            *edge_env_release_rotate;
-  GtkWidget            *edge_release_mode_rotate;
-  GtkWidget            *edge_shape_rotate;
-  GtkWidget            *edge_env_attack_ping_pong;
-  GtkWidget            *edge_env_release_ping_pong;
-  GtkWidget            *edge_release_mode_ping_pong;
-  GtkWidget            *edge_shape_ping_pong;
-  GtkWidget            *edge_speed_ambient;
-  GtkWidget            *edge_thickness_ambient;
-  GtkWidget            *edge_tail_length_ambient;
-  GtkWidget            *edge_pulse_depth_ambient;
-  GtkWidget            *edge_pulse_speed_ambient;
-  GtkWidget            *edge_env_attack_ambient;
-  GtkWidget            *edge_env_release_ambient;
-  GtkWidget            *edge_release_mode_ambient;
-  GtkWidget            *edge_shape_ambient;
-  GtkWidget            *edge_burst_count_ambient;
-  GtkWidget            *edge_burst_spread_ambient;
-  /* Envelope curve + thickness envelope */
-  GtkWidget            *edge_env_curve;
-  GtkWidget            *edge_thk_attack;
-  GtkWidget            *edge_thk_release;
-  GtkWidget            *edge_thk_curve;
-  GtkWidget            *edge_env_curve_fireworks;
-  GtkWidget            *edge_thk_attack_fireworks;
-  GtkWidget            *edge_thk_release_fireworks;
-  GtkWidget            *edge_thk_curve_fireworks;
-  GtkWidget            *edge_env_curve_corners;
-  GtkWidget            *edge_thk_attack_corners;
-  GtkWidget            *edge_thk_release_corners;
-  GtkWidget            *edge_thk_curve_corners;
-  GtkWidget            *edge_env_curve_pulse_out;
-  GtkWidget            *edge_thk_attack_pulse_out;
-  GtkWidget            *edge_thk_release_pulse_out;
-  GtkWidget            *edge_thk_curve_pulse_out;
-  GtkWidget            *edge_env_curve_rotate;
-  GtkWidget            *edge_thk_attack_rotate;
-  GtkWidget            *edge_thk_release_rotate;
-  GtkWidget            *edge_thk_curve_rotate;
-  GtkWidget            *edge_env_curve_ping_pong;
-  GtkWidget            *edge_thk_attack_ping_pong;
-  GtkWidget            *edge_thk_release_ping_pong;
-  GtkWidget            *edge_thk_curve_ping_pong;
-  GtkWidget            *edge_env_curve_ambient;
-  GtkWidget            *edge_thk_attack_ambient;
-  GtkWidget            *edge_thk_release_ambient;
-  GtkWidget            *edge_thk_curve_ambient;
+  GtkWidget            *ag_entries[APP_GLASS_SLOTS];
+  GtkWidget            *ag_colors[APP_GLASS_SLOTS];
+  GtkWidget            *ag_presets[APP_GLASS_SLOTS];
+  GtkWidget            *ag_reverses[APP_GLASS_SLOTS];
+  GtkWidget            *ag_pcolors[APP_GLASS_SLOTS];
   GtkWidget            *logo_picture;
   GtkWidget            *page_title;
   AdwCarousel          *carousel;
@@ -181,14 +140,8 @@ struct _KgxSettingsPage {
 
 G_DEFINE_TYPE (KgxSettingsPage, kgx_settings_page, ADW_TYPE_BIN)
 
-#define APP_GLASS_SLOTS 12
 static void app_glass_load (KgxSettingsPage *self);
 static void sync_all_shapes (KgxSettingsPage *self);
-static inline GtkWidget **app_glass_entries (KgxSettingsPage *self);
-static inline GtkWidget **app_glass_colors (KgxSettingsPage *self);
-static inline GtkWidget **app_glass_presets (KgxSettingsPage *self);
-static inline GtkWidget **app_glass_reverses (KgxSettingsPage *self);
-static inline GtkWidget **app_glass_pcolors (KgxSettingsPage *self);
 
 
 enum {
@@ -216,38 +169,21 @@ kgx_settings_page_dispose (GObject *object)
 
   g_clear_handle_id (&self->app_glass_save_timeout, g_source_remove);
 
-  /* Disconnect all signal handlers from App Glass template children before
+  /* Disconnect all signal handlers from App Glass widgets before
    * disposal — signals can fire during teardown and access freed state. */
-  {
-    GtkWidget **entries  = app_glass_entries (self);
-    GtkWidget **colors   = app_glass_colors (self);
-    GtkWidget **presets  = app_glass_presets (self);
-    GtkWidget **reverses = app_glass_reverses (self);
-    GtkWidget **pcolors  = app_glass_pcolors (self);
-    for (int i = 0; i < APP_GLASS_SLOTS; i++) {
-      if (entries[i])  g_signal_handlers_disconnect_by_data (entries[i], self);
-      if (colors[i])   g_signal_handlers_disconnect_by_data (colors[i], self);
-      if (presets[i])  g_signal_handlers_disconnect_by_data (presets[i], self);
-      if (reverses[i]) g_signal_handlers_disconnect_by_data (reverses[i], self);
-      if (pcolors[i])  g_signal_handlers_disconnect_by_data (pcolors[i], self);
-    }
+  for (int i = 0; i < APP_GLASS_SLOTS; i++) {
+    if (self->ag_entries[i])  g_signal_handlers_disconnect_by_data (self->ag_entries[i], self);
+    if (self->ag_colors[i])   g_signal_handlers_disconnect_by_data (self->ag_colors[i], self);
+    if (self->ag_presets[i])  g_signal_handlers_disconnect_by_data (self->ag_presets[i], self);
+    if (self->ag_reverses[i]) g_signal_handlers_disconnect_by_data (self->ag_reverses[i], self);
+    if (self->ag_pcolors[i])  g_signal_handlers_disconnect_by_data (self->ag_pcolors[i], self);
   }
 
   /* Disconnect shape button click handlers */
-  if (self->edge_shape)
-    g_signal_handlers_disconnect_by_data (self->edge_shape, self);
-  if (self->edge_shape_fireworks)
-    g_signal_handlers_disconnect_by_data (self->edge_shape_fireworks, self);
-  if (self->edge_shape_corners)
-    g_signal_handlers_disconnect_by_data (self->edge_shape_corners, self);
-  if (self->edge_shape_pulse_out)
-    g_signal_handlers_disconnect_by_data (self->edge_shape_pulse_out, self);
-  if (self->edge_shape_rotate)
-    g_signal_handlers_disconnect_by_data (self->edge_shape_rotate, self);
-  if (self->edge_shape_ping_pong)
-    g_signal_handlers_disconnect_by_data (self->edge_shape_ping_pong, self);
-  if (self->edge_shape_ambient)
-    g_signal_handlers_disconnect_by_data (self->edge_shape_ambient, self);
+  for (int r = 0; r < N_PRESET_ROWS; r++) {
+    if (self->tune_widgets[r][COL_SHAPE])
+      g_signal_handlers_disconnect_by_data (self->tune_widgets[r][COL_SHAPE], self);
+  }
 
   /* settings_binds is a template child — disconnect but do NOT free */
   if (self->settings_binds) {
@@ -471,7 +407,28 @@ bool_to_int (GBinding     *binding,
 }
 
 
-/* 1-indexed GSettings preset int  <->  0-indexed GtkDropDown selected */
+/* Map KgxParticlePreset enum (1-6) <-> alphabetical indicator dropdown index (0-5).
+ * Enum: 1=FIREWORKS 2=CORNERS 3=PULSE_OUT 4=ROTATE 5=PING_PONG 6=AMBIENT
+ * Alpha: 0=ambient 1=corners 2=fireworks 3=ping-pong 4=pulse-out 5=rotate */
+static const guint preset_enum_to_indicator[] = {
+  [0] = 0,
+  [KGX_PARTICLE_FIREWORKS] = 2,
+  [KGX_PARTICLE_CORNERS]   = 1,
+  [KGX_PARTICLE_PULSE_OUT] = 4,
+  [KGX_PARTICLE_ROTATE]    = 5,
+  [KGX_PARTICLE_PING_PONG] = 3,
+  [KGX_PARTICLE_AMBIENT]   = 0,
+};
+
+static const int indicator_to_preset_enum[] = {
+  KGX_PARTICLE_AMBIENT,   /* 0: ambient */
+  KGX_PARTICLE_CORNERS,   /* 1: corners */
+  KGX_PARTICLE_FIREWORKS, /* 2: fireworks */
+  KGX_PARTICLE_PING_PONG, /* 3: ping-pong */
+  KGX_PARTICLE_PULSE_OUT, /* 4: pulse-out */
+  KGX_PARTICLE_ROTATE,    /* 5: rotate */
+};
+
 static gboolean
 preset_int_to_selected (GBinding     *binding,
                         const GValue *from,
@@ -479,7 +436,9 @@ preset_int_to_selected (GBinding     *binding,
                         gpointer      user_data)
 {
   int v = g_value_get_int (from);
-  g_value_set_uint (to, (v > 0) ? (guint) (v - 1) : 0);
+  if (v < 1 || v > (int) G_N_ELEMENTS (indicator_to_preset_enum))
+    v = KGX_PARTICLE_FIREWORKS;
+  g_value_set_uint (to, preset_enum_to_indicator[v]);
   return TRUE;
 }
 
@@ -490,7 +449,10 @@ selected_to_preset_int (GBinding     *binding,
                         GValue       *to,
                         gpointer      user_data)
 {
-  g_value_set_int (to, (int) g_value_get_uint (from) + 1);
+  guint sel = g_value_get_uint (from);
+  if (sel >= G_N_ELEMENTS (indicator_to_preset_enum))
+    sel = 0;
+  g_value_set_int (to, indicator_to_preset_enum[sel]);
   return TRUE;
 }
 
@@ -503,12 +465,12 @@ shape_clicked_cb (GtkButton *button, gpointer user_data)
 {
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
   const char *prop_name = g_object_get_data (G_OBJECT (button), "settings-prop");
+  int current = 0, next;
   if (!prop_name || !self->settings)
     return;
 
-  int current = 0;
   g_object_get (self->settings, prop_name, &current, NULL);
-  int next = (current + 1) % 4;
+  next = (current + 1) % 4;
   g_object_set (self->settings, prop_name, next, NULL);
   gtk_button_set_label (button, shape_labels[next]);
 }
@@ -531,9 +493,9 @@ sync_shape_label (KgxSettingsPage *self,
                   GtkWidget       *button,
                   const char      *settings_prop)
 {
+  int current = 0;
   if (!self->settings)
     return;
-  int current = 0;
   g_object_get (self->settings, settings_prop, &current, NULL);
   current = CLAMP (current, 0, 3);
   gtk_button_set_label (GTK_BUTTON (button), shape_labels[current]);
@@ -543,15 +505,253 @@ sync_shape_label (KgxSettingsPage *self,
 static void
 sync_all_shapes (KgxSettingsPage *self)
 {
-  sync_shape_label (self, self->edge_shape, "edge-shape");
-  sync_shape_label (self, self->edge_shape_fireworks, "edge-shape-fireworks");
-  sync_shape_label (self, self->edge_shape_corners, "edge-shape-corners");
-  sync_shape_label (self, self->edge_shape_pulse_out, "edge-shape-pulse-out");
-  sync_shape_label (self, self->edge_shape_rotate, "edge-shape-rotate");
-  sync_shape_label (self, self->edge_shape_ping_pong, "edge-shape-ping-pong");
-  sync_shape_label (self, self->edge_shape_ambient, "edge-shape-ambient");
+  for (int r = 0; r < N_PRESET_ROWS; r++) {
+    const PresetRowDesc *pr = &preset_rows[r];
+    char prop[64];
+    if (pr->settings_suffix)
+      g_snprintf (prop, sizeof prop, "edge-shape-%s", pr->settings_suffix);
+    else
+      g_snprintf (prop, sizeof prop, "edge-shape");
+    sync_shape_label (self, self->tune_widgets[r][COL_SHAPE], prop);
+  }
 }
 
+
+static void
+build_tunables_grid (KgxSettingsPage *self)
+{
+  for (int r = 0; r < N_PRESET_ROWS; r++) {
+    const PresetRowDesc *pr = &preset_rows[r];
+    int grid_row = r + 1;
+
+    /* Column 0: preset label */
+    GtkWidget *label = gtk_label_new (pr->display_name);
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_widget_add_css_class (label, pr->css_class);
+    gtk_grid_attach (GTK_GRID (self->tunables_grid), label, 0, grid_row, 1, 1);
+
+    for (int c = 0; c < N_TUNE_COLS; c++) {
+      const TuneColDesc *td = &tune_cols[c];
+
+      GtkWidget *w;
+
+      if (td->burst_only && !pr->has_burst) {
+        self->tune_widgets[r][c] = NULL;
+        continue;
+      }
+
+      w = NULL;
+
+      switch (td->wkind) {
+      case WID_SPIN: {
+        GtkAdjustment *adj = gtk_adjustment_new (0, td->lower, td->upper,
+                                                  td->step, 0, 0);
+        w = gtk_spin_button_new (adj, 1.0, td->digits);
+        gtk_editable_set_alignment (GTK_EDITABLE (w), 1.0);
+        if (td->tooltip)
+          gtk_widget_set_tooltip_text (w, td->tooltip);
+        break;
+      }
+      case WID_TOGGLE:
+        w = gtk_toggle_button_new ();
+        gtk_button_set_label (GTK_BUTTON (w), "R");
+        gtk_widget_add_css_class (w, "flat");
+        gtk_widget_add_css_class (w, "release-toggle");
+        if (td->tooltip)
+          gtk_widget_set_tooltip_text (w, td->tooltip);
+        break;
+      case WID_BUTTON:
+        w = gtk_button_new_with_label ("\u25A0");
+        gtk_widget_add_css_class (w, "flat");
+        if (td->tooltip)
+          gtk_widget_set_tooltip_text (w, td->tooltip);
+        break;
+      default:
+        break;
+      }
+
+      self->tune_widgets[r][c] = w;
+      gtk_grid_attach (GTK_GRID (self->tunables_grid), w,
+                       td->grid_col, grid_row, 1, 1);
+    }
+  }
+}
+
+
+static void
+bind_tunables (KgxSettingsPage *self)
+{
+  for (int r = 0; r < N_PRESET_ROWS; r++) {
+    const PresetRowDesc *pr = &preset_rows[r];
+
+    for (int c = 0; c < N_TUNE_COLS; c++) {
+      const TuneColDesc *td = &tune_cols[c];
+      GtkWidget *w = self->tune_widgets[r][c];
+      char key[64];
+
+      if (!w)
+        continue;
+
+      /* Fireworks burst anomaly: burst keys are unsuffixed despite other
+       * Fireworks fields using "-fireworks". */
+      if (pr->settings_suffix &&
+          !(td->burst_only && g_str_equal (pr->settings_suffix, "fireworks")))
+        g_snprintf (key, sizeof key, "edge-%s-%s",
+                    td->settings_field, pr->settings_suffix);
+      else
+        g_snprintf (key, sizeof key, "edge-%s", td->settings_field);
+
+      switch (td->bkind) {
+      case BIND_DIRECT:
+        g_binding_group_bind (self->settings_binds, key,
+                              w, "value",
+                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+        break;
+      case BIND_PERCENT:
+        g_binding_group_bind_full (self->settings_binds, key,
+                                   w, "value",
+                                   G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                                   value_to_percent, percent_to_value,
+                                   NULL, NULL);
+        break;
+      case BIND_INT_BOOL:
+        g_binding_group_bind_full (self->settings_binds, key,
+                                   w, "active",
+                                   G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                                   int_to_bool, bool_to_int,
+                                   NULL, NULL);
+        break;
+      case BIND_SHAPE:
+        setup_shape_button (self, w, key);
+        break;
+      default:
+        break;
+      }
+    }
+  }
+}
+
+
+/* App Glass grid columns: Name(0) Glass(1) Preset(2) Rev(3) Particle(4) Switch(5) */
+
+static GtkWidget *
+make_color_btn (void)
+{
+  GtkColorDialog *dlg;
+  GtkWidget *btn;
+  dlg = gtk_color_dialog_new ();
+  gtk_color_dialog_set_with_alpha (dlg, FALSE);
+  btn = gtk_color_dialog_button_new (dlg);
+  gtk_widget_set_valign (btn, GTK_ALIGN_CENTER);
+  return btn;
+}
+
+static void
+build_app_glass_grid (KgxSettingsPage *self)
+{
+  GtkGrid *grid = GTK_GRID (self->app_glass_grid);
+  int row = 0;
+
+  /* --- Row 0: Column headers --- */
+  {
+    static const struct { int col; const char *text; } hdrs[] = {
+      { 1, "Glass" }, { 2, "Preset" }, { 3, "Rev" }, { 4, "P.Clr" },
+    };
+    GtkWidget *title = gtk_label_new ("App Glass");
+    gtk_label_set_xalign (GTK_LABEL (title), 0.0f);
+    gtk_widget_set_hexpand (title, TRUE);
+    gtk_widget_add_css_class (title, "title-4");
+    gtk_grid_attach (grid, title, 0, row, 1, 1);
+
+    for (int h = 0; h < (int) G_N_ELEMENTS (hdrs); h++) {
+      GtkWidget *lbl = gtk_label_new (hdrs[h].text);
+      gtk_label_set_xalign (GTK_LABEL (lbl), 1.0f);
+      gtk_widget_add_css_class (lbl, "tune-header");
+      gtk_grid_attach (grid, lbl, hdrs[h].col, row, 1, 1);
+    }
+    row++;
+  }
+
+  /* --- Row 1: Overscroll indicator --- */
+  {
+    GtkWidget *label = gtk_label_new ("Overscroll");
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_widget_add_css_class (label, "glass-entry");
+    gtk_grid_attach (grid, label, 0, row, 1, 1);
+
+    self->overscroll_color_btn = make_color_btn ();
+    gtk_grid_attach (grid, self->overscroll_color_btn, 1, row, 1, 1);
+
+    self->overscroll_switch = gtk_switch_new ();
+    gtk_widget_set_valign (self->overscroll_switch, GTK_ALIGN_CENTER);
+    gtk_grid_attach (grid, self->overscroll_switch, 5, row, 1, 1);
+    row++;
+  }
+
+  /* --- Row 1: Privilege indicator --- */
+  {
+    GtkWidget *label = gtk_label_new ("Privilege");
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_widget_add_css_class (label, "glass-entry");
+    gtk_grid_attach (grid, label, 0, row, 1, 1);
+
+    self->privilege_color_btn = make_color_btn ();
+    gtk_grid_attach (grid, self->privilege_color_btn, 1, row, 1, 1);
+
+    self->privilege_preset_btn = gtk_drop_down_new (NULL, NULL);
+    gtk_widget_set_valign (self->privilege_preset_btn, GTK_ALIGN_CENTER);
+    gtk_widget_add_css_class (self->privilege_preset_btn, "glass-preset");
+    gtk_grid_attach (grid, self->privilege_preset_btn, 2, row, 1, 1);
+
+    self->privilege_switch = gtk_switch_new ();
+    gtk_widget_set_valign (self->privilege_switch, GTK_ALIGN_CENTER);
+    gtk_grid_attach (grid, self->privilege_switch, 5, row, 1, 1);
+    row++;
+  }
+
+  /* --- Row 2: separator spanning all columns --- */
+  {
+    GtkWidget *sep = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
+    gtk_widget_set_margin_top (sep, 4);
+    gtk_widget_set_margin_bottom (sep, 4);
+    gtk_grid_attach (grid, sep, 0, row, 6, 1);
+    row++;
+  }
+
+  /* --- Rows 3..14: process slots 0..11 --- */
+  for (int i = 0; i < APP_GLASS_SLOTS; i++, row++) {
+    GtkWidget *entry, *rev, *img;
+
+    entry = gtk_entry_new ();
+    gtk_entry_set_placeholder_text (GTK_ENTRY (entry), "process name");
+    gtk_widget_set_hexpand (entry, TRUE);
+    gtk_widget_add_css_class (entry, "glass-entry");
+    self->ag_entries[i] = entry;
+    gtk_grid_attach (grid, entry, 0, row, 1, 1);
+
+    self->ag_colors[i] = make_color_btn ();
+    gtk_grid_attach (grid, self->ag_colors[i], 1, row, 1, 1);
+
+    self->ag_presets[i] = gtk_drop_down_new (NULL, NULL);
+    gtk_widget_set_valign (self->ag_presets[i], GTK_ALIGN_CENTER);
+    gtk_widget_add_css_class (self->ag_presets[i], "glass-preset");
+    gtk_grid_attach (grid, self->ag_presets[i], 2, row, 1, 1);
+
+    rev = gtk_toggle_button_new ();
+    gtk_widget_set_valign (rev, GTK_ALIGN_CENTER);
+    gtk_widget_set_tooltip_text (rev, "Reverse");
+    img = gtk_image_new_from_icon_name ("object-flip-horizontal-symbolic");
+    gtk_image_set_pixel_size (GTK_IMAGE (img), 16);
+    gtk_button_set_child (GTK_BUTTON (rev), img);
+    gtk_widget_add_css_class (rev, "glass-reverse");
+    gtk_widget_add_css_class (rev, "flat");
+    self->ag_reverses[i] = rev;
+    gtk_grid_attach (grid, rev, 3, row, 1, 1);
+
+    self->ag_pcolors[i] = make_color_btn ();
+    gtk_grid_attach (grid, self->ag_pcolors[i], 4, row, 1, 1);
+  }
+}
 
 
 static void
@@ -588,167 +788,9 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, overscroll_switch);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, overscroll_color_btn);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, privilege_switch);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, privilege_color_btn);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, privilege_preset_btn);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, ambient_switch);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_count);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_spread);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_0);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_1);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_2);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_3);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_4);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_5);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_6);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_7);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_0);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_1);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_2);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_3);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_4);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_5);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_6);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_7);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_8);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_9);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_10);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_8);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_9);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_10);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_color_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_0);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_1);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_2);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_3);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_4);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_5);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_6);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_7);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_8);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_9);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_10);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_preset_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_0);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_1);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_2);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_3);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_4);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_5);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_6);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_7);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_8);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_9);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_10);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_reverse_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_0);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_1);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_2);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_3);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_4);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_5);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_6);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_7);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_8);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_9);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_10);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_pcolor_11);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_speed_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thickness_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_tail_length_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_depth_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_pulse_speed_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_attack_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_release_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_release_mode_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_shape_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_count_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_burst_spread_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve_fireworks);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve_corners);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve_pulse_out);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve_rotate);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve_ping_pong);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_env_curve_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_attack_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_release_ambient);
-  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, edge_thk_curve_ambient);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, tunables_grid);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_grid);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, carousel);
@@ -803,74 +845,6 @@ notify_use_system (gpointer user_data)
 }
 
 
-static inline GtkWidget **
-app_glass_entries (KgxSettingsPage *self)
-{
-  static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_0;   arr[1] = self->app_glass_1;
-  arr[2] = self->app_glass_2;   arr[3] = self->app_glass_3;
-  arr[4] = self->app_glass_4;   arr[5] = self->app_glass_5;
-  arr[6] = self->app_glass_6;   arr[7] = self->app_glass_7;
-  arr[8] = self->app_glass_8;   arr[9] = self->app_glass_9;
-  arr[10] = self->app_glass_10; arr[11] = self->app_glass_11;
-  return arr;
-}
-
-
-static inline GtkWidget **
-app_glass_colors (KgxSettingsPage *self)
-{
-  static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_color_0;   arr[1] = self->app_glass_color_1;
-  arr[2] = self->app_glass_color_2;   arr[3] = self->app_glass_color_3;
-  arr[4] = self->app_glass_color_4;   arr[5] = self->app_glass_color_5;
-  arr[6] = self->app_glass_color_6;   arr[7] = self->app_glass_color_7;
-  arr[8] = self->app_glass_color_8;   arr[9] = self->app_glass_color_9;
-  arr[10] = self->app_glass_color_10; arr[11] = self->app_glass_color_11;
-  return arr;
-}
-
-
-static inline GtkWidget **
-app_glass_presets (KgxSettingsPage *self)
-{
-  static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_preset_0;   arr[1] = self->app_glass_preset_1;
-  arr[2] = self->app_glass_preset_2;   arr[3] = self->app_glass_preset_3;
-  arr[4] = self->app_glass_preset_4;   arr[5] = self->app_glass_preset_5;
-  arr[6] = self->app_glass_preset_6;   arr[7] = self->app_glass_preset_7;
-  arr[8] = self->app_glass_preset_8;   arr[9] = self->app_glass_preset_9;
-  arr[10] = self->app_glass_preset_10; arr[11] = self->app_glass_preset_11;
-  return arr;
-}
-
-
-static inline GtkWidget **
-app_glass_reverses (KgxSettingsPage *self)
-{
-  static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_reverse_0;   arr[1] = self->app_glass_reverse_1;
-  arr[2] = self->app_glass_reverse_2;   arr[3] = self->app_glass_reverse_3;
-  arr[4] = self->app_glass_reverse_4;   arr[5] = self->app_glass_reverse_5;
-  arr[6] = self->app_glass_reverse_6;   arr[7] = self->app_glass_reverse_7;
-  arr[8] = self->app_glass_reverse_8;   arr[9] = self->app_glass_reverse_9;
-  arr[10] = self->app_glass_reverse_10; arr[11] = self->app_glass_reverse_11;
-  return arr;
-}
-
-
-static inline GtkWidget **
-app_glass_pcolors (KgxSettingsPage *self)
-{
-  static GtkWidget *arr[APP_GLASS_SLOTS];
-  arr[0] = self->app_glass_pcolor_0;   arr[1] = self->app_glass_pcolor_1;
-  arr[2] = self->app_glass_pcolor_2;   arr[3] = self->app_glass_pcolor_3;
-  arr[4] = self->app_glass_pcolor_4;   arr[5] = self->app_glass_pcolor_5;
-  arr[6] = self->app_glass_pcolor_6;   arr[7] = self->app_glass_pcolor_7;
-  arr[8] = self->app_glass_pcolor_8;   arr[9] = self->app_glass_pcolor_9;
-  arr[10] = self->app_glass_pcolor_10; arr[11] = self->app_glass_pcolor_11;
-  return arr;
-}
 
 
 /* Muted dark defaults for empty slots — slight color tints on near-black */
@@ -895,25 +869,21 @@ app_glass_save (KgxSettingsPage *self)
 {
   if (self->app_glass_inhibit_save)
     return;
-  GtkWidget **entries  = app_glass_entries (self);
-  GtkWidget **colors   = app_glass_colors (self);
-  GtkWidget **presets  = app_glass_presets (self);
-  GtkWidget **reverses = app_glass_reverses (self);
-  GtkWidget **pcolors  = app_glass_pcolors (self);
+
   g_autoptr (GHashTable) ht = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                       g_free, g_free);
 
   for (int i = 0; i < APP_GLASS_SLOTS; i++) {
-    const char *name = gtk_editable_get_text (GTK_EDITABLE (entries[i]));
+    const char *name = gtk_editable_get_text (GTK_EDITABLE (self->ag_entries[i]));
     if (name && name[0] != '\0') {
       const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (
-                               GTK_COLOR_DIALOG_BUTTON (colors[i]));
-      guint preset_idx = gtk_drop_down_get_selected (GTK_DROP_DOWN (presets[i]));
-      gboolean rev = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (reverses[i]));
+                               GTK_COLOR_DIALOG_BUTTON (self->ag_colors[i]));
+      guint preset_idx = gtk_drop_down_get_selected (GTK_DROP_DOWN (self->ag_presets[i]));
+      gboolean rev = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (self->ag_reverses[i]));
       const GdkRGBA *pc = gtk_color_dialog_button_get_rgba (
-                             GTK_COLOR_DIALOG_BUTTON (pcolors[i]));
+                             GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[i]));
 
-      const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", "ping-pong" };
+      const char *preset_names[] = { "none", "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate" };
       const char *preset_str = (preset_idx < G_N_ELEMENTS (preset_names))
                                  ? preset_names[preset_idx] : "none";
 
@@ -942,12 +912,12 @@ static guint
 preset_string_to_index (const char *s)
 {
   if (!s) return 0;
-  if (g_str_equal (s, "fireworks"))  return 1;
+  if (g_str_equal (s, "ambient"))    return 1;
   if (g_str_equal (s, "corners"))    return 2;
-  if (g_str_equal (s, "pulse-out"))  return 3;
-  if (g_str_equal (s, "rotate"))     return 4;
-  if (g_str_equal (s, "ping-pong"))  return 5;
-  if (g_str_equal (s, "ambient"))   return 6;
+  if (g_str_equal (s, "fireworks"))  return 3;
+  if (g_str_equal (s, "ping-pong"))  return 4;
+  if (g_str_equal (s, "pulse-out"))  return 5;
+  if (g_str_equal (s, "rotate"))     return 6;
   return 0;
 }
 
@@ -955,11 +925,6 @@ preset_string_to_index (const char *s)
 static void
 app_glass_load (KgxSettingsPage *self)
 {
-  GtkWidget **entries  = app_glass_entries (self);
-  GtkWidget **colors   = app_glass_colors (self);
-  GtkWidget **presets  = app_glass_presets (self);
-  GtkWidget **reverses = app_glass_reverses (self);
-  GtkWidget **pcolors  = app_glass_pcolors (self);
   GHashTable *ht = NULL;
   GHashTableIter iter;
   gpointer key, val;
@@ -974,12 +939,12 @@ app_glass_load (KgxSettingsPage *self)
 
   /* Clear all slots and set muted default colors. */
   for (int j = 0; j < APP_GLASS_SLOTS; j++) {
-    gtk_editable_set_text (GTK_EDITABLE (entries[j]), "");
-    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[j]),
+    gtk_editable_set_text (GTK_EDITABLE (self->ag_entries[j]), "");
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_colors[j]),
                                       &glass_default_colors[j]);
-    gtk_drop_down_set_selected (GTK_DROP_DOWN (presets[j]), 0);
-    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (reverses[j]), FALSE);
-    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (pcolors[j]),
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (self->ag_presets[j]), 0);
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->ag_reverses[j]), FALSE);
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[j]),
                                       &glass_default_colors[j]);
   }
 
@@ -990,7 +955,7 @@ app_glass_load (KgxSettingsPage *self)
       KgxParticlePreset preset = KGX_PARTICLE_NONE;
       gboolean reverse = FALSE;
       GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
-      gtk_editable_set_text (GTK_EDITABLE (entries[i]), (const char *) key);
+      gtk_editable_set_text (GTK_EDITABLE (self->ag_entries[i]), (const char *) key);
       kgx_parse_process_config ((const char *) val,
                                  &glass_hex, &preset, &reverse, &particle_color);
 
@@ -998,14 +963,14 @@ app_glass_load (KgxSettingsPage *self)
         GdkRGBA rgba = { 0, 0, 0, 1 };
         gdk_rgba_parse (&rgba, glass_hex);
         rgba.alpha = 1.0f;
-        gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (colors[i]), &rgba);
+        gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_colors[i]), &rgba);
       }
 
-      gtk_drop_down_set_selected (GTK_DROP_DOWN (presets[i]),
+      gtk_drop_down_set_selected (GTK_DROP_DOWN (self->ag_presets[i]),
                                    preset_string_to_index (kgx_particle_preset_to_string (preset)));
-      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (reverses[i]), reverse);
+      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->ag_reverses[i]), reverse);
       particle_color.alpha = 1.0f;
-      gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (pcolors[i]), &particle_color);
+      gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[i]), &particle_color);
       i++;
     }
     g_hash_table_unref (ht);
@@ -1086,6 +1051,8 @@ kgx_settings_page_init (KgxSettingsPage *self)
   self->app_glass_inhibit_save = TRUE;
 
   gtk_widget_init_template (GTK_WIDGET (self));
+  build_tunables_grid (self);
+  build_app_glass_grid (self);
 
   g_signal_connect (self->carousel, "notify::position",
                     G_CALLBACK (carousel_page_changed), self);
@@ -1101,37 +1068,30 @@ kgx_settings_page_init (KgxSettingsPage *self)
 
   /* App Glass — connect change signals and load initial data. */
   {
-    GtkWidget **entries  = app_glass_entries (self);
-    GtkWidget **colors   = app_glass_colors (self);
-    GtkWidget **presets  = app_glass_presets (self);
-    GtkWidget **reverses = app_glass_reverses (self);
-    GtkWidget **pcolors  = app_glass_pcolors (self);
-
-    /* Each dropdown gets its own model to avoid double-free on dispose. */
-    const char *preset_names[] = { "none", "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient", NULL };
+    const char *preset_names[] = { "none", "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate", NULL };
     for (int i = 0; i < APP_GLASS_SLOTS; i++) {
       GtkStringList *model = gtk_string_list_new (preset_names);
-      gtk_drop_down_set_model (GTK_DROP_DOWN (presets[i]), G_LIST_MODEL (model));
+      gtk_drop_down_set_model (GTK_DROP_DOWN (self->ag_presets[i]), G_LIST_MODEL (model));
       g_object_unref (model);
     }
 
     for (int i = 0; i < APP_GLASS_SLOTS; i++) {
-      g_signal_connect (entries[i], "changed",
+      g_signal_connect (self->ag_entries[i], "changed",
                         G_CALLBACK (app_glass_changed), self);
-      g_signal_connect (colors[i], "notify::rgba",
+      g_signal_connect (self->ag_colors[i], "notify::rgba",
                         G_CALLBACK (app_glass_color_changed), self);
-      g_signal_connect (presets[i], "notify::selected",
+      g_signal_connect (self->ag_presets[i], "notify::selected",
                         G_CALLBACK (app_glass_color_changed), self);
-      g_signal_connect (reverses[i], "notify::active",
+      g_signal_connect (self->ag_reverses[i], "notify::active",
                         G_CALLBACK (app_glass_color_changed), self);
-      g_signal_connect (pcolors[i], "notify::rgba",
+      g_signal_connect (self->ag_pcolors[i], "notify::rgba",
                         G_CALLBACK (app_glass_color_changed), self);
     }
   }
 
   /* Indicator preset dropdowns (no "none" — presets are 1-indexed). */
   {
-    const char *indicator_presets[] = { "fireworks", "corners", "pulse-out", "rotate", "ping-pong", "ambient", NULL };
+    const char *indicator_presets[] = { "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate", NULL };
     GtkStringList *model = gtk_string_list_new (indicator_presets);
     gtk_drop_down_set_model (GTK_DROP_DOWN (self->privilege_preset_btn), G_LIST_MODEL (model));
     g_object_unref (model);
@@ -1233,361 +1193,6 @@ kgx_settings_page_init (KgxSettingsPage *self)
   g_binding_group_bind (self->settings_binds, "edge-settings-animation",
                         self->ambient_switch, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thickness",
-                        self->edge_thickness, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed",
-                             self->edge_speed, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed-fireworks",
-                             self->edge_speed_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed-corners",
-                             self->edge_speed_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed-pulse-out",
-                             self->edge_speed_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed-rotate",
-                             self->edge_speed_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed-ping-pong",
-                             self->edge_speed_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-speed-ambient",
-                             self->edge_speed_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  /* Per-preset thickness (int, direct bind) */
-  g_binding_group_bind (self->settings_binds, "edge-thickness-fireworks",
-                        self->edge_thickness_fireworks, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thickness-corners",
-                        self->edge_thickness_corners, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thickness-pulse-out",
-                        self->edge_thickness_pulse_out, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thickness-rotate",
-                        self->edge_thickness_rotate, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thickness-ping-pong",
-                        self->edge_thickness_ping_pong, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thickness-ambient",
-                        self->edge_thickness_ambient, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  /* Per-preset tail-length (double, percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-fireworks",
-                             self->edge_tail_length_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-corners",
-                             self->edge_tail_length_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-pulse-out",
-                             self->edge_tail_length_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-rotate",
-                             self->edge_tail_length_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-ping-pong",
-                             self->edge_tail_length_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length-ambient",
-                             self->edge_tail_length_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  /* Per-preset pulse-depth (double, percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-fireworks",
-                             self->edge_pulse_depth_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-corners",
-                             self->edge_pulse_depth_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-pulse-out",
-                             self->edge_pulse_depth_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-rotate",
-                             self->edge_pulse_depth_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-ping-pong",
-                             self->edge_pulse_depth_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth-ambient",
-                             self->edge_pulse_depth_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  /* Per-preset pulse-speed (double, percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-fireworks",
-                             self->edge_pulse_speed_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-corners",
-                             self->edge_pulse_speed_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-pulse-out",
-                             self->edge_pulse_speed_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-rotate",
-                             self->edge_pulse_speed_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-ping-pong",
-                             self->edge_pulse_speed_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed-ambient",
-                             self->edge_pulse_speed_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-depth",
-                             self->edge_pulse_depth, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-tail-length",
-                             self->edge_tail_length, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-pulse-speed",
-                             self->edge_pulse_speed, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind (self->settings_binds, "edge-burst-count",
-                        self->edge_burst_count, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind_full (self->settings_binds, "edge-burst-spread",
-                             self->edge_burst_spread, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
 
-  /* Envelope attack (percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack",
-                             self->edge_env_attack, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-fireworks",
-                             self->edge_env_attack_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-corners",
-                             self->edge_env_attack_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-pulse-out",
-                             self->edge_env_attack_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-rotate",
-                             self->edge_env_attack_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-ping-pong",
-                             self->edge_env_attack_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-attack-ambient",
-                             self->edge_env_attack_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-
-  /* Envelope release (percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release",
-                             self->edge_env_release, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release-fireworks",
-                             self->edge_env_release_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release-corners",
-                             self->edge_env_release_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release-pulse-out",
-                             self->edge_env_release_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release-rotate",
-                             self->edge_env_release_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release-ping-pong",
-                             self->edge_env_release_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-env-release-ambient",
-                             self->edge_env_release_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-
-  /* Release mode (int <-> toggle bool) */
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode",
-                             self->edge_release_mode, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-fireworks",
-                             self->edge_release_mode_fireworks, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-corners",
-                             self->edge_release_mode_corners, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-pulse-out",
-                             self->edge_release_mode_pulse_out, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-rotate",
-                             self->edge_release_mode_rotate, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-ping-pong",
-                             self->edge_release_mode_ping_pong, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-release-mode-ambient",
-                             self->edge_release_mode_ambient, "active",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             int_to_bool, bool_to_int, NULL, NULL);
-
-  g_binding_group_bind (self->settings_binds, "edge-burst-count-ambient",
-                        self->edge_burst_count_ambient, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind_full (self->settings_binds, "edge-burst-spread-ambient",
-                             self->edge_burst_spread_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-
-  /* Envelope curve (int, direct bind) */
-  g_binding_group_bind (self->settings_binds, "edge-env-curve",
-                        self->edge_env_curve, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-env-curve-fireworks",
-                        self->edge_env_curve_fireworks, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-env-curve-corners",
-                        self->edge_env_curve_corners, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-env-curve-pulse-out",
-                        self->edge_env_curve_pulse_out, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-env-curve-rotate",
-                        self->edge_env_curve_rotate, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-env-curve-ping-pong",
-                        self->edge_env_curve_ping_pong, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-env-curve-ambient",
-                        self->edge_env_curve_ambient, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-
-  /* Thickness attack (double, percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack",
-                             self->edge_thk_attack, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack-fireworks",
-                             self->edge_thk_attack_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack-corners",
-                             self->edge_thk_attack_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack-pulse-out",
-                             self->edge_thk_attack_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack-rotate",
-                             self->edge_thk_attack_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack-ping-pong",
-                             self->edge_thk_attack_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-attack-ambient",
-                             self->edge_thk_attack_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-
-  /* Thickness release (double, percent transform) */
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release",
-                             self->edge_thk_release, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release-fireworks",
-                             self->edge_thk_release_fireworks, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release-corners",
-                             self->edge_thk_release_corners, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release-pulse-out",
-                             self->edge_thk_release_pulse_out, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release-rotate",
-                             self->edge_thk_release_rotate, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release-ping-pong",
-                             self->edge_thk_release_ping_pong, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-  g_binding_group_bind_full (self->settings_binds, "edge-thk-release-ambient",
-                             self->edge_thk_release_ambient, "value",
-                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
-                             value_to_percent, percent_to_value, NULL, NULL);
-
-  /* Thickness curve (int, direct bind) */
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve",
-                        self->edge_thk_curve, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve-fireworks",
-                        self->edge_thk_curve_fireworks, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve-corners",
-                        self->edge_thk_curve_corners, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve-pulse-out",
-                        self->edge_thk_curve_pulse_out, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve-rotate",
-                        self->edge_thk_curve_rotate, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve-ping-pong",
-                        self->edge_thk_curve_ping_pong, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_binding_group_bind (self->settings_binds, "edge-thk-curve-ambient",
-                        self->edge_thk_curve_ambient, "value",
-                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-
-  /* Shape buttons (cycle on click, no binding — manual sync) */
-  setup_shape_button (self, self->edge_shape, "edge-shape");
-  setup_shape_button (self, self->edge_shape_fireworks, "edge-shape-fireworks");
-  setup_shape_button (self, self->edge_shape_corners, "edge-shape-corners");
-  setup_shape_button (self, self->edge_shape_pulse_out, "edge-shape-pulse-out");
-  setup_shape_button (self, self->edge_shape_rotate, "edge-shape-rotate");
-  setup_shape_button (self, self->edge_shape_ping_pong, "edge-shape-ping-pong");
-  setup_shape_button (self, self->edge_shape_ambient, "edge-shape-ambient");
+  bind_tunables (self);
 }
