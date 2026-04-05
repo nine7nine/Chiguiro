@@ -85,6 +85,7 @@ struct _KgxWindowPrivate {
 
   /* Cached terminal for glass transition — avoids g_object_get per frame */
   KgxTerminal          *glass_cached_terminal;  /* weak pointer */
+  double                glass_opacity_cached;   /* from settings at transition start */
 
   /* Deferred particle — fires after glass transition completes */
   gboolean              deferred_particle;
@@ -676,23 +677,20 @@ apply_glass_color (KgxWindow     *self,
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
-  /* Quantize to steps of 4 so the CSS dedup check below naturally
-   * skips most frames during smooth transitions — reduces CSS
-   * reparsing from ~12 to ~3 per 200ms transition.  VTE bg still
-   * updates at full precision every frame for visual smoothness. */
-  int r = (int)(color->red * 255) & ~3;
-  int g = (int)(color->green * 255) & ~3;
-  int b = (int)(color->blue * 255) & ~3;
+  int r = (int)(color->red * 255.0 + 0.5);
+  int g = (int)(color->green * 255.0 + 0.5);
+  int b = (int)(color->blue * 255.0 + 0.5);
 
-  /* Update CSS glass — skip if quantized RGB unchanged since last frame. */
+  /* Update CSS glass every frame — skip only if RGB unchanged. */
   if (priv->override_css && priv->override_css_selectors &&
       (r != priv->override_last_r ||
        g != priv->override_last_g ||
        b != priv->override_last_b)) {
+    double opacity = priv->glass_opacity_cached;
     char buf[512];
     snprintf (buf, sizeof (buf),
-              "%s { background-color: rgba(%d, %d, %d, 0.94); }",
-              priv->override_css_selectors, r, g, b);
+              "%s { background-color: rgba(%d, %d, %d, %f); }",
+              priv->override_css_selectors, r, g, b, opacity);
     gtk_css_provider_load_from_string (priv->override_css, buf);
     priv->override_last_r = r;
     priv->override_last_g = g;
@@ -735,6 +733,11 @@ glass_transition_done_cb (KgxWindow *self)
 
   g_clear_weak_pointer (&priv->glass_cached_terminal);
 
+  /* Reset dedup so the next transition's first frame always updates CSS. */
+  priv->override_last_r = -1;
+  priv->override_last_g = -1;
+  priv->override_last_b = -1;
+
   if (priv->deferred_particle) {
     priv->deferred_particle = FALSE;
     priv->deferred_color.alpha = 1.0f;
@@ -753,6 +756,11 @@ start_glass_transition (KgxWindow     *self,
 
   priv->glass_from = priv->glass_current;
   priv->glass_to = *target;
+
+  /* Cache glass opacity from settings at transition start. */
+  priv->glass_opacity_cached = 0.94;
+  if (priv->settings)
+    g_object_get (priv->settings, "glass-opacity", &priv->glass_opacity_cached, NULL);
 
   /* Cache the active terminal for the duration of the transition
    * so apply_glass_color doesn't need g_object_get per frame. */
@@ -778,6 +786,11 @@ start_glass_transition (KgxWindow     *self,
     g_signal_connect_swapped (priv->glass_transition, "done",
                               G_CALLBACK (glass_transition_done_cb), self);
   }
+
+  /* Force CSS update on the first frame of every transition. */
+  priv->override_last_r = -1;
+  priv->override_last_g = -1;
+  priv->override_last_b = -1;
 
   adw_animation_reset (priv->glass_transition);
   adw_animation_play (priv->glass_transition);
@@ -929,9 +942,7 @@ tab_train_changed (GObject *object, GParamSpec *pspec, gpointer data)
 
   /* Children changed on the active tab's train — re-check process glass.
    * This catches name-based glass matches (e.g. pwsh, htop) that don't
-   * affect status flags and would otherwise only update on the timer.
-   * Use DEFAULT_IDLE so the paint cycle finishes before we start the
-   * glass transition — avoids stalling the particle animation. */
+   * affect status flags and would otherwise only update on the timer. */
   schedule_process_glass_idle (self);
 }
 
@@ -955,7 +966,7 @@ schedule_process_glass_idle (KgxWindow *self)
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
   if (priv->process_glass_idle == 0)
-    priv->process_glass_idle = g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+    priv->process_glass_idle = g_idle_add_full (G_PRIORITY_HIGH_IDLE,
                                                  update_process_glass_idle,
                                                  g_object_ref (self),
                                                  g_object_unref);
@@ -996,11 +1007,22 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
     g_autoptr (KgxTab) active = NULL;
     g_object_get (priv->pages, "active-page", &active, NULL);
     g_signal_group_set_target (priv->tab_signals, active);
+
+    /* Immediately snap the new terminal's background to the current
+     * glass color so there's no flash between the tab switch (which
+     * makes the new terminal visible) and the glass transition start
+     * (which runs from an idle).  Without this, the new terminal shows
+     * its own stale bg_current for 1+ frames while the CSS chrome still
+     * shows the old glass color — a visible two-color flicker. */
+    if (priv->glass_has_current && active) {
+      g_autoptr (KgxTerminal) terminal = NULL;
+      g_object_get (active, "terminal", &terminal, NULL);
+      if (terminal)
+        kgx_terminal_apply_bg_immediate (terminal, &priv->glass_current);
+    }
   }
 
-  /* Deferred check — use DEFAULT_IDLE so the frame clock can complete
-   * the current paint cycle before we start glass/particle transitions.
-   * This avoids stalling ongoing particle animations during tab switch. */
+  /* Re-evaluate process glass for the newly active tab. */
   schedule_process_glass_idle (self);
 }
 
