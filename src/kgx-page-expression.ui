@@ -11,6 +11,9 @@
           <lookup name="train" type="KgxTab">
             <lookup name="child">AdwTabPage</lookup>
           </lookup>
+          <lookup name="activity-frame" type="KgxTab">
+            <lookup name="child">AdwTabPage</lookup>
+          </lookup>
         </closure>
       </closure>
     </binding>

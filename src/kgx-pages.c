@@ -449,7 +449,8 @@ compare_process_pid (gconstpointer a, gconstpointer b)
 
 static char *
 fallback_title (G_GNUC_UNUSED GObject *self,
-                KgxTrain              *train)
+                KgxTrain              *train,
+                int                    activity_frame)
 {
   if (train) {
     g_autofree char *shell_name = NULL;
@@ -466,12 +467,11 @@ fallback_title (G_GNUC_UNUSED GObject *self,
     /* If there are child processes, build full chain: >shell>child>grandchild */
     {
       static const char *activity_chars[] = { "⠂", "⠒", "⠲", "⠰", "⠠", "⠤", "⠦", "⠆" };
-      static int frame = 0;
       g_autoptr(GPtrArray) children = kgx_train_get_children (train);
 
       if (children && children->len > 0) {
         g_autoptr(GString) chain = g_string_new (NULL);
-        const char *indicator = activity_chars[frame++ % G_N_ELEMENTS (activity_chars)];
+        const char *indicator = activity_chars[activity_frame % G_N_ELEMENTS (activity_chars)];
 
         g_ptr_array_sort (children, compare_process_pid);
 

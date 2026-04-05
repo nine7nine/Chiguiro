@@ -68,6 +68,7 @@ struct _KgxWindowPrivate {
   KgxEdge              *edge;
   char                 *process_glass_override;
   guint                 process_check_timer;
+  guint                 process_glass_idle;
   GtkCssProvider       *override_css;
   char                 *window_css_class;
   char                 *override_css_selectors; /* pre-built CSS selector list */
@@ -119,6 +120,7 @@ static void kgx_window_update_opaque_region (KgxWindow *self);
 static void kgx_window_update_glass_opacity (KgxWindow *self);
 static void glass_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
 static gboolean update_process_glass (KgxWindow *self);
+static void schedule_process_glass_idle (KgxWindow *self);
 
 
 static void
@@ -144,6 +146,7 @@ kgx_window_dispose (GObject *object)
     g_source_remove (priv->process_check_timer);
     priv->process_check_timer = 0;
   }
+  g_clear_handle_id (&priv->process_glass_idle, g_source_remove);
 
   /* glass_css is a process-lifetime singleton — don't clear it */
   if (priv->override_css) {
@@ -227,6 +230,15 @@ kgx_window_set_property (GObject      *object,
     case PROP_SETTINGS_VISIBLE:
       if (kgx_set_boolean_prop (object, pspec, &priv->settings_visible, value)) {
         if (priv->content_stack) {
+          /* Lazily create the settings page on first use — avoids
+           * icon lookup warnings during initial window show. */
+          if (priv->settings_visible && !priv->settings_page) {
+            priv->settings_page = g_object_new (KGX_TYPE_SETTINGS_PAGE,
+                                                "settings", priv->settings,
+                                                NULL);
+            gtk_stack_add_named (GTK_STACK (priv->content_stack),
+                                priv->settings_page, "settings");
+          }
           gtk_stack_set_visible_child_name (
             GTK_STACK (priv->content_stack),
             priv->settings_visible ? "settings" : "terminal");
@@ -234,14 +246,13 @@ kgx_window_set_property (GObject      *object,
         if (!priv->settings_visible && priv->pages) {
           gtk_widget_grab_focus (priv->pages);
         }
-        /* Ambient edge decoration while settings page is visible. */
+        /* Toggle ambient bursts with settings page visibility. */
         kgx_edge_set_ambient (priv->edge, priv->settings_visible);
-        /* Restore process particle immediately when leaving settings. */
+
+        /* When leaving settings, re-check process glass so the correct
+         * particle fires for the now-visible tab. */
         if (!priv->settings_visible)
-          g_idle_add_full (G_PRIORITY_HIGH_IDLE,
-                           (GSourceFunc) update_process_glass,
-                           g_object_ref (self),
-                           g_object_unref);
+          schedule_process_glass_idle (KGX_WINDOW (object));
       }
       break;
     default:
@@ -851,17 +862,21 @@ update_process_glass (KgxWindow *self)
         match = NULL;
     }
 
-    /* Fire particle immediately — don't wait for the glass color
-     * transition.  A brief color mismatch during the transition is
-     * less noticeable than a delayed particle start. */
-    priv->deferred_particle = FALSE;
+    /* Defer particle until glass transition completes — firing both on
+     * the same frame causes a visible stall as particle snapshot and
+     * glass CSS/VTE updates compete for the frame budget.
+     * Stop the old particle immediately so it doesn't keep rendering
+     * during the transition. */
+    kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
+                                   FALSE);
     if (preset != KGX_PARTICLE_NONE) {
-      particle_color.alpha = 1.0f;
-      kgx_edge_set_process_particle (priv->edge, preset,
-                                     &particle_color, reverse);
+      priv->deferred_particle = TRUE;
+      priv->deferred_preset = preset;
+      priv->deferred_color = particle_color;
+      priv->deferred_color.alpha = 1.0f;
+      priv->deferred_reverse = reverse;
     } else {
-      kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
-                                     FALSE);
+      priv->deferred_particle = FALSE;
     }
   }
 
@@ -874,38 +889,33 @@ update_process_glass (KgxWindow *self)
     priv->glass_has_current = TRUE;
   }
 
-  /* Skip if already at target. */
+  /* Update the terminal's override string so apply_palette knows. */
+  {
+    g_autoptr (KgxTerminal) terminal = NULL;
+    if (active)
+      g_object_get (active, "terminal", &terminal, NULL);
+    if (terminal)
+      kgx_terminal_set_process_override (terminal, match);
+  }
+
+  /* Skip if already at target — no glass transition needed, so fire
+   * the deferred particle immediately (it would never get fired by
+   * glass_transition_done_cb since no transition starts). */
   if (priv->glass_current.red   == target.red   &&
       priv->glass_current.green == target.green &&
       priv->glass_current.blue  == target.blue) {
-    /* No transition needed — fire particle immediately. */
     if (priv->deferred_particle) {
       priv->deferred_particle = FALSE;
-      priv->deferred_color.alpha = 1.0f;
       kgx_edge_set_process_particle (priv->edge,
                                      priv->deferred_preset,
                                      &priv->deferred_color,
                                      priv->deferred_reverse);
     }
-    /* Keep the terminal's override string consistent. */
-    if (active) {
-      g_autoptr (KgxTerminal) terminal = NULL;
-      g_object_get (active, "terminal", &terminal, NULL);
-      if (terminal)
-        kgx_terminal_set_process_override (terminal, match);
-    }
     return G_SOURCE_REMOVE;
   }
 
-  /* Update the terminal's override string so apply_palette knows. */
-  if (active) {
-    g_autoptr (KgxTerminal) terminal = NULL;
-    g_object_get (active, "terminal", &terminal, NULL);
-    if (terminal)
-      kgx_terminal_set_process_override (terminal, match);
-  }
-
-  /* Animate both VTE and CSS glass together. */
+  /* Animate both VTE and CSS glass together.
+   * glass_transition_done_cb fires the deferred particle on completion. */
   start_glass_transition (self, &target);
 
   return G_SOURCE_REMOVE;
@@ -919,11 +929,36 @@ tab_train_changed (GObject *object, GParamSpec *pspec, gpointer data)
 
   /* Children changed on the active tab's train — re-check process glass.
    * This catches name-based glass matches (e.g. pwsh, htop) that don't
-   * affect status flags and would otherwise only update on the timer. */
-  g_idle_add_full (G_PRIORITY_HIGH_IDLE,
-                   (GSourceFunc) update_process_glass,
-                   g_object_ref (self),
-                   g_object_unref);
+   * affect status flags and would otherwise only update on the timer.
+   * Use DEFAULT_IDLE so the paint cycle finishes before we start the
+   * glass transition — avoids stalling the particle animation. */
+  schedule_process_glass_idle (self);
+}
+
+
+static gboolean
+update_process_glass_idle (gpointer data)
+{
+  KgxWindow *self = KGX_WINDOW (data);
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+
+  priv->process_glass_idle = 0;
+  update_process_glass (self);
+
+  return G_SOURCE_REMOVE;
+}
+
+
+static void
+schedule_process_glass_idle (KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+
+  if (priv->process_glass_idle == 0)
+    priv->process_glass_idle = g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+                                                 update_process_glass_idle,
+                                                 g_object_ref (self),
+                                                 g_object_unref);
 }
 
 
@@ -963,11 +998,10 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
     g_signal_group_set_target (priv->tab_signals, active);
   }
 
-  /* Immediate check + deferred for late-arriving children. */
-  g_idle_add_full (G_PRIORITY_HIGH_IDLE,
-                   (GSourceFunc) update_process_glass,
-                   g_object_ref (self),
-                   g_object_unref);
+  /* Deferred check — use DEFAULT_IDLE so the frame clock can complete
+   * the current paint cycle before we start glass/particle transitions.
+   * This avoids stalling ongoing particle animations during tab switch. */
+  schedule_process_glass_idle (self);
 }
 
 
@@ -1237,7 +1271,7 @@ kgx_window_class_init (KgxWindowClass *klass)
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_revealer);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, search_entry);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, content_stack);
-  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, settings_page);
+  /* settings_page created lazily on first use — not in the template */
 
   g_type_ensure (KGX_TYPE_EDGE);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, edge);
