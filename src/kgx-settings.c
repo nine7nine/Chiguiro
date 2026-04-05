@@ -153,7 +153,7 @@ static const struct {
   [TUNE_GAP]          = { 0,   0,   0,   0,   0, 1, 0, 0, TRUE },
   [TUNE_THK_ATTACK]   = { 0.0, 0.5, 0.0, 0.0, 0, 0, 0, 0, FALSE },
   [TUNE_THK_RELEASE]  = { 0.0, 0.5, 0.0, 0.0, 0, 0, 0, 0, FALSE },
-  [TUNE_THK_RELEASE_MODE] = { 0, 0, 0, 0,    0, 3, 0, 0, TRUE },
+  [TUNE_THK_RELEASE_MODE] = { 0, 0, 0, 0,    0, 4, 0, 0, TRUE },
   [TUNE_THK_CURVE]    = { 0,   0,   0,   0,   1, 3, 2, 2, TRUE },
 };
 

@@ -40,6 +40,7 @@ typedef enum {
   KGX_RELEASE_RETRACT,      /* tail shrinks back toward head        */
   KGX_RELEASE_SPREAD,       /* tail blocks spread apart             */
   KGX_RELEASE_GROW,         /* grows (tail extends / thickness up)  */
+  KGX_RELEASE_ALL,          /* all blocks shrink (head included)    */
 } KgxReleaseMode;
 
 typedef enum {

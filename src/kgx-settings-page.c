@@ -551,9 +551,9 @@ sync_all_shapes (KgxSettingsPage *self)
 
 
 /* --- Release mode cycling buttons --- */
-/* Rls cycles U/R/S (3), T.Rls cycles U/R/S/G (4). */
+/* Rls cycles U/R/S (3), T.Rls cycles U/R/S/G/A (5). */
 
-static const char *release_mode_labels[] = { "U", "R", "S", "G" };
+static const char *release_mode_labels[] = { "U", "R", "S", "G", "A" };
 
 
 static void
@@ -861,7 +861,7 @@ bind_tunables (KgxSettingsPage *self)
         gtk_widget_add_css_class (w, "tune-rls");
         break;
       case BIND_THK_RELEASE_MODE:
-        setup_release_mode_button (self, w, key, 4);  /* U/R/S/G */
+        setup_release_mode_button (self, w, key, 5);  /* U/R/S/G/A */
         gtk_widget_add_css_class (w, "tune-thk-rls");
         break;
       case BIND_GAP:

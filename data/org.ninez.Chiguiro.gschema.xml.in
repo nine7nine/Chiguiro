@@ -223,7 +223,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve" type="i">
@@ -263,7 +263,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode-fireworks" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-fireworks" type="i">
@@ -303,7 +303,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode-corners" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-corners" type="i">
@@ -343,7 +343,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode-pulse-out" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-pulse-out" type="i">
@@ -383,7 +383,7 @@
       <default>0.3</default>
     </key>
     <key name="edge-thk-release-mode-rotate" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-rotate" type="i">
@@ -423,7 +423,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode-ping-pong" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-ping-pong" type="i">
@@ -483,7 +483,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode-ambient" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-ambient" type="i">
@@ -543,7 +543,7 @@
       <default>0.0</default>
     </key>
     <key name="edge-thk-release-mode-scroll2" type="i">
-      <range min="0" max="3"/>
+      <range min="0" max="4"/>
       <default>0</default>
     </key>
     <key name="edge-thk-curve-scroll2" type="i">

@@ -357,16 +357,18 @@ draw_segment (GtkSnapshot                *snapshot,
     thk_attack_env = thickness_envelope (phase, tune->thk_attack, 0.0, tune->thk_curve);
 
   /* R = uniform shrink (all blocks together, original behavior).
-   * S/G = per-block (head stays, tail changes) — computed in the loop. */
-  float thk_release_factor = 0.0f;  /* per-block factor for S/G modes */
+   * S/G = per-block (head stays, tail changes) — computed in the loop.
+   * A = all blocks shrink (head included) — uniform release factor. */
+  float thk_release_factor = 0.0f;  /* per-block factor for S/G/A modes */
   if (tune->thk_release_mode == KGX_RELEASE_RETRACT) {
     /* Uniform: apply full envelope including release to all blocks. */
     blk *= thickness_envelope (phase, tune->thk_attack, tune->thk_release, tune->thk_curve);
   } else {
     blk *= thk_attack_env;
-    /* Per-block release factor for S/G modes. */
+    /* Per-block release factor for S/G/A modes. */
     if ((tune->thk_release_mode == KGX_RELEASE_SPREAD ||
-         tune->thk_release_mode == KGX_RELEASE_GROW) &&
+         tune->thk_release_mode == KGX_RELEASE_GROW ||
+         tune->thk_release_mode == KGX_RELEASE_ALL) &&
         tune->thk_release > 0.0 && phase > 1.0 - tune->thk_release) {
       thk_release_factor = (float)((phase - (1.0 - tune->thk_release)) / tune->thk_release);
     }
@@ -404,12 +406,15 @@ draw_segment (GtkSnapshot                *snapshot,
     float  t = (float) s * inv_blocks;
 
     /* Per-block thickness: head stays full, tail shrinks/grows during release.
-     * thk_release_factor is 0 outside release phase, ramps 0→1 during release. */
+     * thk_release_factor is 0 outside release phase, ramps 0→1 during release.
+     * ALL mode: every block (head included) shrinks uniformly. */
     double block_blk = blk;
     if (thk_release_factor > 0.0f) {
-      if (tune->thk_release_mode == KGX_RELEASE_GROW)
+      if (tune->thk_release_mode == KGX_RELEASE_ALL)
+        block_blk = blk * (1.0 - (double)(thk_release_factor));
+      else if (tune->thk_release_mode == KGX_RELEASE_GROW)
         block_blk = blk * (1.0 + (double)(t * thk_release_factor));
-      else /* RETRACT or SPREAD = shrink */
+      else /* SPREAD = shrink tail only */
         block_blk = blk * (1.0 - (double)(t * thk_release_factor));
       if (block_blk < 1.0) block_blk = 1.0;
     }
@@ -1142,7 +1147,7 @@ kgx_edge_set_property (GObject      *object,
     else if (field == TUNE_GAP)
       self->preset[pi].gap = CLAMP (g_value_get_int (value), 0, 1);
     else if (field == TUNE_THK_RELEASE_MODE)
-      self->preset[pi].thk_release_mode = CLAMP (g_value_get_int (value), 0, 3);
+      self->preset[pi].thk_release_mode = CLAMP (g_value_get_int (value), 0, 4);
     else if (field == TUNE_THK_CURVE)
       self->preset[pi].thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     else
@@ -1168,7 +1173,7 @@ kgx_edge_set_property (GObject      *object,
     } else if (field == TUNE_GAP) {
       self->global.gap = CLAMP (g_value_get_int (value), 0, 1);
     } else if (field == TUNE_THK_RELEASE_MODE) {
-      self->global.thk_release_mode = CLAMP (g_value_get_int (value), 0, 3);
+      self->global.thk_release_mode = CLAMP (g_value_get_int (value), 0, 4);
     } else if (field == TUNE_THK_CURVE) {
       self->global.thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     } else if (field == TUNE_SPEED) {
@@ -1443,9 +1448,13 @@ kgx_edge_class_init (KgxEdgeClass *klass)
         edge_pspecs[id] =
           g_param_spec_int (tune_names[f], NULL, NULL, 0, 1, 0,
                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-      } else if (f == TUNE_RELEASE_MODE || f == TUNE_THK_RELEASE_MODE) {
+      } else if (f == TUNE_RELEASE_MODE) {
         edge_pspecs[id] =
           g_param_spec_int (tune_names[f], NULL, NULL, 0, 3, 0,
+                            G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+      } else if (f == TUNE_THK_RELEASE_MODE) {
+        edge_pspecs[id] =
+          g_param_spec_int (tune_names[f], NULL, NULL, 0, 4, 0,
                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
       } else if (f == TUNE_SHAPE) {
         edge_pspecs[id] =
@@ -1485,9 +1494,13 @@ kgx_edge_class_init (KgxEdgeClass *klass)
           edge_pspecs[id] =
             g_param_spec_int (name, NULL, NULL, 0, 1, 0,
                               G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
-        } else if (f == TUNE_RELEASE_MODE || f == TUNE_THK_RELEASE_MODE) {
+        } else if (f == TUNE_RELEASE_MODE) {
           edge_pspecs[id] =
             g_param_spec_int (name, NULL, NULL, 0, 3, 0,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
+        } else if (f == TUNE_THK_RELEASE_MODE) {
+          edge_pspecs[id] =
+            g_param_spec_int (name, NULL, NULL, 0, 4, 0,
                               G_PARAM_READWRITE | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB);
         } else if (f == TUNE_SHAPE) {
           edge_pspecs[id] =
