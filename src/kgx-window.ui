@@ -199,7 +199,10 @@
         <child type="overlay">
           <object class="KgxEdge" id="edge">
             <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
+            <property name="vexpand">False</property>
+            <property name="halign">fill</property>
+            <property name="valign">start</property>
+            <property name="side">top</property>
             <binding name="overscroll-enabled">
               <lookup name="edge-overscroll">
                 <lookup name="settings">KgxWindow</lookup>
@@ -222,6 +225,16 @@
             </binding>
             <binding name="ambient-enabled">
               <lookup name="edge-settings-animation">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="particle-throttle-enabled">
+              <lookup name="edge-particle-throttle">
+                <lookup name="settings">KgxWindow</lookup>
+              </lookup>
+            </binding>
+            <binding name="particle-hz">
+              <lookup name="edge-particle-hz">
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
@@ -845,6 +858,36 @@
                 <lookup name="settings">KgxWindow</lookup>
               </lookup>
             </binding>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="KgxEdge">
+            <property name="hexpand">False</property>
+            <property name="vexpand">True</property>
+            <property name="halign">end</property>
+            <property name="valign">fill</property>
+            <property name="side">right</property>
+            <property name="master">edge</property>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="KgxEdge">
+            <property name="hexpand">True</property>
+            <property name="vexpand">False</property>
+            <property name="halign">fill</property>
+            <property name="valign">end</property>
+            <property name="side">bottom</property>
+            <property name="master">edge</property>
+          </object>
+        </child>
+        <child type="overlay">
+          <object class="KgxEdge">
+            <property name="hexpand">False</property>
+            <property name="vexpand">True</property>
+            <property name="halign">start</property>
+            <property name="valign">fill</property>
+            <property name="side">left</property>
+            <property name="master">edge</property>
           </object>
         </child>
       </object>

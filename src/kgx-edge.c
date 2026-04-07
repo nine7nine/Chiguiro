@@ -26,6 +26,11 @@
 
 #define BASE_OVERSCROLL_MS    600
 #define BASE_OVERSCROLL_SEG   200.0
+#define EDGE_GOVERNOR_WARN_US 250000
+#define EDGE_GOVERNOR_STRESS_US 1000000
+#define EDGE_BLOCK_BUDGET_NORMAL 320
+#define EDGE_BLOCK_BUDGET_WARN   224
+#define EDGE_BLOCK_BUDGET_STRESS 160
 
 typedef struct _KgxEdge KgxEdge;
 typedef struct { int index; KgxEdge *self; } BurstData;
@@ -33,6 +38,9 @@ typedef struct { int index; KgxEdge *self; } BurstData;
 
 struct _KgxEdge {
   GtkWidget       parent_instance;
+
+  KgxEdge        *master;              /* NULL = stateful master strip */
+  GtkPositionType side;                /* which edge this strip renders */
 
   /* ── configurable properties ───────────────────────────── */
   gboolean        overscroll_enabled;
@@ -54,6 +62,21 @@ struct _KgxEdge {
 
   /* ── ambient (settings page) configuration ─────────────── */
   gboolean        ambient_enabled;     /* edge-settings-animation GSettings */
+  gboolean        particle_throttle_enabled;
+  int             particle_hz;         /* global redraw cap before governor */
+
+  /* ── redraw governor ────────────────────────────────────── */
+  guint           redraw_tick_id;
+  gboolean        redraw_pending;
+  gint64          last_redraw_request_us;
+  gint64          last_snapshot_end_us;
+  double          snapshot_cost_ewma_us;
+  double          frame_snapshot_cost_us;
+  double          redraw_frame_credit;
+  gint64          overload_us;
+  gint64          recovery_us;
+  int             governor_level;
+  int             frame_draw_budget_remaining;
 
   /* ── firework / burst mode ────────────────────────────────── */
   gboolean        ambient_active;      /* settings page is currently open */
@@ -118,9 +141,9 @@ struct _KgxEdge {
   gboolean          has_stashed;
 
   /* ── snapshotted tunables (captured at animation start) ──── */
-  KgxParticleTunables process_tune_snap; /* for process_anim in-flight   */
-  KgxParticleTunables burst_tune_snap;   /* for firework bursts           */
-  KgxParticleTunables ambient_tune_snap; /* for ambient bursts            */
+  KgxParticleTunables process_tune_snap;             /* for process_anim in-flight */
+  KgxParticleTunables burst_tune_snap[MAX_BURSTS];   /* per firework burst slot    */
+  KgxParticleTunables ambient_tune_snap[MAX_BURSTS]; /* per ambient burst slot     */
 
   /* ── cached pre-built paths for shaped particles ─────────── */
   GskPath            *unit_triangle;
@@ -134,6 +157,8 @@ struct _KgxEdge {
 
 enum {
   PROP_0,
+  PROP_MASTER,
+  PROP_SIDE,
   PROP_OVERSCROLL_ENABLED,
   PROP_OVERSCROLL_COLOR,
   PROP_OVERSCROLL_STYLE,
@@ -141,6 +166,8 @@ enum {
   PROP_BURST_SPREAD,
   PROP_BURST_COUNT,
   PROP_AMBIENT_ENABLED,
+  PROP_PARTICLE_THROTTLE_ENABLED,
+  PROP_PARTICLE_HZ,
   PROP_AMBIENT_BURST_COUNT,
   PROP_AMBIENT_BURST_SPREAD,
   /* Global tunables (N_TUNE_FIELDS values) */
@@ -173,6 +200,351 @@ resolve_tunables (KgxEdge *self, KgxParticlePreset preset)
   if (preset >= KGX_PARTICLE_FIREWORKS && preset <= KGX_PARTICLE_SCROLL2)
     return &self->preset[preset - 1];
   return &self->global;
+}
+
+static inline KgxEdge *
+kgx_edge_get_root (KgxEdge *self)
+{
+  while (self->master)
+    self = self->master;
+
+  return self;
+}
+
+static void
+kgx_edge_queue_draw_views (KgxEdge *self)
+{
+  KgxEdge *root = kgx_edge_get_root (self);
+  GtkWidget *root_widget = GTK_WIDGET (root);
+  GtkWidget *parent = gtk_widget_get_parent (root_widget);
+
+  if (!parent) {
+    gtk_widget_queue_draw (root_widget);
+    if (root != self)
+      gtk_widget_queue_draw (GTK_WIDGET (self));
+    return;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child (parent);
+       child;
+       child = gtk_widget_get_next_sibling (child)) {
+    if (KGX_IS_EDGE (child) &&
+        kgx_edge_get_root (KGX_EDGE (child)) == root)
+      gtk_widget_queue_draw (child);
+  }
+}
+
+static void
+kgx_edge_queue_resize_views (KgxEdge *self)
+{
+  KgxEdge *root = kgx_edge_get_root (self);
+  GtkWidget *root_widget = GTK_WIDGET (root);
+  GtkWidget *parent = gtk_widget_get_parent (root_widget);
+
+  if (!parent) {
+    gtk_widget_queue_resize (root_widget);
+    if (root != self)
+      gtk_widget_queue_resize (GTK_WIDGET (self));
+    return;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child (parent);
+       child;
+       child = gtk_widget_get_next_sibling (child)) {
+    if (KGX_IS_EDGE (child) &&
+        kgx_edge_get_root (KGX_EDGE (child)) == root)
+      gtk_widget_queue_resize (child);
+  }
+}
+
+static void
+kgx_edge_get_canvas_size (GtkWidget *widget,
+                          int       *width,
+                          int       *height)
+{
+  GtkWidget *parent = gtk_widget_get_parent (widget);
+
+  *width = parent ? gtk_widget_get_width (parent) : gtk_widget_get_width (widget);
+  *height = parent ? gtk_widget_get_height (parent) : gtk_widget_get_height (widget);
+
+  if (*width <= 0)
+    *width = gtk_widget_get_width (widget);
+  if (*height <= 0)
+    *height = gtk_widget_get_height (widget);
+}
+
+static int
+kgx_edge_get_strip_extent (KgxEdge *self)
+{
+  KgxEdge *root = kgx_edge_get_root (self);
+  int extent = MAX (root->global.thickness, 1);
+  gboolean process_segment_active =
+    root->process_progress >= 0.0 &&
+    root->process_preset != KGX_PARTICLE_NONE &&
+    !firework_active (root);
+  gboolean pending_process_segment =
+    root->pending_change &&
+    root->pending_preset != KGX_PARTICLE_NONE &&
+    root->pending_preset != KGX_PARTICLE_FIREWORKS &&
+    root->pending_preset != KGX_PARTICLE_AMBIENT;
+
+  for (int i = 0; i < N_PRESETS; i++)
+    extent = MAX (extent, root->preset[i].thickness);
+
+  if (process_segment_active) {
+    extent = MAX (extent, root->process_tune_snap.thickness);
+    extent = MAX (extent, root->process_thk_override);
+  }
+
+  if (pending_process_segment)
+    extent = MAX (extent, root->pending_thk_override);
+
+  return MAX (extent + 2, 4);
+}
+
+static inline void
+kgx_edge_queue_resize_views_if_needed (KgxEdge *self,
+                                       int      old_extent)
+{
+  self = kgx_edge_get_root (self);
+
+  if (kgx_edge_get_strip_extent (self) != old_extent)
+    kgx_edge_queue_resize_views (self);
+}
+
+static gboolean
+kgx_edge_has_visible_content (KgxEdge *self)
+{
+  self = kgx_edge_get_root (self);
+
+  if (self->overscroll_progress >= 0.0 || self->process_progress >= 0.0)
+    return TRUE;
+
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    if (self->burst_progress[i] >= 0.0 || self->ambient_progress[i] >= 0.0)
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+static inline void
+kgx_edge_reset_governor (KgxEdge *self)
+{
+  self->redraw_pending = FALSE;
+  self->last_redraw_request_us = 0;
+  self->last_snapshot_end_us = 0;
+  self->snapshot_cost_ewma_us = 0.0;
+  self->frame_snapshot_cost_us = 0.0;
+  self->redraw_frame_credit = 0.0;
+  self->overload_us = 0;
+  self->recovery_us = 0;
+  self->governor_level = 0;
+  self->frame_draw_budget_remaining = 0;
+}
+
+static inline int
+kgx_edge_get_effective_hz (KgxEdge *self)
+{
+  int hz = CLAMP (self->particle_hz, 10, 60);
+
+  switch (self->governor_level) {
+  case 1:
+    hz = MAX (12, (hz * 3 + 3) / 4);
+    break;
+  case 2:
+    hz = MAX (12, (hz + 1) / 2);
+    break;
+  default:
+    break;
+  }
+
+  return hz;
+}
+
+static double
+kgx_edge_get_refresh_hz (GdkFrameClock *frame_clock,
+                         gint64         now_us)
+{
+  gint64 refresh_interval_us = 0;
+  double fps;
+
+  gdk_frame_clock_get_refresh_info (frame_clock,
+                                    now_us,
+                                    &refresh_interval_us,
+                                    NULL);
+
+  if (refresh_interval_us > 0)
+    return CLAMP ((double) G_USEC_PER_SEC / (double) refresh_interval_us, 24.0, 240.0);
+
+  fps = gdk_frame_clock_get_fps (frame_clock);
+  if (fps > 0.0)
+    return CLAMP (fps, 24.0, 240.0);
+
+  return 60.0;
+}
+
+static inline int
+kgx_edge_get_block_budget (KgxEdge *self)
+{
+  switch (self->governor_level) {
+  case 1:
+    return EDGE_BLOCK_BUDGET_WARN;
+  case 2:
+    return EDGE_BLOCK_BUDGET_STRESS;
+  default:
+    return EDGE_BLOCK_BUDGET_NORMAL;
+  }
+}
+
+static void
+kgx_edge_note_snapshot (KgxEdge *self,
+                        double   snapshot_cost_us,
+                        gint64   sample_end_us)
+{
+  gint64 nominal_interval_us = G_USEC_PER_SEC / CLAMP (self->particle_hz, 10, 60);
+  gint64 sample_interval_us = nominal_interval_us;
+  gboolean overloaded;
+
+  if (self->last_snapshot_end_us > 0)
+    sample_interval_us = MAX (sample_end_us - self->last_snapshot_end_us, 0);
+  self->last_snapshot_end_us = sample_end_us;
+
+  if (self->snapshot_cost_ewma_us <= 0.0)
+    self->snapshot_cost_ewma_us = snapshot_cost_us;
+  else
+    self->snapshot_cost_ewma_us = self->snapshot_cost_ewma_us * 0.8 + snapshot_cost_us * 0.2;
+
+  overloaded = (sample_interval_us > (gint64) (nominal_interval_us * 1.35)) ||
+               (self->snapshot_cost_ewma_us > nominal_interval_us * 0.60);
+
+  if (overloaded) {
+    self->recovery_us = 0;
+    self->overload_us = MIN (self->overload_us + sample_interval_us,
+                             EDGE_GOVERNOR_STRESS_US * 2);
+    if (self->overload_us >= EDGE_GOVERNOR_STRESS_US)
+      self->governor_level = 2;
+    else if (self->overload_us >= EDGE_GOVERNOR_WARN_US && self->governor_level < 1)
+      self->governor_level = 1;
+  } else {
+    self->overload_us = MAX (self->overload_us - sample_interval_us / 2, 0);
+    self->recovery_us = MIN (self->recovery_us + sample_interval_us,
+                             EDGE_GOVERNOR_STRESS_US * 2);
+
+    if (self->governor_level == 2 && self->recovery_us >= EDGE_GOVERNOR_STRESS_US) {
+      self->governor_level = 1;
+      self->recovery_us = 0;
+    } else if (self->governor_level == 1 &&
+               self->recovery_us >= EDGE_GOVERNOR_STRESS_US) {
+      self->governor_level = 0;
+      self->recovery_us = 0;
+      self->overload_us = 0;
+    }
+  }
+}
+
+static gboolean
+kgx_edge_redraw_tick_cb (GtkWidget     *widget,
+                         GdkFrameClock *frame_clock,
+                         gpointer       user_data)
+{
+  KgxEdge *self = KGX_EDGE (user_data);
+  gint64 now_us = gdk_frame_clock_get_frame_time (frame_clock);
+
+  if (!self->particle_throttle_enabled) {
+    self->redraw_tick_id = 0;
+    kgx_edge_reset_governor (self);
+    return G_SOURCE_REMOVE;
+  }
+
+  if (!kgx_edge_has_visible_content (self) && !self->redraw_pending) {
+    self->redraw_tick_id = 0;
+    kgx_edge_reset_governor (self);
+    return G_SOURCE_REMOVE;
+  }
+
+  if (self->frame_snapshot_cost_us > 0.0) {
+    kgx_edge_note_snapshot (self, self->frame_snapshot_cost_us, now_us);
+    self->frame_snapshot_cost_us = 0.0;
+  }
+
+  if (self->redraw_pending) {
+    double refresh_hz = kgx_edge_get_refresh_hz (frame_clock, now_us);
+    double effective_hz = kgx_edge_get_effective_hz (self);
+    gboolean should_draw = FALSE;
+
+    if (self->last_redraw_request_us == 0 || effective_hz >= refresh_hz * 0.98) {
+      should_draw = TRUE;
+      self->redraw_frame_credit = 0.0;
+    } else {
+      self->redraw_frame_credit =
+        MIN (self->redraw_frame_credit + effective_hz / refresh_hz, 4.0);
+
+      if (self->redraw_frame_credit + 1e-6 >= 1.0) {
+        self->redraw_frame_credit = MAX (self->redraw_frame_credit - 1.0, 0.0);
+        should_draw = TRUE;
+      }
+    }
+
+    if (should_draw) {
+      self->last_redraw_request_us = now_us;
+      self->redraw_pending = FALSE;
+      self->frame_draw_budget_remaining = kgx_edge_get_block_budget (self);
+      kgx_edge_queue_draw_views (self);
+    }
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static inline void
+kgx_edge_ensure_redraw_tick (KgxEdge *self)
+{
+  if (self->redraw_tick_id == 0 && gtk_widget_get_mapped (GTK_WIDGET (self))) {
+    self->redraw_tick_id =
+      gtk_widget_add_tick_callback (GTK_WIDGET (self),
+                                    kgx_edge_redraw_tick_cb,
+                                    self,
+                                    NULL);
+  }
+}
+
+static inline void
+kgx_edge_stop_redraw_tick (KgxEdge *self)
+{
+  if (self->redraw_tick_id != 0) {
+    gtk_widget_remove_tick_callback (GTK_WIDGET (self), self->redraw_tick_id);
+    self->redraw_tick_id = 0;
+  }
+}
+
+static void
+kgx_edge_mark_dirty (KgxEdge *self)
+{
+  KgxEdge *root = kgx_edge_get_root (self);
+  GtkWidget *widget = GTK_WIDGET (root);
+
+  if (!gtk_widget_get_mapped (widget))
+    return;
+
+  if (!root->particle_throttle_enabled) {
+    root->redraw_pending = FALSE;
+    root->last_redraw_request_us = 0;
+    root->frame_draw_budget_remaining = 0;
+    kgx_edge_stop_redraw_tick (root);
+    kgx_edge_queue_draw_views (root);
+    return;
+  }
+
+  if (!kgx_edge_has_visible_content (root)) {
+    root->redraw_pending = FALSE;
+    root->last_redraw_request_us = 0;
+    kgx_edge_queue_draw_views (root);
+    return;
+  }
+
+  root->redraw_pending = TRUE;
+  kgx_edge_ensure_redraw_tick (root);
 }
 
 static inline void
@@ -345,6 +717,9 @@ draw_segment (GtkSnapshot                *snapshot,
               int                         trail_dir,
               const KgxParticleTunables  *tune,
               double                      phase,
+              GtkPositionType             side,
+              float                       strip_extent,
+              int                        *budget_remaining,
               GskPath                    *unit_triangle,
               GskPath                    *unit_diamond)
 {
@@ -391,6 +766,14 @@ draw_segment (GtkSnapshot                *snapshot,
 
   if (blocks < 1) blocks = 1;
 
+  if (budget_remaining) {
+    if (*budget_remaining <= 0)
+      return;
+
+    blocks = MIN (blocks, *budget_remaining);
+    *budget_remaining -= blocks;
+  }
+
   double d     = fmod (head_d + perim, perim);
   double delta = trail_dir * step;
   float  inv_blocks = 1.0f / (float)(blocks > 1 ? blocks - 1 : 1);
@@ -430,6 +813,7 @@ draw_segment (GtkSnapshot                *snapshot,
       a *= pulse;
     }
     GdkRGBA c = *color;
+    GtkPositionType block_side;
     float  px, py, bw, bh;
 
     c.alpha = a;
@@ -438,27 +822,39 @@ draw_segment (GtkSnapshot                *snapshot,
     float tri_angle = 0;
     if (d < width) {
       /* Top edge — CW = right, CCW = left */
+      block_side = GTK_POS_TOP;
       px = (float) d;  py = 0;
       bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 0 : 180;
     } else if (d < width + height) {
       /* Right edge — CW = down, CCW = up */
+      block_side = GTK_POS_RIGHT;
       px = width - bb;  py = (float)(d - width);
       bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 90 : 270;
     } else if (d < 2 * width + height) {
       /* Bottom edge — CW = left, CCW = right */
+      block_side = GTK_POS_BOTTOM;
       px = width - (float)(d - width - height) - bb;
       py = height - bb;
       bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 180 : 0;
     } else {
       /* Left edge — CW = up, CCW = down */
+      block_side = GTK_POS_LEFT;
       px = 0;
       py = height - (float)(d - 2 * width - height) - bb;
       bw = bb;  bh = bb;
       tri_angle = (trail_dir == -1) ? 270 : 90;
     }
+
+    if (block_side != side)
+      continue;
+
+    if (side == GTK_POS_RIGHT)
+      px -= width - strip_extent;
+    else if (side == GTK_POS_BOTTOM)
+      py -= height - strip_extent;
 
     switch (tune->shape) {
     case KGX_PARTICLE_SHAPE_CIRCLE:
@@ -492,6 +888,9 @@ draw_overscroll (GtkSnapshot                *snapshot,
                  double                      perim,
                  const GdkRGBA              *color,
                  const KgxParticleTunables  *tune,
+                 GtkPositionType             side,
+                 float                       strip_extent,
+                 int                        *budget_remaining,
                  GskPath                    *unit_triangle,
                  GskPath                    *unit_diamond)
 {
@@ -500,6 +899,9 @@ draw_overscroll (GtkSnapshot                *snapshot,
 
   if (style == 1) {
     /* Scroll 2: solid bar along the active edge. */
+    if (edge != side)
+      return;
+
     float thk = (float) tune->thickness;
     float thk_env_val = 1.0f;
     if (tune->thk_attack > 0.0)
@@ -518,7 +920,7 @@ draw_overscroll (GtkSnapshot                *snapshot,
     } else {
       float x = reverse ? width - bar_len : 0.0f;
       gtk_snapshot_append_color (snapshot, &c,
-                                 &GRAPHENE_RECT_INIT (x, height - thk, bar_len, thk));
+                                 &GRAPHENE_RECT_INIT (x, strip_extent - thk, bar_len, thk));
     }
   } else {
     /* Scroll 1: corner burst along two adjacent edges. */
@@ -557,10 +959,12 @@ draw_overscroll (GtkSnapshot                *snapshot,
     }
 
     draw_segment (snapshot, h_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, perim, color, h_trail, tune, progress,
+                  width, height, perim, color, h_trail, tune, progress, side, strip_extent,
+                  budget_remaining,
                   unit_triangle, unit_diamond);
     draw_segment (snapshot, v_head, BASE_OVERSCROLL_SEG, a,
-                  width, height, perim, color, v_trail, tune, progress,
+                  width, height, perim, color, v_trail, tune, progress, side, strip_extent,
+                  budget_remaining,
                   unit_triangle, unit_diamond);
   }
 }
@@ -587,7 +991,7 @@ static void
 burst_value_cb (double value, BurstData *bd)
 {
   bd->self->burst_progress[bd->index] = value;
-  gtk_widget_queue_draw (GTK_WIDGET (bd->self));
+  kgx_edge_mark_dirty (bd->self);
 }
 
 
@@ -598,6 +1002,7 @@ static void
 burst_done_cb (BurstData *bd)
 {
   bd->self->burst_progress[bd->index] = -1.0;
+  kgx_edge_mark_dirty (bd->self);
 }
 
 
@@ -607,7 +1012,8 @@ burst_fire (gpointer data)
   BurstData *bd = data;
   KgxEdge *self = bd->self;
   int i = bd->index;
-  int width, height;
+  int width;
+  int height;
   double perim;
 
   self->burst_timeout[i] = 0;
@@ -615,8 +1021,7 @@ burst_fire (gpointer data)
   if (!firework_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
     return G_SOURCE_REMOVE;
 
-  width  = gtk_widget_get_width (GTK_WIDGET (self));
-  height = gtk_widget_get_height (GTK_WIDGET (self));
+  kgx_edge_get_canvas_size (GTK_WIDGET (self), &width, &height);
   perim  = 2.0 * (width + height);
 
   self->burst_head[i] = g_random_double () * perim;
@@ -634,7 +1039,7 @@ burst_fire (gpointer data)
       (self->process_preset == KGX_PARTICLE_FIREWORKS)
         ? resolve_tunables (self, KGX_PARTICLE_FIREWORKS)
         : &self->global;
-    self->burst_tune_snap = *bt;
+    self->burst_tune_snap[i] = *bt;
     adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->burst_anim[i]),
                                       (guint)(800.0 / bt->speed));
   }
@@ -709,7 +1114,7 @@ static void
 ambient_burst_value_cb (double value, BurstData *bd)
 {
   bd->self->ambient_progress[bd->index] = value;
-  gtk_widget_queue_draw (GTK_WIDGET (bd->self));
+  kgx_edge_mark_dirty (bd->self);
 }
 
 
@@ -717,6 +1122,7 @@ static void
 ambient_burst_done_cb (BurstData *bd)
 {
   bd->self->ambient_progress[bd->index] = -1.0;
+  kgx_edge_mark_dirty (bd->self);
 }
 
 
@@ -729,6 +1135,9 @@ ambient_burst_fire (gpointer data)
   BurstData *bd = data;
   KgxEdge *self = bd->self;
   int i = bd->index;
+  int width;
+  int height;
+  double perim;
 
   self->ambient_burst_timeout[i] = 0;
 
@@ -736,9 +1145,8 @@ ambient_burst_fire (gpointer data)
       !gtk_widget_get_mapped (GTK_WIDGET (self)))
     return G_SOURCE_REMOVE;
 
-  int width  = gtk_widget_get_width (GTK_WIDGET (self));
-  int height = gtk_widget_get_height (GTK_WIDGET (self));
-  double perim = 2.0 * (width + height);
+  kgx_edge_get_canvas_size (GTK_WIDGET (self), &width, &height);
+  perim = 2.0 * (width + height);
 
   self->ambient_head[i] = g_random_double () * perim;
 
@@ -747,7 +1155,7 @@ ambient_burst_fire (gpointer data)
   /* Snapshot ambient tunables at burst-fire time. */
   {
     const KgxParticleTunables *bt = &self->preset[KGX_PARTICLE_AMBIENT - 1]; /* ambient tunables */
-    self->ambient_tune_snap = *bt;
+    self->ambient_tune_snap[i] = *bt;
     adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
                                       (guint)(800.0 / bt->speed));
   }
@@ -817,55 +1225,67 @@ kgx_edge_snapshot (GtkWidget   *widget,
                    GtkSnapshot *snapshot)
 {
   KgxEdge *self = KGX_EDGE (widget);
+  KgxEdge *root = kgx_edge_get_root (self);
+  gint64 snapshot_start_us;
+  int width;
+  int height;
+  int strip_extent;
+  int *draw_budget;
+  double perim;
+  GskPath *tri;
+  GskPath *dia;
 
   /* Fast path: nothing animating — skip all rendering work. */
-  if (self->overscroll_progress < 0.0 &&
-      self->process_progress < 0.0 &&
-      !firework_active (self) &&
-      !self->ambient_active) {
-    gboolean any = FALSE;
-    for (int i = 0; i < MAX_BURSTS && !any; i++)
-      any = (self->burst_progress[i] >= 0.0 ||
-             self->ambient_progress[i] >= 0.0);
-    if (!any)
-      return;
-  }
+  if (!kgx_edge_has_visible_content (root))
+    return;
 
-  int      width  = gtk_widget_get_width (widget);
-  int      height = gtk_widget_get_height (widget);
-  double   perim  = 2.0 * (width + height);
+  snapshot_start_us = g_get_monotonic_time ();
+  kgx_edge_get_canvas_size (widget, &width, &height);
+  if (width <= 0 || height <= 0)
+    return;
 
-  GskPath *tri = self->unit_triangle;
-  GskPath *dia = self->unit_diamond;
+  strip_extent = (self->side == GTK_POS_TOP || self->side == GTK_POS_BOTTOM)
+                   ? gtk_widget_get_height (widget)
+                   : gtk_widget_get_width (widget);
+  if (strip_extent <= 0)
+    strip_extent = kgx_edge_get_strip_extent (root);
+
+  perim = 2.0 * (width + height);
+  draw_budget = root->particle_throttle_enabled
+                  ? &root->frame_draw_budget_remaining
+                  : NULL;
+  tri = root->unit_triangle;
+  dia = root->unit_diamond;
 
   /* Overscroll beam */
-  if (self->overscroll_progress >= 0.0 && self->overscroll_enabled) {
-    GdkRGBA color = resolve_color_cached (self, self->overscroll_color,
-                                          &self->overscroll_rgba,
-                                          &self->overscroll_rgba_valid);
+  if (root->overscroll_progress >= 0.0 && root->overscroll_enabled) {
+    GdkRGBA color = resolve_color_cached (root, root->overscroll_color,
+                                          &root->overscroll_rgba,
+                                          &root->overscroll_rgba_valid);
 
     const KgxParticleTunables *os_tune =
-      (self->overscroll_style == 1) ? resolve_tunables (self, KGX_PARTICLE_SCROLL2)
-                                    : &self->global;
-    draw_overscroll (snapshot, self->overscroll_progress,
-                     self->overscroll_edge, self->overscroll_style,
-                     (self->overscroll_reverse == 2)
-                       ? self->overscroll_reverse_toggle
-                       : (self->overscroll_reverse == 1),
-                     width, height, perim, &color, os_tune, tri, dia);
+      (root->overscroll_style == 1) ? resolve_tunables (root, KGX_PARTICLE_SCROLL2)
+                                    : &root->global;
+    draw_overscroll (snapshot, root->overscroll_progress,
+                     root->overscroll_edge, root->overscroll_style,
+                     (root->overscroll_reverse == 2)
+                       ? root->overscroll_reverse_toggle
+                       : (root->overscroll_reverse == 1),
+                     width, height, perim, &color, os_tune,
+                     self->side, strip_extent, draw_budget, tri, dia);
   }
 
   /* Firework decoration — staggered center-bursts.
    * When process_reverse + FIREWORKS: implode (converge to center).
    * Uses snapshotted tunables captured at burst-fire time. */
   {
-    gboolean implode = (self->process_preset == KGX_PARTICLE_FIREWORKS &&
-                        self->process_reverse);
-    const KgxParticleTunables *bt = &self->burst_tune_snap;
+    gboolean implode = (root->process_preset == KGX_PARTICLE_FIREWORKS &&
+                        root->process_reverse);
 
     for (int i = 0; i < MAX_BURSTS; i++) {
-      if (self->burst_progress[i] >= 0.0) {
-        double p     = self->burst_progress[i];
+      if (root->burst_progress[i] >= 0.0) {
+        const KgxParticleTunables *bt = &root->burst_tune_snap[i];
+        double p     = root->burst_progress[i];
         double bp    = implode ? 1.0 - p : p;
         float  b_env = implode
                           ? envelope (bp, 0.0, 0.02, 2)
@@ -874,17 +1294,17 @@ kgx_edge_snapshot (GtkWidget   *widget,
         double seg   = BASE_OVERSCROLL_SEG * bt->tail_length * 2.0 * seg_env;
         float  a     = b_env * 0.5f;
         double spread = seg * 3.0 * bp;
-        double left_head  = fmod (self->burst_head[i] - spread + perim, perim);
-        double right_head = fmod (self->burst_head[i] + spread, perim);
+        double left_head  = fmod (root->burst_head[i] - spread + perim, perim);
+        double right_head = fmod (root->burst_head[i] + spread, perim);
         int l_trail = implode ? -1 : +1;
         int r_trail = implode ? +1 : -1;
 
         draw_segment (snapshot, left_head, seg, a,
-                      width, height, perim, &self->burst_color[i],
-                      l_trail, bt, p, tri, dia);
+                      width, height, perim, &root->burst_color[i],
+                      l_trail, bt, p, self->side, strip_extent, draw_budget, tri, dia);
         draw_segment (snapshot, right_head, seg, a,
-                      width, height, perim, &self->burst_color[i],
-                      r_trail, bt, p, tri, dia);
+                      width, height, perim, &root->burst_color[i],
+                      r_trail, bt, p, self->side, strip_extent, draw_budget, tri, dia);
       }
     }
   }
@@ -894,31 +1314,30 @@ kgx_edge_snapshot (GtkWidget   *widget,
    * Keep rendering if any burst is still in-flight even after ambient_active
    * is cleared — this gives a graceful fade-out when leaving settings. */
   {
-    gboolean ambient_render = (self->ambient_active && self->ambient_enabled);
+    gboolean ambient_render = (root->ambient_active && root->ambient_enabled);
     if (!ambient_render) {
       for (int i = 0; i < MAX_BURSTS && !ambient_render; i++)
-        ambient_render = (self->ambient_progress[i] >= 0.0);
+        ambient_render = (root->ambient_progress[i] >= 0.0);
     }
     if (ambient_render) {
-    const KgxParticleTunables *abt = &self->ambient_tune_snap;
-
     for (int i = 0; i < MAX_BURSTS; i++) {
-      if (self->ambient_progress[i] >= 0.0) {
-        double p     = self->ambient_progress[i];
+      if (root->ambient_progress[i] >= 0.0) {
+        const KgxParticleTunables *abt = &root->ambient_tune_snap[i];
+        double p     = root->ambient_progress[i];
         float  b_env = envelope (p, abt->env_attack, abt->env_release, abt->env_curve);
         double seg_env = envelope (p, abt->env_attack, 0.0, abt->env_curve);
         double seg   = BASE_OVERSCROLL_SEG * abt->tail_length * 2.0 * seg_env;
         float  a     = b_env * 0.5f;
         double spread = seg * 3.0 * p;
-        double left_head  = fmod (self->ambient_head[i] - spread + perim, perim);
-        double right_head = fmod (self->ambient_head[i] + spread, perim);
+        double left_head  = fmod (root->ambient_head[i] - spread + perim, perim);
+        double right_head = fmod (root->ambient_head[i] + spread, perim);
 
         draw_segment (snapshot, left_head, seg, a,
-                      width, height, perim, &self->ambient_burst_color[i],
-                      +1, abt, p, tri, dia);
+                      width, height, perim, &root->ambient_burst_color[i],
+                      +1, abt, p, self->side, strip_extent, draw_budget, tri, dia);
         draw_segment (snapshot, right_head, seg, a,
-                      width, height, perim, &self->ambient_burst_color[i],
-                      -1, abt, p, tri, dia);
+                      width, height, perim, &root->ambient_burst_color[i],
+                      -1, abt, p, self->side, strip_extent, draw_budget, tri, dia);
       }
     }
     }
@@ -928,27 +1347,27 @@ kgx_edge_snapshot (GtkWidget   *widget,
    * EXCEPT during the brief graceful falloff (pending_change in progress).
    * Once the pending fires and stops the animation, suppression kicks in.
    * Uses snapshotted tunables captured at animation start. */
-  if (self->process_progress >= 0.0 &&
-      self->process_preset != KGX_PARTICLE_NONE) {
-    const KgxParticleTunables *pt = &self->process_tune_snap;
+  if (root->process_progress >= 0.0 &&
+      root->process_preset != KGX_PARTICLE_NONE) {
+    const KgxParticleTunables *pt = &root->process_tune_snap;
 
     /* Use AdwAnimation-driven progress when it's advancing normally.
      * Fall back to wall clock only when progress hasn't changed between
      * snapshots (frame clock stall during tab-switch layout). */
     double p;
-    if (self->process_progress != self->process_last_snapshot_progress) {
-      p = self->process_progress;
-    } else if (self->process_start_us > 0 && self->process_duration_s > 0) {
-      double elapsed = (g_get_monotonic_time () - self->process_start_us) / 1000000.0;
-      p = CLAMP (elapsed / self->process_duration_s, 0.0, 1.0);
-      if (!self->process_linear) {
+    if (root->process_progress != root->process_last_snapshot_progress) {
+      p = root->process_progress;
+    } else if (root->process_start_us > 0 && root->process_duration_s > 0) {
+      double elapsed = (g_get_monotonic_time () - root->process_start_us) / 1000000.0;
+      p = CLAMP (elapsed / root->process_duration_s, 0.0, 1.0);
+      if (!root->process_linear) {
         double inv = 1.0 - p;
         p = 1.0 - inv * inv * inv;
       }
     } else {
-      p = self->process_progress;
+      p = root->process_progress;
     }
-    self->process_last_snapshot_progress = self->process_progress;
+    root->process_last_snapshot_progress = root->process_progress;
     float  env   = envelope (p, pt->env_attack, pt->env_release, pt->env_curve);
     float  a     = env * 0.8f;
 
@@ -956,7 +1375,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
     /* Tail envelope: grows during attack. In retract mode, shrinks during release.
      * Rotate keeps full tail -- it's always in motion. */
     double tail_env;
-    if (self->process_preset == KGX_PARTICLE_ROTATE)
+    if (root->process_preset == KGX_PARTICLE_ROTATE)
       tail_env = 1.0;
     else if (pt->release_mode == KGX_RELEASE_RETRACT) {
       /* Retract faster than alpha fades so the pull-back is visible.
@@ -967,10 +1386,10 @@ kgx_edge_snapshot (GtkWidget   *widget,
       tail_env = envelope (p, pt->env_attack, 0.0, pt->env_curve);  /* uniform/spread/grow: attack only */
     double seg = seg_full * tail_env;
 
-    switch (self->process_preset) {
+    switch (root->process_preset) {
     case KGX_PARTICLE_CORNERS: {
       double corner_a, corner_b;
-      if (self->process_reverse) {
+      if (root->process_reverse) {
         corner_a = (double) width;
         corner_b = (double)(2 * width + height);
       } else {
@@ -985,14 +1404,14 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double b_cw  = fmod (corner_b + travel, perim);
       double b_ccw = fmod (corner_b - travel + perim * 2, perim);
 
-      draw_segment (snapshot, a_cw,  clamped_seg, a, width, height, perim, &self->process_color, -1, pt, p, tri, dia);
-      draw_segment (snapshot, a_ccw, clamped_seg, a, width, height, perim, &self->process_color, +1, pt, p, tri, dia);
-      draw_segment (snapshot, b_cw,  clamped_seg, a, width, height, perim, &self->process_color, -1, pt, p, tri, dia);
-      draw_segment (snapshot, b_ccw, clamped_seg, a, width, height, perim, &self->process_color, +1, pt, p, tri, dia);
+      draw_segment (snapshot, a_cw,  clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
+      draw_segment (snapshot, a_ccw, clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
+      draw_segment (snapshot, b_cw,  clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
+      draw_segment (snapshot, b_ccw, clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
       break;
     }
     case KGX_PARTICLE_PULSE_OUT: {
-      double center = self->process_reverse
+      double center = root->process_reverse
                         ? (double)width + height + width / 2.0
                         : width / 2.0;
       double spread = (perim / 4.0) * p;
@@ -1000,13 +1419,13 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double left_head  = fmod (center - spread + perim, perim);
       double right_head = fmod (center + spread, perim);
 
-      draw_segment (snapshot, left_head,  clamped_seg, a, width, height, perim, &self->process_color, +1, pt, p, tri, dia);
-      draw_segment (snapshot, right_head, clamped_seg, a, width, height, perim, &self->process_color, -1, pt, p, tri, dia);
+      draw_segment (snapshot, left_head,  clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
+      draw_segment (snapshot, right_head, clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
       break;
     }
     case KGX_PARTICLE_ROTATE: {
-      int dir   = self->process_reverse ? -1 : +1;
-      int trail = self->process_reverse ? +1 : -1;
+      int dir   = root->process_reverse ? -1 : +1;
+      int trail = root->process_reverse ? +1 : -1;
 
       double half_p   = fmod (p * 2.0, 1.0);
       double eased    = 1.0 - (1.0 - half_p) * (1.0 - half_p) * (1.0 - half_p);
@@ -1026,11 +1445,11 @@ kgx_edge_snapshot (GtkWidget   *widget,
       double head   = fmod (dir * travel + offset + perim, perim);
 
       draw_segment (snapshot, head, clamped_seg, lap_a,
-                    width, height, perim, &self->process_color, trail, pt, half_p, tri, dia);
+                    width, height, perim, &root->process_color, trail, pt, half_p, self->side, strip_extent, draw_budget, tri, dia);
       break;
     }
     case KGX_PARTICLE_PING_PONG: {
-      double edge_start = self->process_reverse
+      double edge_start = root->process_reverse
                             ? (double)(width + height) : 0.0;
 
       double half_p = fmod (p * 2.0, 1.0);
@@ -1058,13 +1477,15 @@ kgx_edge_snapshot (GtkWidget   *widget,
       }
 
       draw_segment (snapshot, pos, clamped_seg, pp_a,
-                    width, height, perim, &self->process_color, trail, pt, half_p, tri, dia);
+                    width, height, perim, &root->process_color, trail, pt, half_p, self->side, strip_extent, draw_budget, tri, dia);
       break;
     }
     default:
       break;
     }
   }
+
+  root->frame_snapshot_cost_us += MAX ((double) (g_get_monotonic_time () - snapshot_start_us), 0.0);
 }
 
 
@@ -1079,8 +1500,23 @@ kgx_edge_measure (GtkWidget      *widget,
                   int            *minimum_baseline,
                   int            *natural_baseline)
 {
-  *minimum = 0;
-  *natural = 0;
+  KgxEdge *self = KGX_EDGE (widget);
+  int extent = kgx_edge_get_strip_extent (self);
+  gboolean horizontal_strip = (self->side == GTK_POS_TOP || self->side == GTK_POS_BOTTOM);
+
+  if ((horizontal_strip && orientation == GTK_ORIENTATION_VERTICAL) ||
+      (!horizontal_strip && orientation == GTK_ORIENTATION_HORIZONTAL)) {
+    *minimum = extent;
+    *natural = extent;
+  } else {
+    *minimum = 0;
+    *natural = 0;
+  }
+
+  if (minimum_baseline)
+    *minimum_baseline = -1;
+  if (natural_baseline)
+    *natural_baseline = -1;
 }
 
 
@@ -1091,7 +1527,7 @@ overscroll_value_cb (double   value,
                      KgxEdge *self)
 {
   self->overscroll_progress = value;
-  gtk_widget_queue_draw (GTK_WIDGET (self));
+  kgx_edge_mark_dirty (self);
 }
 
 
@@ -1099,6 +1535,7 @@ static void
 overscroll_done_cb (KgxEdge *self)
 {
   self->overscroll_progress = -1.0;
+  kgx_edge_mark_dirty (self);
 }
 
 
@@ -1108,8 +1545,15 @@ static void
 kgx_edge_map (GtkWidget *widget)
 {
   KgxEdge *self = KGX_EDGE (widget);
+  KgxEdge *root = kgx_edge_get_root (self);
 
   GTK_WIDGET_CLASS (kgx_edge_parent_class)->map (widget);
+
+  if (self != root) {
+    if (kgx_edge_has_visible_content (root))
+      gtk_widget_queue_draw (widget);
+    return;
+  }
 
   if (firework_active (self) && self->burst_progress[0] < 0.0)
     firework_schedule (self);
@@ -1117,6 +1561,27 @@ kgx_edge_map (GtkWidget *widget)
   if (self->ambient_active && self->ambient_enabled &&
       self->ambient_progress[0] < 0.0)
     ambient_schedule (self);
+
+  if (kgx_edge_has_visible_content (self)) {
+    if (self->particle_throttle_enabled) {
+      self->redraw_pending = TRUE;
+      kgx_edge_ensure_redraw_tick (self);
+    } else {
+      kgx_edge_queue_draw_views (self);
+    }
+  }
+}
+
+
+static void
+kgx_edge_unmap (GtkWidget *widget)
+{
+  KgxEdge *self = KGX_EDGE (widget);
+
+  if (self == kgx_edge_get_root (self))
+    kgx_edge_stop_redraw_tick (self);
+
+  GTK_WIDGET_CLASS (kgx_edge_parent_class)->unmap (widget);
 }
 
 
@@ -1129,6 +1594,24 @@ kgx_edge_set_property (GObject      *object,
                        GParamSpec   *pspec)
 {
   KgxEdge *self = KGX_EDGE (object);
+  KgxEdge *state = self;
+
+  switch (property_id) {
+    case PROP_MASTER:
+      g_set_object (&self->master, g_value_get_object (value));
+      gtk_widget_queue_resize (GTK_WIDGET (self));
+      gtk_widget_queue_draw (GTK_WIDGET (self));
+      return;
+    case PROP_SIDE:
+      self->side = g_value_get_enum (value);
+      gtk_widget_queue_resize (GTK_WIDGET (self));
+      gtk_widget_queue_draw (GTK_WIDGET (self));
+      return;
+    default:
+      break;
+  }
+
+  state = kgx_edge_get_root (self);
 
   /* Handle per-preset tunables via indexed arithmetic */
   if (property_id >= PROP_PRESET_BASE &&
@@ -1137,24 +1620,25 @@ kgx_edge_set_property (GObject      *object,
     int pi    = idx / N_TUNE_FIELDS;
     int field = idx % N_TUNE_FIELDS;
     if (field == TUNE_THICKNESS)
-      self->preset[pi].thickness = CLAMP (g_value_get_int (value), 2, 40);
+      state->preset[pi].thickness = CLAMP (g_value_get_int (value), 2, 40);
     else if (field == TUNE_RELEASE_MODE)
-      self->preset[pi].release_mode = CLAMP (g_value_get_int (value), 0, 3);
+      state->preset[pi].release_mode = CLAMP (g_value_get_int (value), 0, 3);
     else if (field == TUNE_SHAPE)
-      self->preset[pi].shape = CLAMP (g_value_get_int (value), 0, 3);
+      state->preset[pi].shape = CLAMP (g_value_get_int (value), 0, 3);
     else if (field == TUNE_ENV_CURVE)
-      self->preset[pi].env_curve = CLAMP (g_value_get_int (value), 1, 3);
+      state->preset[pi].env_curve = CLAMP (g_value_get_int (value), 1, 3);
     else if (field == TUNE_GAP)
-      self->preset[pi].gap = CLAMP (g_value_get_int (value), 0, 1);
+      state->preset[pi].gap = CLAMP (g_value_get_int (value), 0, 1);
     else if (field == TUNE_THK_RELEASE_MODE)
-      self->preset[pi].thk_release_mode = CLAMP (g_value_get_int (value), 0, 4);
+      state->preset[pi].thk_release_mode = CLAMP (g_value_get_int (value), 0, 4);
     else if (field == TUNE_THK_CURVE)
-      self->preset[pi].thk_curve = CLAMP (g_value_get_int (value), 1, 3);
+      state->preset[pi].thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     else
-      set_tunable_double (&self->preset[pi], field, g_value_get_double (value));
-    if (self->process_progress >= 0.0 || self->overscroll_progress >= 0.0 ||
-        firework_active (self) || self->ambient_active)
-      gtk_widget_queue_draw (GTK_WIDGET (self));
+      set_tunable_double (&state->preset[pi], field, g_value_get_double (value));
+    if (field == TUNE_THICKNESS)
+      kgx_edge_queue_resize_views (state);
+    if (kgx_edge_has_visible_content (state))
+      kgx_edge_mark_dirty (state);
     return;
   }
 
@@ -1163,80 +1647,95 @@ kgx_edge_set_property (GObject      *object,
       property_id < PROP_GLOBAL_BASE + N_TUNE_FIELDS) {
     int field = property_id - PROP_GLOBAL_BASE;
     if (field == TUNE_THICKNESS) {
-      self->global.thickness = g_value_get_int (value);
+      state->global.thickness = g_value_get_int (value);
     } else if (field == TUNE_RELEASE_MODE) {
-      self->global.release_mode = CLAMP (g_value_get_int (value), 0, 3);
+      state->global.release_mode = CLAMP (g_value_get_int (value), 0, 3);
     } else if (field == TUNE_SHAPE) {
-      self->global.shape = CLAMP (g_value_get_int (value), 0, 3);
+      state->global.shape = CLAMP (g_value_get_int (value), 0, 3);
     } else if (field == TUNE_ENV_CURVE) {
-      self->global.env_curve = CLAMP (g_value_get_int (value), 1, 3);
+      state->global.env_curve = CLAMP (g_value_get_int (value), 1, 3);
     } else if (field == TUNE_GAP) {
-      self->global.gap = CLAMP (g_value_get_int (value), 0, 1);
+      state->global.gap = CLAMP (g_value_get_int (value), 0, 1);
     } else if (field == TUNE_THK_RELEASE_MODE) {
-      self->global.thk_release_mode = CLAMP (g_value_get_int (value), 0, 4);
+      state->global.thk_release_mode = CLAMP (g_value_get_int (value), 0, 4);
     } else if (field == TUNE_THK_CURVE) {
-      self->global.thk_curve = CLAMP (g_value_get_int (value), 1, 3);
+      state->global.thk_curve = CLAMP (g_value_get_int (value), 1, 3);
     } else if (field == TUNE_SPEED) {
-      self->global.speed = g_value_get_double (value);
+      state->global.speed = g_value_get_double (value);
       /* Update overscroll / burst animation durations */
-      if (self->overscroll_anim)
+      if (state->overscroll_anim)
         adw_timed_animation_set_duration (
-          ADW_TIMED_ANIMATION (self->overscroll_anim),
-          (guint)(BASE_OVERSCROLL_MS / self->global.speed));
+          ADW_TIMED_ANIMATION (state->overscroll_anim),
+          (guint)(BASE_OVERSCROLL_MS / state->global.speed));
       for (int i = 0; i < MAX_BURSTS; i++) {
-        if (self->burst_anim[i])
+        if (state->burst_anim[i])
           adw_timed_animation_set_duration (
-            ADW_TIMED_ANIMATION (self->burst_anim[i]),
-            (guint)(800.0 / self->global.speed));
+            ADW_TIMED_ANIMATION (state->burst_anim[i]),
+            (guint)(800.0 / state->global.speed));
       }
     } else {
-      set_tunable_double (&self->global, field, g_value_get_double (value));
+      set_tunable_double (&state->global, field, g_value_get_double (value));
     }
-    if (self->process_progress >= 0.0 || self->overscroll_progress >= 0.0 ||
-        firework_active (self) || self->ambient_active)
-      gtk_widget_queue_draw (GTK_WIDGET (self));
+    if (field == TUNE_THICKNESS)
+      kgx_edge_queue_resize_views (state);
+    if (kgx_edge_has_visible_content (state))
+      kgx_edge_mark_dirty (state);
     return;
   }
 
   switch (property_id) {
     case PROP_OVERSCROLL_ENABLED:
-      self->overscroll_enabled = g_value_get_boolean (value);
-      gtk_widget_queue_draw (GTK_WIDGET (self));
+      state->overscroll_enabled = g_value_get_boolean (value);
+      kgx_edge_mark_dirty (state);
       break;
     case PROP_OVERSCROLL_COLOR:
-      g_free (self->overscroll_color);
-      self->overscroll_color = g_value_dup_string (value);
-      self->overscroll_rgba_valid = FALSE;
-      gtk_widget_queue_draw (GTK_WIDGET (self));
+      g_free (state->overscroll_color);
+      state->overscroll_color = g_value_dup_string (value);
+      state->overscroll_rgba_valid = FALSE;
+      kgx_edge_mark_dirty (state);
       break;
     case PROP_OVERSCROLL_STYLE:
-      self->overscroll_style = g_value_get_int (value);
+      state->overscroll_style = g_value_get_int (value);
       break;
     case PROP_OVERSCROLL_REVERSE:
-      self->overscroll_reverse = g_value_get_int (value);
+      state->overscroll_reverse = g_value_get_int (value);
       break;
     case PROP_BURST_SPREAD:
-      self->burst_spread = g_value_get_double (value);
+      state->burst_spread = g_value_get_double (value);
       break;
     case PROP_BURST_COUNT:
-      self->burst_count = CLAMP (g_value_get_int (value), 1, MAX_BURSTS);
+      state->burst_count = CLAMP (g_value_get_int (value), 1, MAX_BURSTS);
       break;
     case PROP_AMBIENT_ENABLED:
       {
-        gboolean was = self->ambient_enabled;
-        self->ambient_enabled = g_value_get_boolean (value);
+        gboolean was = state->ambient_enabled;
+        state->ambient_enabled = g_value_get_boolean (value);
         /* Restart or stop ambient if settings page is currently open. */
-        if (self->ambient_active && was != self->ambient_enabled) {
-          self->ambient_active = FALSE;
-          kgx_edge_set_ambient (self, TRUE);
+        if (state->ambient_active && was != state->ambient_enabled) {
+          state->ambient_active = FALSE;
+          kgx_edge_set_ambient (state, TRUE);
         }
       }
       break;
+    case PROP_PARTICLE_THROTTLE_ENABLED:
+      state->particle_throttle_enabled = g_value_get_boolean (value);
+      kgx_edge_reset_governor (state);
+      if (!state->particle_throttle_enabled)
+        kgx_edge_stop_redraw_tick (state);
+      if (kgx_edge_has_visible_content (state))
+        kgx_edge_mark_dirty (state);
+      break;
+    case PROP_PARTICLE_HZ:
+      state->particle_hz = CLAMP (g_value_get_int (value), 10, 60);
+      kgx_edge_reset_governor (state);
+      if (kgx_edge_has_visible_content (state))
+        kgx_edge_mark_dirty (state);
+      break;
     case PROP_AMBIENT_BURST_COUNT:
-      self->ambient_burst_count = CLAMP (g_value_get_int (value), 1, MAX_BURSTS);
+      state->ambient_burst_count = CLAMP (g_value_get_int (value), 1, MAX_BURSTS);
       break;
     case PROP_AMBIENT_BURST_SPREAD:
-      self->ambient_burst_spread = g_value_get_double (value);
+      state->ambient_burst_spread = g_value_get_double (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -1252,6 +1751,18 @@ kgx_edge_get_property (GObject    *object,
                        GParamSpec *pspec)
 {
   KgxEdge *self = KGX_EDGE (object);
+  KgxEdge *state = kgx_edge_get_root (self);
+
+  switch (property_id) {
+    case PROP_MASTER:
+      g_value_set_object (value, self->master);
+      return;
+    case PROP_SIDE:
+      g_value_set_enum (value, self->side);
+      return;
+    default:
+      break;
+  }
 
   /* Handle per-preset tunables */
   if (property_id >= PROP_PRESET_BASE &&
@@ -1260,17 +1771,17 @@ kgx_edge_get_property (GObject    *object,
     int pi    = idx / N_TUNE_FIELDS;
     int field = idx % N_TUNE_FIELDS;
     if (field == TUNE_THICKNESS)
-      g_value_set_int (value, self->preset[pi].thickness);
+      g_value_set_int (value, state->preset[pi].thickness);
     else if (field == TUNE_RELEASE_MODE)
-      g_value_set_int (value, self->preset[pi].release_mode);
+      g_value_set_int (value, state->preset[pi].release_mode);
     else if (field == TUNE_SHAPE)
-      g_value_set_int (value, self->preset[pi].shape);
+      g_value_set_int (value, state->preset[pi].shape);
     else if (field == TUNE_ENV_CURVE)
-      g_value_set_int (value, self->preset[pi].env_curve);
+      g_value_set_int (value, state->preset[pi].env_curve);
     else if (field == TUNE_THK_CURVE)
-      g_value_set_int (value, self->preset[pi].thk_curve);
+      g_value_set_int (value, state->preset[pi].thk_curve);
     else
-      g_value_set_double (value, get_tunable_double (&self->preset[pi], field));
+      g_value_set_double (value, get_tunable_double (&state->preset[pi], field));
     return;
   }
 
@@ -1279,47 +1790,53 @@ kgx_edge_get_property (GObject    *object,
       property_id < PROP_GLOBAL_BASE + N_TUNE_FIELDS) {
     int field = property_id - PROP_GLOBAL_BASE;
     if (field == TUNE_THICKNESS)
-      g_value_set_int (value, self->global.thickness);
+      g_value_set_int (value, state->global.thickness);
     else if (field == TUNE_RELEASE_MODE)
-      g_value_set_int (value, self->global.release_mode);
+      g_value_set_int (value, state->global.release_mode);
     else if (field == TUNE_SHAPE)
-      g_value_set_int (value, self->global.shape);
+      g_value_set_int (value, state->global.shape);
     else if (field == TUNE_ENV_CURVE)
-      g_value_set_int (value, self->global.env_curve);
+      g_value_set_int (value, state->global.env_curve);
     else if (field == TUNE_THK_CURVE)
-      g_value_set_int (value, self->global.thk_curve);
+      g_value_set_int (value, state->global.thk_curve);
     else
-      g_value_set_double (value, get_tunable_double (&self->global, field));
+      g_value_set_double (value, get_tunable_double (&state->global, field));
     return;
   }
 
   switch (property_id) {
     case PROP_OVERSCROLL_ENABLED:
-      g_value_set_boolean (value, self->overscroll_enabled);
+      g_value_set_boolean (value, state->overscroll_enabled);
       break;
     case PROP_OVERSCROLL_COLOR:
-      g_value_set_string (value, self->overscroll_color ? self->overscroll_color : "");
+      g_value_set_string (value, state->overscroll_color ? state->overscroll_color : "");
       break;
     case PROP_OVERSCROLL_STYLE:
-      g_value_set_int (value, self->overscroll_style);
+      g_value_set_int (value, state->overscroll_style);
       break;
     case PROP_OVERSCROLL_REVERSE:
-      g_value_set_int (value, self->overscroll_reverse);
+      g_value_set_int (value, state->overscroll_reverse);
       break;
     case PROP_BURST_SPREAD:
-      g_value_set_double (value, self->burst_spread);
+      g_value_set_double (value, state->burst_spread);
       break;
     case PROP_BURST_COUNT:
-      g_value_set_int (value, self->burst_count);
+      g_value_set_int (value, state->burst_count);
       break;
     case PROP_AMBIENT_ENABLED:
-      g_value_set_boolean (value, self->ambient_enabled);
+      g_value_set_boolean (value, state->ambient_enabled);
+      break;
+    case PROP_PARTICLE_THROTTLE_ENABLED:
+      g_value_set_boolean (value, state->particle_throttle_enabled);
+      break;
+    case PROP_PARTICLE_HZ:
+      g_value_set_int (value, state->particle_hz);
       break;
     case PROP_AMBIENT_BURST_COUNT:
-      g_value_set_int (value, self->ambient_burst_count);
+      g_value_set_int (value, state->ambient_burst_count);
       break;
     case PROP_AMBIENT_BURST_SPREAD:
-      g_value_set_double (value, self->ambient_burst_spread);
+      g_value_set_double (value, state->ambient_burst_spread);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -1335,6 +1852,7 @@ kgx_edge_dispose (GObject *object)
 {
   KgxEdge *self = KGX_EDGE (object);
 
+  kgx_edge_stop_redraw_tick (self);
   g_clear_object (&self->overscroll_anim);
   self->process_preset = KGX_PARTICLE_NONE;
   self->process_progress = -1.0;
@@ -1346,6 +1864,7 @@ kgx_edge_dispose (GObject *object)
     g_clear_object (&self->burst_anim[i]);
   for (int i = 0; i < MAX_BURSTS; i++)
     g_clear_object (&self->ambient_anim[i]);
+  g_clear_object (&self->master);
   g_clear_pointer (&self->overscroll_color, g_free);
   g_clear_pointer (&self->unit_triangle, gsk_path_unref);
   g_clear_pointer (&self->unit_diamond, gsk_path_unref);
@@ -1389,6 +1908,18 @@ kgx_edge_class_init (KgxEdgeClass *klass)
   widget_class->snapshot = kgx_edge_snapshot;
   widget_class->measure  = kgx_edge_measure;
   widget_class->map      = kgx_edge_map;
+  widget_class->unmap    = kgx_edge_unmap;
+
+  edge_pspecs[PROP_MASTER] =
+    g_param_spec_object ("master", NULL, NULL,
+                         KGX_TYPE_EDGE,
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  edge_pspecs[PROP_SIDE] =
+    g_param_spec_enum ("side", NULL, NULL,
+                       GTK_TYPE_POSITION_TYPE,
+                       GTK_POS_TOP,
+                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   edge_pspecs[PROP_OVERSCROLL_ENABLED] =
     g_param_spec_boolean ("overscroll-enabled", NULL, NULL, TRUE,
@@ -1418,8 +1949,13 @@ kgx_edge_class_init (KgxEdgeClass *klass)
     g_param_spec_boolean ("ambient-enabled", NULL, NULL, TRUE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
+  edge_pspecs[PROP_PARTICLE_THROTTLE_ENABLED] =
+    g_param_spec_boolean ("particle-throttle-enabled", NULL, NULL, TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
-
+  edge_pspecs[PROP_PARTICLE_HZ] =
+    g_param_spec_int ("particle-hz", NULL, NULL, 10, 60, 30,
+                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
 
   edge_pspecs[PROP_AMBIENT_BURST_COUNT] =
@@ -1535,14 +2071,18 @@ kgx_edge_init (KgxEdge *self)
   /* Defaults */
   self->overscroll_enabled  = TRUE;
   self->overscroll_color    = g_strdup ("");
+  self->side                = GTK_POS_TOP;
   self->burst_spread        = 3.1;
   self->burst_count         = 8;
   self->ambient_enabled     = TRUE;
+  self->particle_throttle_enabled = TRUE;
+  self->particle_hz         = 30;
   self->ambient_burst_count = 8;
   self->ambient_burst_spread = 3.1;
   self->overscroll_progress = -1.0;
   self->process_progress    = -1.0;
   self->process_preset      = KGX_PARTICLE_NONE;
+  kgx_edge_reset_governor (self);
 
   /* Global tunables (used for overscroll fallback) */
   self->global = (KgxParticleTunables) {
@@ -1658,6 +2198,8 @@ kgx_edge_fire_overscroll (KgxEdge         *self,
 {
   g_return_if_fail (KGX_IS_EDGE (self));
 
+  self = kgx_edge_get_root (self);
+
   if (!self->overscroll_enabled)
     return;
 
@@ -1667,8 +2209,10 @@ kgx_edge_fire_overscroll (KgxEdge         *self,
   if (self->overscroll_reverse == 2)
     self->overscroll_reverse_toggle = !self->overscroll_reverse_toggle;
 
+  self->overscroll_progress = 0.0;
   adw_animation_reset (self->overscroll_anim);
   adw_animation_play (self->overscroll_anim);
+  kgx_edge_mark_dirty (self);
 }
 
 
@@ -1677,6 +2221,8 @@ kgx_edge_set_ambient (KgxEdge  *self,
                       gboolean  ambient)
 {
   g_return_if_fail (KGX_IS_EDGE (self));
+
+  self = kgx_edge_get_root (self);
 
   if (self->ambient_active == ambient)
     return;
@@ -1809,13 +2355,15 @@ process_particle_value_cb (double value, KgxEdge *self)
   }
 
   self->process_progress = value;
-  gtk_widget_queue_draw (GTK_WIDGET (self));
+  kgx_edge_mark_dirty (self);
 }
 
 
 static void
 process_particle_done_cb (KgxEdge *self)
 {
+  int old_extent = kgx_edge_get_strip_extent (self);
+
   /* If a preset change is pending, apply it now that the current
    * animation has finished gracefully.  Don't set progress to -1
    * here — that creates a one-frame gap where no particle is drawn.
@@ -1861,6 +2409,8 @@ process_particle_done_cb (KgxEdge *self)
 
   self->process_progress = -1.0;
   self->process_start_us = 0;
+  kgx_edge_queue_resize_views_if_needed (self, old_extent);
+  kgx_edge_mark_dirty (self);
 }
 
 
@@ -1874,7 +2424,12 @@ kgx_edge_set_process_particle (KgxEdge          *self,
                                int                speed_override,
                                int                thk_override)
 {
+  int old_extent;
+
   g_return_if_fail (KGX_IS_EDGE (self));
+
+  self = kgx_edge_get_root (self);
+  old_extent = kgx_edge_get_strip_extent (self);
 
   /* If an animation is currently playing and the preset is changing,
    * queue the change as pending so the current cycle finishes gracefully.
@@ -1938,7 +2493,8 @@ kgx_edge_set_process_particle (KgxEdge          *self,
       if (self->burst_anim[i])
         adw_animation_reset (self->burst_anim[i]);
     }
-    gtk_widget_queue_draw (GTK_WIDGET (self));
+    kgx_edge_queue_resize_views_if_needed (self, old_extent);
+    kgx_edge_mark_dirty (self);
     return;
   }
 
@@ -1950,6 +2506,7 @@ kgx_edge_set_process_particle (KgxEdge          *self,
       burst_fire (&self->burst_data[0]);
       firework_schedule (self);
     }
+    kgx_edge_queue_resize_views_if_needed (self, old_extent);
     return;
   }
 
@@ -2011,4 +2568,6 @@ kgx_edge_set_process_particle (KgxEdge          *self,
                           preset == KGX_PARTICLE_PING_PONG);
   adw_animation_reset (self->process_anim);
   adw_animation_play (self->process_anim);
+  kgx_edge_queue_resize_views_if_needed (self, old_extent);
+  kgx_edge_mark_dirty (self);
 }

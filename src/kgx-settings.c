@@ -65,6 +65,8 @@ struct _KgxSettings {
   int                   edge_overscroll_style;
   int                   edge_overscroll_reverse;
   gboolean              edge_settings_animation;
+  gboolean              edge_particle_throttle;
+  int                   edge_particle_hz;
   int                   edge_burst_count_ambient;
   double                edge_burst_spread_ambient;
   KgxParticleTunables   edge_global;
@@ -111,6 +113,8 @@ enum {
   PROP_EDGE_OVERSCROLL_STYLE,
   PROP_EDGE_OVERSCROLL_REVERSE,
   PROP_EDGE_SETTINGS_ANIMATION,
+  PROP_EDGE_PARTICLE_THROTTLE,
+  PROP_EDGE_PARTICLE_HZ,
   PROP_EDGE_BURST_COUNT_AMBIENT,
   PROP_EDGE_BURST_SPREAD_AMBIENT,
   /* Indexed tunables: global (N_TUNE_FIELDS values) */
@@ -441,6 +445,18 @@ kgx_settings_set_property (GObject      *object,
     case PROP_EDGE_SETTINGS_ANIMATION:
       kgx_set_boolean_prop (object, pspec, &self->edge_settings_animation, value);
       break;
+    case PROP_EDGE_PARTICLE_THROTTLE:
+      kgx_set_boolean_prop (object, pspec, &self->edge_particle_throttle, value);
+      break;
+    case PROP_EDGE_PARTICLE_HZ:
+      {
+        int new_value = CLAMP (g_value_get_int (value), 10, 60);
+        if (new_value != self->edge_particle_hz) {
+          self->edge_particle_hz = new_value;
+          g_object_notify_by_pspec (object, pspec);
+        }
+      }
+      break;
     case PROP_EDGE_BURST_COUNT_AMBIENT:
       {
         int new_value = CLAMP (g_value_get_int (value), 1, 8);
@@ -593,6 +609,12 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_EDGE_SETTINGS_ANIMATION:
       g_value_set_boolean (value, self->edge_settings_animation);
+      break;
+    case PROP_EDGE_PARTICLE_THROTTLE:
+      g_value_set_boolean (value, self->edge_particle_throttle);
+      break;
+    case PROP_EDGE_PARTICLE_HZ:
+      g_value_set_int (value, self->edge_particle_hz);
       break;
     case PROP_EDGE_BURST_COUNT_AMBIENT:
       g_value_set_int (value, self->edge_burst_count_ambient);
@@ -784,8 +806,15 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                           TRUE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
+  pspecs[PROP_EDGE_PARTICLE_THROTTLE] =
+    g_param_spec_boolean ("edge-particle-throttle", NULL, NULL,
+                          TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
-
+  pspecs[PROP_EDGE_PARTICLE_HZ] =
+    g_param_spec_int ("edge-particle-hz", NULL, NULL,
+                      10, 60, 30,
+                      G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
 
   pspecs[PROP_EDGE_BURST_COUNT_AMBIENT] =
@@ -1091,6 +1120,12 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "edge-settings-animation",
                    self, "edge-settings-animation",
                    G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-particle-throttle",
+                   self, "edge-particle-throttle",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "edge-particle-hz",
+                   self, "edge-particle-hz",
+                   G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "edge-burst-count-ambient",
                    self, "edge-burst-count-ambient",
                    G_SETTINGS_BIND_DEFAULT);
@@ -1389,5 +1424,3 @@ kgx_settings_lookup_process_color (KgxSettings *self,
 
   return NULL;
 }
-
-

@@ -67,6 +67,13 @@
     <key name="edge-settings-animation" type="b">
       <default>true</default>
     </key>
+    <key name="edge-particle-throttle" type="b">
+      <default>true</default>
+    </key>
+    <key name="edge-particle-hz" type="i">
+      <range min="10" max="60"/>
+      <default>30</default>
+    </key>
     <key name="edge-settings-color" type="s">
       <default>''</default>
     </key>

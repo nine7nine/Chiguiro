@@ -121,6 +121,9 @@ struct _KgxSettingsPage {
   GtkWidget            *overscroll_preset_btn;
   GtkWidget            *overscroll_reverse_btn;
   GtkWidget            *ambient_switch;
+  GtkWidget            *particle_throttle_switch;
+  GtkWidget            *particle_hz_row;
+  GtkWidget            *particle_hz;
   GtkWidget            *tunables_grid;
   GtkWidget            *tune_widgets[N_PRESET_ROWS][N_TUNE_COLS];
   GtkWidget            *app_glass_grid;
@@ -436,6 +439,28 @@ bool_to_int (GBinding     *binding,
              gpointer      user_data)
 {
   g_value_set_int (to, g_value_get_boolean (from) ? 1 : 0);
+  return TRUE;
+}
+
+
+static gboolean
+int_to_double (GBinding     *binding,
+               const GValue *from_value,
+               GValue       *to_value,
+               gpointer      user_data)
+{
+  g_value_set_double (to_value, g_value_get_int (from_value));
+  return TRUE;
+}
+
+
+static gboolean
+double_to_int (GBinding     *binding,
+               const GValue *from_value,
+               GValue       *to_value,
+               gpointer      user_data)
+{
+  g_value_set_int (to_value, (int) g_value_get_double (from_value));
   return TRUE;
 }
 
@@ -1147,6 +1172,9 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, ambient_switch);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particle_throttle_switch);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particle_hz_row);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particle_hz);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, tunables_grid);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_grid);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
@@ -1646,6 +1674,13 @@ kgx_settings_page_init (KgxSettingsPage *self)
   g_binding_group_bind (self->settings_binds, "edge-settings-animation",
                         self->ambient_switch, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "edge-particle-throttle",
+                        self->particle_throttle_switch, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "edge-particle-hz",
+                             self->particle_hz, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             int_to_double, double_to_int, NULL, NULL);
 
   bind_tunables (self);
 }
