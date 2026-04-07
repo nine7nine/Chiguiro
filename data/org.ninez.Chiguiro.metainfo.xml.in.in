@@ -27,6 +27,17 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.0" date="2026-04-07" type="stable">
+      <description>
+        <p>Chigüiro 1.0 brings the current glass and particle work together as a cohesive release.</p>
+        <ul>
+          <li>Edge particle rendering now uses strip-based drawing with adaptive redraw throttling and smoother frame pacing.</li>
+          <li>Process glass detection, watcher polling, and tab fallback titles are lighter and more responsive under tab churn.</li>
+          <li>The Adwaita tab bar has been replaced with a custom Chigüiro tab strip tuned for fast tab changes and process-chain titles.</li>
+          <li>Edge particle code is now split into focused subsystems for rendering, bursts, process lifecycle, and shared particle helpers.</li>
+        </ul>
+      </description>
+    </release>
     <release version="50.0" date="2026-03-16" type="stable">
       <description>
         <p>Updated Translations:</p>
