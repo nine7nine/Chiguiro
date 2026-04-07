@@ -26,6 +26,15 @@
 #include "kgx-watcher.h"
 
 
+#define WATCHER_FG_ACTIVE_MS   500
+#define WATCHER_FG_STEADY_MS  1000
+#define WATCHER_BG_ACTIVE_MS  2000
+#define WATCHER_BG_STEADY_MS  5000
+#define WATCHER_BG_IDLE_MS   10000
+#define WATCHER_STEADY_POLLS     4
+#define WATCHER_IDLE_POLLS      12
+
+
 /**
  * KgxWatcher:
  * @watching: (element-type GLib.Pid ProcessWatch) the shells running in windows
@@ -43,6 +52,7 @@ struct _KgxWatcher {
   GTree                    *children;
 
   guint                     timeout;
+  guint                     stable_polls;
 };
 
 
@@ -92,6 +102,7 @@ struct SessionScan {
   KgxWatcher *self;
   GHashTable *live_pids;
   GPtrArray  *dead_shells;
+  guint       added_children;
 };
 
 
@@ -103,6 +114,7 @@ scan_session (gpointer key,
   struct SessionScan *data = user_data;
   ProcessWatch *shell = val;
   GPid shell_pid = GPOINTER_TO_INT (key);
+  GPid session_id = 0;
   g_autofree GPid *pids = NULL;
   size_t n_pids;
 
@@ -112,7 +124,14 @@ scan_session (gpointer key,
     return FALSE;
   }
 
-  if (kgx_pids_get_session_pids (shell_pid, &pids, &n_pids) != KGX_PIDS_OK)
+  if (G_UNLIKELY (shell->process == NULL))
+    return FALSE;
+
+  session_id = kgx_process_get_session (shell->process);
+  if (session_id <= 0)
+    return FALSE;
+
+  if (kgx_pids_get_session_pids (session_id, &pids, &n_pids) != KGX_PIDS_OK)
     return FALSE;
 
   for (size_t i = 0; i < n_pids; i++) {
@@ -140,6 +159,7 @@ scan_session (gpointer key,
                      child);
 
       kgx_train_push_child (shell->train, process);
+      data->added_children++;
     }
   }
 
@@ -178,20 +198,54 @@ remove_dead (gpointer pid,
 static gboolean watch (gpointer data);
 
 static void
-ensure_timeout (KgxWatcher *self)
+schedule_timeout (KgxWatcher *self,
+                  guint       interval_ms)
 {
-  if (self->timeout != 0)
-    return;
-
   if (g_tree_nnodes (self->watching) == 0)
     return;
 
+  g_clear_handle_id (&self->timeout, g_source_remove);
+
   self->timeout = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE,
-                                      self->in_background ? 2000 : 500,
+                                      interval_ms,
                                       watch,
                                       g_object_ref (self),
                                       g_object_unref);
   g_source_set_name_by_id (self->timeout, "[kgx] watcher");
+}
+
+
+static guint
+get_target_interval (KgxWatcher *self)
+{
+  if (!self->in_background) {
+    if (g_tree_nnodes (self->children) > 0)
+      return WATCHER_FG_ACTIVE_MS;
+
+    return self->stable_polls >= WATCHER_STEADY_POLLS
+             ? WATCHER_FG_STEADY_MS
+             : WATCHER_FG_ACTIVE_MS;
+  }
+
+  if (self->stable_polls < WATCHER_STEADY_POLLS)
+    return WATCHER_BG_ACTIVE_MS;
+
+  if (g_tree_nnodes (self->children) > 0 || self->stable_polls < WATCHER_IDLE_POLLS)
+    return WATCHER_BG_STEADY_MS;
+
+  return WATCHER_BG_IDLE_MS;
+}
+
+
+static inline void
+note_watch_activity (KgxWatcher *self,
+                     gboolean    changed)
+{
+  if (changed) {
+    self->stable_polls = 0;
+  } else if (self->stable_polls < G_MAXUINT) {
+    self->stable_polls++;
+  }
 }
 
 
@@ -202,9 +256,11 @@ watch (gpointer data)
   g_autoptr (GHashTable) live_pids = NULL;
   struct SessionScan scan;
   struct RemoveDead dead;
+  gboolean changed = FALSE;
+
+  self->timeout = 0;
 
   if (g_tree_nnodes (self->watching) == 0) {
-    self->timeout = 0;
     return G_SOURCE_REMOVE;
   }
 
@@ -213,11 +269,13 @@ watch (gpointer data)
   scan.self = self;
   scan.live_pids = live_pids;
   scan.dead_shells = g_ptr_array_new_full (1, NULL);
+  scan.added_children = 0;
 
   /* Query each shell's session for its child processes */
   g_tree_foreach (self->watching, scan_session, &scan);
 
   /* Remove shells whose trains have died */
+  changed = scan.dead_shells->len > 0 || scan.added_children > 0;
   for (guint i = 0; i < scan.dead_shells->len; i++)
     g_tree_remove (self->watching, g_ptr_array_index (scan.dead_shells, i));
   g_ptr_array_unref (scan.dead_shells);
@@ -229,18 +287,20 @@ watch (gpointer data)
   g_tree_foreach (self->children, remove_dead, &dead);
 
   /* Can't modify self->children whilst walking it */
+  changed = changed || dead.dead->len > 0;
   for (guint i = 0; i < dead.dead->len; i++)
     g_tree_remove (self->children, g_ptr_array_index (dead.dead, i));
 
   g_ptr_array_unref (dead.dead);
 
   /* Stop polling if all shells are gone */
-  if (g_tree_nnodes (self->watching) == 0) {
-    self->timeout = 0;
+  if (g_tree_nnodes (self->watching) == 0)
     return G_SOURCE_REMOVE;
-  }
 
-  return G_SOURCE_CONTINUE;
+  note_watch_activity (self, changed);
+  schedule_timeout (self, get_target_interval (self));
+
+  return G_SOURCE_REMOVE;
 }
 
 
@@ -255,9 +315,9 @@ update_watcher (KgxWatcher *self, gboolean in_background)
 
   g_debug ("watcher: in_background? %s", in_background ? "yes" : "no");
 
-  /* Reschedule with new interval if currently polling */
-  g_clear_handle_id (&self->timeout, g_source_remove);
-  ensure_timeout (self);
+  /* Reschedule with the appropriate cadence for the new state. */
+  if (g_tree_nnodes (self->watching) > 0)
+    schedule_timeout (self, get_target_interval (self));
 
   return TRUE;
 }
@@ -355,11 +415,17 @@ kgx_watcher_watch (KgxWatcher *self,
 
   watch = process_watch_alloc ();
   watch->process = kgx_process_new (pid);
+  if (G_UNLIKELY (watch->process == NULL)) {
+    process_watch_free (watch);
+    return;
+  }
+
   g_set_weak_pointer (&watch->train, train);
 
   g_debug ("watcher: tracking %i", pid);
 
   g_tree_insert (self->watching, GINT_TO_POINTER (pid), watch);
 
-  ensure_timeout (self);
+  self->stable_polls = 0;
+  schedule_timeout (self, get_target_interval (self));
 }

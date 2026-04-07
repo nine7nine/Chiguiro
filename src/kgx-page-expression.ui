@@ -7,14 +7,11 @@
         <lookup name="tab-title" type="KgxTab">
           <lookup name="child">AdwTabPage</lookup>
         </lookup>
-        <closure type='gchararray' function='fallback_title'>
+        <lookup name="fallback-title" type="KgxTrain">
           <lookup name="train" type="KgxTab">
             <lookup name="child">AdwTabPage</lookup>
           </lookup>
-          <lookup name="activity-frame" type="KgxTab">
-            <lookup name="child">AdwTabPage</lookup>
-          </lookup>
-        </closure>
+        </lookup>
       </closure>
     </binding>
     <binding name="tooltip">

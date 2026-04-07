@@ -367,11 +367,6 @@ kgx_terminal_set_property (GObject      *object,
                                  G_CALLBACK (kgx_terminal_apply_palette),
                                  self,
                                  G_CONNECT_SWAPPED);
-        g_signal_connect_object (self->settings,
-                                 "notify::glass-opacity",
-                                 G_CALLBACK (kgx_terminal_apply_palette),
-                                 self,
-                                 G_CONNECT_SWAPPED);
         g_object_notify_by_pspec (object, pspec);
       }
       break;

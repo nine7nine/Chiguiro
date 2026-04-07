@@ -1343,10 +1343,11 @@ kgx_edge_snapshot (GtkWidget   *widget,
     }
   }
 
-  /* Process-specific particle — suppressed when settings page is open,
-   * EXCEPT during the brief graceful falloff (pending_change in progress).
-   * Once the pending fires and stops the animation, suppression kicks in.
-   * Uses snapshotted tunables captured at animation start. */
+  /* Process-specific particle.
+   * Ambient/settings visuals are allowed to run alongside it so presets can
+   * be edited live; the dedicated ambient/settings toggle is what disables
+   * that path when desired. Uses snapshotted tunables captured at animation
+   * start. */
   if (root->process_progress >= 0.0 &&
       root->process_preset != KGX_PARTICLE_NONE) {
     const KgxParticleTunables *pt = &root->process_tune_snap;

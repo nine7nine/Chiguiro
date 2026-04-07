@@ -36,8 +36,8 @@
                         <signal name="create-tearoff-host" handler="create_tearoff_host"
                           swapped="no" />
                         <signal name="maybe-close-window" handler="maybe_close_window" swapped="yes" />
+                        <signal name="notify::active-page" handler="active_page_changed" swapped="yes" />
                         <signal name="notify::status" handler="status_changed" swapped="yes" />
-                        <signal name="notify::title" handler="status_changed" swapped="yes" />
                         <signal name="notify::ringing" handler="ringing_changed" swapped="yes" />
                       </object>
                     </property>

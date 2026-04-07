@@ -44,13 +44,16 @@
 struct _KgxProcess {
   GPid  pid;
   GPid  parent;
+  GPid  session;
   uid_t euid;
+  char *name;
   GStrv argv;
 };
 
 static void
 clear_process (KgxProcess *self)
 {
+  g_clear_pointer (&self->name, g_free);
   g_clear_pointer (&self->argv, g_strfreev);
 }
 
@@ -92,7 +95,8 @@ kgx_process_new (GPid pid)
 
   if (G_UNLIKELY (kgx_pids_get_pid_info (pid,
                                          &self->parent,
-                                         &self->euid) != KGX_PIDS_OK)) {
+                                         &self->euid,
+                                         &self->session) != KGX_PIDS_OK)) {
     return NULL;
   }
 
@@ -152,6 +156,33 @@ kgx_process_get_parent (KgxProcess *self)
   g_return_val_if_fail (self != NULL, 0);
 
   return self->parent;
+}
+
+
+inline GPid
+kgx_process_get_session (KgxProcess *self)
+{
+  g_return_val_if_fail (self != NULL, 0);
+
+  return self->session;
+}
+
+
+inline const char *
+kgx_process_get_name (KgxProcess *self)
+{
+  GStrv argv;
+
+  g_return_val_if_fail (self != NULL, NULL);
+
+  if (self->name != NULL)
+    return self->name;
+
+  argv = kgx_process_get_argv (self);
+  if (argv && argv[0] != NULL)
+    self->name = g_path_get_basename (argv[0]);
+
+  return self->name;
 }
 
 

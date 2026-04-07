@@ -74,6 +74,7 @@ struct _KgxSettings {
   int                   edge_burst_count;
   double                edge_burst_spread;
   GHashTable           *process_glass_colors;  /* string→string */
+  GHashTable           *process_glass_lookup;  /* expanded exact-name lookup */
 
   KgxLiveryManager     *livery_manager;
 
@@ -84,6 +85,50 @@ struct _KgxSettings {
 
 G_DEFINE_FINAL_TYPE_WITH_CODE (KgxSettings, kgx_settings, G_TYPE_OBJECT,
                                G_IMPLEMENT_INTERFACE (KGX_TYPE_TEMPLATED, NULL))
+
+
+static GHashTable *
+build_process_glass_lookup (GHashTable *source)
+{
+  GHashTableIter iter;
+  gpointer key, val;
+  GHashTable *lookup;
+
+  lookup = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+
+  if (source == NULL)
+    return lookup;
+
+  /* Preserve direct exact-match rules as the highest-priority entries. */
+  g_hash_table_iter_init (&iter, source);
+  while (g_hash_table_iter_next (&iter, &key, &val)) {
+    const char *name = key;
+
+    if (strchr (name, ',') == NULL)
+      g_hash_table_insert (lookup, g_strdup (name), g_strdup ((const char *) val));
+  }
+
+  /* Expand comma-separated aliases into the same exact-match table. */
+  g_hash_table_iter_init (&iter, source);
+  while (g_hash_table_iter_next (&iter, &key, &val)) {
+    const char *names = key;
+
+    if (strchr (names, ',') != NULL) {
+      g_auto (GStrv) parts = g_strsplit (names, ",", -1);
+
+      for (int i = 0; parts[i] != NULL; i++) {
+        g_strstrip (parts[i]);
+
+        if (parts[i][0] == '\0' || g_hash_table_contains (lookup, parts[i]))
+          continue;
+
+        g_hash_table_insert (lookup, g_strdup (parts[i]), g_strdup ((const char *) val));
+      }
+    }
+  }
+
+  return lookup;
+}
 
 
 enum {
@@ -237,6 +282,7 @@ kgx_settings_dispose (GObject *object)
   g_clear_pointer (&self->custom_font, pango_font_description_free);
   g_clear_pointer (&self->livery, kgx_livery_unref);
   g_clear_pointer (&self->process_glass_colors, g_hash_table_unref);
+  g_clear_pointer (&self->process_glass_lookup, g_hash_table_unref);
   g_clear_pointer (&self->glass_color, g_free);
   g_clear_pointer (&self->accent_color, g_free);
   g_clear_pointer (&self->edge_overscroll_color, g_free);
@@ -413,7 +459,9 @@ kgx_settings_set_property (GObject      *object,
       break;
     case PROP_PROCESS_GLASS_COLORS:
       g_clear_pointer (&self->process_glass_colors, g_hash_table_unref);
+      g_clear_pointer (&self->process_glass_lookup, g_hash_table_unref);
       self->process_glass_colors = g_value_dup_boxed (value);
+      self->process_glass_lookup = build_process_glass_lookup (self->process_glass_colors);
       g_object_notify_by_pspec (object, pspec);
       break;
     case PROP_EDGE_OVERSCROLL:
@@ -1396,31 +1444,20 @@ const char *
 kgx_settings_lookup_process_color (KgxSettings *self,
                                    const char  *process_name)
 {
-  GHashTableIter iter;
-  gpointer key, val;
-
   g_return_val_if_fail (KGX_IS_SETTINGS (self), NULL);
 
-  if (!self->process_glass_colors || !process_name)
+  if (!self->process_glass_lookup || !process_name)
     return NULL;
 
-  /* Try exact match first (fast path). */
-  val = g_hash_table_lookup (self->process_glass_colors, process_name);
-  if (val)
-    return val;
+  return g_hash_table_lookup (self->process_glass_lookup, process_name);
+}
 
-  /* Check comma-separated keys (e.g. "su, sudo" matches "su" or "sudo"). */
-  g_hash_table_iter_init (&iter, self->process_glass_colors);
-  while (g_hash_table_iter_next (&iter, &key, &val)) {
-    if (strchr ((const char *) key, ',')) {
-      g_auto (GStrv) parts = g_strsplit ((const char *) key, ",", -1);
-      for (int i = 0; parts[i]; i++) {
-        g_strstrip (parts[i]);
-        if (g_str_equal (parts[i], process_name))
-          return val;
-      }
-    }
-  }
 
-  return NULL;
+gboolean
+kgx_settings_has_process_colors (KgxSettings *self)
+{
+  g_return_val_if_fail (KGX_IS_SETTINGS (self), FALSE);
+
+  return self->process_glass_lookup != NULL &&
+         g_hash_table_size (self->process_glass_lookup) > 0;
 }

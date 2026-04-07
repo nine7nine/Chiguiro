@@ -61,8 +61,6 @@ struct _KgxTabPrivate {
 
   gboolean              dropping;
   int                   working;
-  guint                 activity_timer;
-  int                   activity_frame;
 
   KgxTerminal          *terminal;
   GSignalGroup         *terminal_signals;
@@ -112,7 +110,6 @@ enum {
   PROP_CANCELLABLE,
   PROP_INITIAL_TITLE,
   PROP_INITIAL_PATH,
-  PROP_ACTIVITY_FRAME,
   LAST_PROP
 };
 static GParamSpec *pspecs[LAST_PROP] = { NULL, };
@@ -215,7 +212,6 @@ kgx_tab_dispose (GObject *object)
   g_clear_object (&priv->path);
 
   g_clear_handle_id (&priv->ringing_timeout, g_source_remove);
-  g_clear_handle_id (&priv->activity_timer, g_source_remove);
 
   g_clear_pointer (&priv->initial_title, g_free);
   g_clear_object (&priv->initial_path);
@@ -316,9 +312,6 @@ kgx_tab_get_property (GObject    *object,
       break;
     case PROP_INITIAL_PATH:
       g_value_set_object (value, priv->initial_path);
-      break;
-    case PROP_ACTIVITY_FRAME:
-      g_value_set_int (value, priv->activity_frame);
       break;
     KGX_INVALID_PROP (object, property_id, pspec);
   }
@@ -710,11 +703,6 @@ kgx_tab_class_init (KgxTabClass *klass)
                          G_TYPE_FILE,
                          G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
-  pspecs[PROP_ACTIVITY_FRAME] =
-    g_param_spec_int ("activity-frame", NULL, NULL,
-                      0, 7, 0,
-                      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
-
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
 
   signals[SIZE_CHANGED] = g_signal_new ("size-changed",
@@ -857,38 +845,6 @@ pid_died (KgxTrain *train,
 }
 
 
-static gboolean
-activity_tick (gpointer user_data)
-{
-  KgxTab *self = KGX_TAB (user_data);
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
-
-  priv->activity_frame = (priv->activity_frame + 1) % 8;
-  g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_ACTIVITY_FRAME]);
-  g_object_notify (G_OBJECT (self), "train");
-
-  return G_SOURCE_CONTINUE;
-}
-
-
-static void
-on_child_added (KgxTrain   *train,
-                KgxProcess *child,
-                gpointer    user_data)
-{
-  KgxTab *self = KGX_TAB (user_data);
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
-
-  g_object_notify (G_OBJECT (self), "train");
-
-  if (priv->activity_timer == 0) {
-    priv->activity_frame = 0;
-    priv->activity_timer = g_timeout_add_full (G_PRIORITY_LOW, 1200,
-                                                activity_tick, self, NULL);
-  }
-}
-
-
 static void
 on_child_removed (KgxTrain   *train,
                   KgxProcess *child,
@@ -897,20 +853,12 @@ on_child_removed (KgxTrain   *train,
   KgxTab *self = KGX_TAB (user_data);
   KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
 
-  g_object_notify (G_OBJECT (self), "train");
-
-  /* Stop animation and clear stale VTE title when no children remain */
-  {
-    g_autoptr(GPtrArray) children = kgx_train_get_children (train);
-
-    if (!children || children->len == 0) {
-      g_clear_handle_id (&priv->activity_timer, g_source_remove);
-
-      /* VTE retains window-title from the exited child process.
-       * Clear tab-title so the fallback title (shell name) is used. */
-      g_clear_pointer (&priv->title, g_free);
-      g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_TAB_TITLE]);
-    }
+  /* Clear stale VTE title when no children remain so fallback title takes over. */
+  if (kgx_train_get_child_count (train) == 0) {
+    /* VTE retains window-title from the exited child process.
+     * Clear tab-title so the fallback title (shell name) is used. */
+    g_clear_pointer (&priv->title, g_free);
+    g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_TAB_TITLE]);
   }
 }
 
@@ -1012,9 +960,6 @@ kgx_tab_init (KgxTab *self)
 
   g_signal_group_connect_object (priv->train_signals,
                                  "pid-died", G_CALLBACK (pid_died),
-                                 self, G_CONNECT_DEFAULT);
-  g_signal_group_connect_object (priv->train_signals,
-                                 "child-added", G_CALLBACK (on_child_added),
                                  self, G_CONNECT_DEFAULT);
   g_signal_group_connect_object (priv->train_signals,
                                  "child-removed", G_CALLBACK (on_child_removed),

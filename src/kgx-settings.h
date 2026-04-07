@@ -81,5 +81,6 @@ void                  kgx_settings_set_livery                (KgxSettings       
                                                               KgxLivery             *livery);
 const char           *kgx_settings_lookup_process_color     (KgxSettings           *self,
                                                               const char            *process_name);
+gboolean              kgx_settings_has_process_colors       (KgxSettings           *self);
 
 G_END_DECLS

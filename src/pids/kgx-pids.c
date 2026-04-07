@@ -26,9 +26,10 @@
 KgxPidsResult
 kgx_pids_get_pid_info (GPid       pid,
                        GPid      *parent,
-                       uid_t     *euid)
+                       uid_t     *euid,
+                       GPid      *session)
 {
-  return kgx_gtop_get_pid_status (pid, parent, euid);
+  return kgx_gtop_get_pid_status (pid, parent, euid, session);
 }
 
 

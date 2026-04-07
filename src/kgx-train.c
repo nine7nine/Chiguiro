@@ -33,6 +33,7 @@ typedef struct _KgxTrainPrivate KgxTrainPrivate;
 struct _KgxTrainPrivate {
   char *uuid;
   char *tag;
+  char *fallback_title;
   GPid pid;
   KgxStatus status;
   char *last_child_name;
@@ -55,6 +56,7 @@ enum {
   PROP_0,
   PROP_UUID,
   PROP_TAG,
+  PROP_FALLBACK_TITLE,
   PROP_PID,
   PROP_STATUS,
   LAST_PROP
@@ -78,6 +80,7 @@ kgx_train_dispose (GObject *object)
 
   g_clear_pointer (&priv->uuid, g_free);
   g_clear_pointer (&priv->tag, g_free);
+  g_clear_pointer (&priv->fallback_title, g_free);
   g_clear_pointer (&priv->last_child_name, g_free);
 
   g_clear_pointer (&priv->root, g_hash_table_unref);
@@ -104,6 +107,9 @@ kgx_train_get_property (GObject    *object,
     case PROP_TAG:
       g_value_set_string (value, priv->tag);
       break;
+    case PROP_FALLBACK_TITLE:
+      g_value_set_string (value, priv->fallback_title);
+      break;
     case PROP_PID:
       g_value_set_int (value, priv->pid);
       break;
@@ -112,6 +118,97 @@ kgx_train_get_property (GObject    *object,
       break;
     KGX_INVALID_PROP (object, property_id, pspec);
   }
+}
+
+
+static gint
+compare_process_pid (gconstpointer a,
+                     gconstpointer b)
+{
+  GPid pa = kgx_process_get_pid (*(KgxProcess **) a);
+  GPid pb = kgx_process_get_pid (*(KgxProcess **) b);
+
+  return pa < pb ? -1 : pa > pb ? 1 : 0;
+}
+
+
+static char *
+build_fallback_title (KgxTrain *self)
+{
+  KgxTrainPrivate *priv = kgx_train_get_instance_private (self);
+  const char *shell_name = priv->tag;
+
+  if (g_hash_table_size (priv->children) > 0) {
+    g_autoptr (GPtrArray) children = g_ptr_array_new ();
+    GHashTableIter iter;
+    gpointer pid, process;
+
+    g_hash_table_iter_init (&iter, priv->children);
+    while (g_hash_table_iter_next (&iter, &pid, &process)) {
+      g_ptr_array_add (children, process);
+    }
+
+    if (children->len > 0) {
+      g_autoptr (GString) chain = g_string_new (NULL);
+      g_autoptr (GHashTable) seen = g_hash_table_new_full (g_str_hash,
+                                                           g_str_equal,
+                                                           g_free,
+                                                           NULL);
+
+      g_ptr_array_sort (children, compare_process_pid);
+
+      if (shell_name && shell_name[0] != '\0') {
+        g_string_append_printf (chain, ">%s", shell_name);
+        g_hash_table_add (seen, g_strdup (shell_name));
+      }
+
+      for (guint i = 0; i < children->len; i++) {
+        KgxProcess *child = g_ptr_array_index (children, i);
+        const char *name = kgx_process_get_name (child);
+
+        if (name && name[0] != '\0' &&
+            !g_hash_table_contains (seen, name)) {
+          g_hash_table_add (seen, g_strdup (name));
+          g_string_append_printf (chain, ">%s", name);
+        }
+      }
+
+      if (chain->len > 0) {
+        return g_string_free (g_steal_pointer (&chain), FALSE);
+      }
+    }
+  }
+
+  if (priv->last_child_name && priv->last_child_name[0] != '\0') {
+    if (shell_name && shell_name[0] != '\0') {
+      return g_strdup_printf ("%s: %s", shell_name, priv->last_child_name);
+    }
+
+    return g_strdup (priv->last_child_name);
+  }
+
+  if (shell_name && shell_name[0] != '\0') {
+    return g_strdup (shell_name);
+  }
+
+  return g_strdup ("Terminal");
+}
+
+
+static void
+update_fallback_title (KgxTrain *self)
+{
+  KgxTrainPrivate *priv = kgx_train_get_instance_private (self);
+  g_autofree char *title = build_fallback_title (self);
+
+  if (g_strcmp0 (priv->fallback_title, title) == 0) {
+    return;
+  }
+
+  g_free (priv->fallback_title);
+  priv->fallback_title = g_steal_pointer (&title);
+
+  g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_FALLBACK_TITLE]);
 }
 
 
@@ -126,6 +223,7 @@ kgx_train_set_property (GObject      *object,
   switch (property_id) {
     case PROP_TAG:
       if (g_set_str (&priv->tag, g_value_get_string (value))) {
+        update_fallback_title (KGX_TRAIN (object));
         g_object_notify_by_pspec (object, pspec);
       }
       break;
@@ -155,6 +253,11 @@ kgx_train_class_init (KgxTrainClass *klass)
     g_param_spec_string ("tag", NULL, NULL,
                          NULL,
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+
+  pspecs[PROP_FALLBACK_TITLE] =
+    g_param_spec_string ("fallback-title", NULL, NULL,
+                         "Terminal",
+                         G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
 
   /* We've assumed that GPid fits in GParamSpecInt */
   { G_STATIC_ASSERT (sizeof (GPid) == sizeof (int)); }
@@ -294,6 +397,7 @@ kgx_train_init (KgxTrain *self)
   KgxTrainPrivate *priv = kgx_train_get_instance_private (self);
 
   priv->uuid = g_uuid_string_random ();
+  priv->fallback_title = g_strdup ("Terminal");
 
   priv->root = g_hash_table_new (g_direct_hash, g_direct_equal);
   priv->remote = g_hash_table_new (g_direct_hash, g_direct_equal);
@@ -331,6 +435,19 @@ kgx_train_get_tag (KgxTrain *self)
 }
 
 
+const char *
+kgx_train_get_fallback_title (KgxTrain *self)
+{
+  KgxTrainPrivate *priv;
+
+  g_return_val_if_fail (KGX_IS_TRAIN (self), "Terminal");
+
+  priv = kgx_train_get_instance_private (self);
+
+  return priv->fallback_title;
+}
+
+
 GPid
 kgx_train_get_pid (KgxTrain *self)
 {
@@ -354,6 +471,19 @@ kgx_train_get_last_child_name (KgxTrain *self)
   priv = kgx_train_get_instance_private (self);
 
   return priv->last_child_name;
+}
+
+
+guint
+kgx_train_get_child_count (KgxTrain *self)
+{
+  KgxTrainPrivate *priv;
+
+  g_return_val_if_fail (KGX_IS_TRAIN (self), 0);
+
+  priv = kgx_train_get_instance_private (self);
+
+  return g_hash_table_size (priv->children);
 }
 
 
@@ -446,7 +576,7 @@ kgx_train_push_child (KgxTrain   *self,
   argv = kgx_process_get_argv (process);
 
   if (G_LIKELY (argv[0] != NULL)) {
-    g_autofree char *program = g_path_get_basename (argv[0]);
+    const char *program = kgx_process_get_name (process);
 
     /* Remember the last child process name for tab title fallback */
     g_free (priv->last_child_name);
@@ -481,6 +611,7 @@ kgx_train_push_child (KgxTrain   *self,
   }
 
   push_type (priv->children, pid, process, KGX_NONE);
+  update_fallback_title (self);
 
   g_signal_emit (self, signals[CHILD_ADDED], 0, process);
 }
@@ -533,6 +664,7 @@ kgx_train_pop_child (KgxTrain   *self,
   pop_type (priv->children, pid, KGX_NONE);
 
   set_status (self, new_status);
+  update_fallback_title (self);
 
   g_signal_emit (self, signals[CHILD_REMOVED], 0, process);
 }

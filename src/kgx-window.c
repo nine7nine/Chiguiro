@@ -67,7 +67,6 @@ struct _KgxWindowPrivate {
   GtkWidget            *settings_page;
   KgxEdge              *edge;
   char                 *process_glass_override;
-  guint                 process_check_timer;
   guint                 process_glass_idle;
   GtkCssProvider       *override_css;
   char                 *window_css_class;
@@ -98,6 +97,7 @@ struct _KgxWindowPrivate {
   int                   deferred_thk;
 
   GSignalGroup         *tab_signals;
+  GSignalGroup         *train_signals;
 
   GBindingGroup        *surface_binds;
 };
@@ -124,8 +124,12 @@ static GParamSpec *pspecs[LAST_PROP] = { NULL, };
 static void kgx_window_update_opaque_region (KgxWindow *self);
 static void kgx_window_update_glass_opacity (KgxWindow *self);
 static void glass_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
+static void process_glass_settings_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
 static gboolean update_process_glass (KgxWindow *self);
 static void schedule_process_glass_idle (KgxWindow *self);
+static gboolean sync_active_train_signals (KgxWindow *self,
+                                           KgxTab    *active);
+static void sync_active_page_state (KgxWindow *self);
 
 
 static void
@@ -146,11 +150,10 @@ kgx_window_dispose (GObject *object)
   if (priv->tab_signals) {
     g_signal_group_set_target (priv->tab_signals, NULL);
   }
-
-  if (priv->process_check_timer) {
-    g_source_remove (priv->process_check_timer);
-    priv->process_check_timer = 0;
+  if (priv->train_signals) {
+    g_signal_group_set_target (priv->train_signals, NULL);
   }
+
   g_clear_handle_id (&priv->process_glass_idle, g_source_remove);
 
   /* glass_css is a process-lifetime singleton — don't clear it */
@@ -173,6 +176,7 @@ kgx_window_dispose (GObject *object)
 
   /* tab_signals is created in init (not a template child) — safe to clear */
   g_clear_object (&priv->tab_signals);
+  g_clear_object (&priv->train_signals);
   g_clear_object (&priv->settings);
 
   /* Stop all edge animations before parent disposes the widget tree. */
@@ -211,6 +215,11 @@ kgx_window_set_property (GObject      *object,
         g_signal_connect_object (priv->settings,
                                  "notify::accent-color",
                                  G_CALLBACK (glass_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+        g_signal_connect_object (priv->settings,
+                                 "notify::process-glass-colors",
+                                 G_CALLBACK (process_glass_settings_changed),
                                  self,
                                  G_CONNECT_DEFAULT);
         kgx_window_update_glass_opacity (self);
@@ -675,6 +684,25 @@ static gboolean update_process_glass (KgxWindow *self);
 
 
 static void
+copy_opaque_rgba (GdkRGBA       *dest,
+                  const GdkRGBA *src)
+{
+  *dest = *src;
+  dest->alpha = 1.0f;
+}
+
+
+static gboolean
+same_opaque_rgb (const GdkRGBA *a,
+                 const GdkRGBA *b)
+{
+  return a->red == b->red &&
+         a->green == b->green &&
+         a->blue == b->blue;
+}
+
+
+static void
 apply_glass_color (KgxWindow     *self,
                     const GdkRGBA *color)
 {
@@ -804,14 +832,6 @@ start_glass_transition (KgxWindow     *self,
 }
 
 
-static gboolean
-process_check_tick (gpointer data)
-{
-  update_process_glass (KGX_WINDOW (data));
-  return G_SOURCE_CONTINUE;
-}
-
-
 static GdkRGBA
 get_default_glass_color (KgxWindow *self)
 {
@@ -830,6 +850,15 @@ get_default_glass_color (KgxWindow *self)
 }
 
 
+static void
+process_glass_settings_changed (GObject    *object,
+                                GParamSpec *pspec,
+                                KgxWindow  *self)
+{
+  schedule_process_glass_idle (self);
+}
+
+
 static gboolean
 update_process_glass (KgxWindow *self)
 {
@@ -842,21 +871,20 @@ update_process_glass (KgxWindow *self)
   g_object_get (priv->pages, "active-page", &active, NULL);
   g_object_get (self, "settings", &settings, NULL);
 
-  if (active && settings) {
+  if (active && settings && kgx_settings_has_process_colors (settings)) {
     g_autoptr (KgxTrain) train = NULL;
     g_object_get (active, "train", &train, NULL);
 
     if (train) {
-      g_autoptr (GPtrArray) children = kgx_train_get_children (train);
+      if (kgx_train_get_child_count (train) > 0) {
+        g_autoptr (GPtrArray) children = kgx_train_get_children (train);
 
-      if (children) {
         for (int i = children->len - 1; i >= 0 && !match; i--) {
           KgxProcess *proc = g_ptr_array_index (children, i);
-          GStrv argv = kgx_process_get_argv (proc);
-          if (argv && argv[0]) {
-            g_autofree char *name = g_path_get_basename (argv[0]);
+          const char *name = kgx_process_get_name (proc);
+
+          if (name && name[0] != '\0')
             match = kgx_settings_lookup_process_color (settings, name);
-          }
         }
       }
     }
@@ -963,10 +991,30 @@ static void
 tab_train_changed (GObject *object, GParamSpec *pspec, gpointer data)
 {
   KgxWindow *self = KGX_WINDOW (data);
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  g_autoptr (KgxTab) active = NULL;
 
-  /* Children changed on the active tab's train — re-check process glass.
-   * This catches name-based glass matches (e.g. pwsh, htop) that don't
-   * affect status flags and would otherwise only update on the timer. */
+  g_object_get (priv->pages, "active-page", &active, NULL);
+
+  /* Only react here when the active tab's train object actually changed,
+   * then retarget the direct train signal group. Child churn is handled
+   * by direct KgxTrain signals. */
+  if (active == KGX_TAB (object) &&
+      sync_active_train_signals (self, active))
+    schedule_process_glass_idle (self);
+}
+
+
+static void
+active_train_children_changed (KgxTrain   *train,
+                               KgxProcess *child,
+                               gpointer    data)
+{
+  KgxWindow *self = KGX_WINDOW (data);
+
+  /* Children changed on the active train — re-check process glass.
+   * This catches name-based glass matches (e.g. pwsh, htop) without
+   * routing the window through synthetic notify::train churn. */
   schedule_process_glass_idle (self);
 }
 
@@ -997,6 +1045,28 @@ schedule_process_glass_idle (KgxWindow *self)
 }
 
 
+static gboolean
+sync_active_train_signals (KgxWindow *self,
+                           KgxTab    *active)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  g_autoptr (KgxTrain) train = NULL;
+  g_autoptr (KgxTrain) current = NULL;
+
+  if (active)
+    g_object_get (active, "train", &train, NULL);
+
+  current = g_signal_group_dup_target (priv->train_signals);
+
+  if (current == train)
+    return FALSE;
+
+  g_signal_group_set_target (priv->train_signals, train);
+
+  return TRUE;
+}
+
+
 static void
 status_changed (GObject *object, GParamSpec *pspec, gpointer data)
 {
@@ -1023,29 +1093,49 @@ status_changed (GObject *object, GParamSpec *pspec, gpointer data)
   } else {
     gtk_widget_remove_css_class (GTK_WIDGET (self), KGX_WINDOW_STYLE_ROOT);
   }
+}
 
-  /* Track the active tab for child process changes. */
-  {
-    g_autoptr (KgxTab) active = NULL;
-    g_object_get (priv->pages, "active-page", &active, NULL);
-    g_signal_group_set_target (priv->tab_signals, active);
+static void
+sync_active_page_state (KgxWindow *self)
+{
+  KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
+  g_autoptr (KgxTab) active = NULL;
 
-    /* Immediately snap the new terminal's background to the current
-     * glass color so there's no flash between the tab switch (which
-     * makes the new terminal visible) and the glass transition start
-     * (which runs from an idle).  Without this, the new terminal shows
-     * its own stale bg_current for 1+ frames while the CSS chrome still
-     * shows the old glass color — a visible two-color flicker. */
-    if (priv->glass_has_current && active) {
-      g_autoptr (KgxTerminal) terminal = NULL;
-      g_object_get (active, "terminal", &terminal, NULL);
-      if (terminal)
-        kgx_terminal_apply_bg_immediate (terminal, &priv->glass_current);
+  g_object_get (priv->pages, "active-page", &active, NULL);
+  g_signal_group_set_target (priv->tab_signals, active);
+  sync_active_train_signals (self, active);
+
+  /* Immediately snap the new terminal's background to the current
+   * glass color so there's no flash between the tab switch (which
+   * makes the new terminal visible) and the glass transition start
+   * (which runs from an idle). Without this, the new terminal shows
+   * its own stale bg_current for 1+ frames while the CSS chrome still
+   * shows the old glass color — a visible two-color flicker. */
+  if (priv->glass_has_current && active) {
+    g_autoptr (KgxTerminal) terminal = NULL;
+    g_object_get (active, "terminal", &terminal, NULL);
+    if (terminal) {
+      GdkRGBA current_bg;
+      GdkRGBA target_bg;
+
+      kgx_terminal_get_current_bg (terminal, &current_bg);
+      copy_opaque_rgba (&target_bg, &priv->glass_current);
+
+      if (!same_opaque_rgb (&current_bg, &target_bg))
+        kgx_terminal_apply_bg_immediate (terminal, &target_bg);
     }
   }
-
+ 
   /* Re-evaluate process glass for the newly active tab. */
   schedule_process_glass_idle (self);
+}
+
+static void
+active_page_changed (GObject *object, GParamSpec *pspec, gpointer data)
+{
+  KgxWindow *self = KGX_WINDOW (object);
+
+  sync_active_page_state (self);
 }
 
 
@@ -1327,6 +1417,7 @@ kgx_window_class_init (KgxWindowClass *klass)
   gtk_widget_class_bind_template_callback (widget_class, create_tearoff_host);
   gtk_widget_class_bind_template_callback (widget_class, maybe_close_window);
   gtk_widget_class_bind_template_callback (widget_class, status_changed);
+  gtk_widget_class_bind_template_callback (widget_class, active_page_changed);
   gtk_widget_class_bind_template_callback (widget_class, ringing_changed);
   gtk_widget_class_bind_template_callback (widget_class, extra_drag_drop);
   gtk_widget_class_bind_template_callback (widget_class, search_enabled);
@@ -1433,16 +1524,21 @@ kgx_window_init (KgxWindow *self)
       GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 2);
   }
 
-  /* Track the active tab to react to child process changes for glass. */
+  /* Track the active tab and its current train for process-glass updates. */
   priv->tab_signals = g_signal_group_new (KGX_TYPE_TAB);
   g_signal_group_connect (priv->tab_signals,
                           "notify::train",
                           G_CALLBACK (tab_train_changed),
                           self);
-
-  /* Safety-net timer for process glass — catches edge cases where
-   * signal-driven updates miss (e.g. tab switch timing). */
-  priv->process_check_timer = g_timeout_add_seconds (30, process_check_tick, self);
+  priv->train_signals = g_signal_group_new (KGX_TYPE_TRAIN);
+  g_signal_group_connect (priv->train_signals,
+                          "child-added",
+                          G_CALLBACK (active_train_children_changed),
+                          self);
+  g_signal_group_connect (priv->train_signals,
+                          "child-removed",
+                          G_CALLBACK (active_train_children_changed),
+                          self);
 
   g_binding_group_bind_full (priv->surface_binds, "state",
                              self, "floating",

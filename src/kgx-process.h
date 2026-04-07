@@ -34,6 +34,8 @@ KgxProcess *kgx_process_new         (GPid        pid);
 GPid        kgx_process_get_pid     (KgxProcess *self);
 gboolean    kgx_process_get_is_root (KgxProcess *self);
 GPid        kgx_process_get_parent  (KgxProcess *self);
+GPid        kgx_process_get_session (KgxProcess *self);
+const char *kgx_process_get_name    (KgxProcess *self);
 GStrv       kgx_process_get_argv    (KgxProcess *self);
 void        kgx_process_get_title   (KgxProcess  *self,
                                      char       **title,

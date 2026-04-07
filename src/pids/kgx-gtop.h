@@ -28,7 +28,8 @@ G_BEGIN_DECLS
 
 KgxPidsResult   kgx_gtop_get_pid_status        (GPid       pid,
                                                 GPid      *parent,
-                                                uid_t     *euid);
+                                                uid_t     *euid,
+                                                GPid      *session);
 KgxPidsResult   kgx_gtop_get_cmdline           (GPid       pid,
                                                 GStrv     *args);
 KgxPidsResult   kgx_gtop_get_list              (GPid     **pids,

@@ -33,12 +33,13 @@ typedef enum {
 
 KgxPidsResult   kgx_pids_get_pid_info          (GPid       pid,
                                                 GPid      *parent,
-                                                uid_t     *euid);
+                                                uid_t     *euid,
+                                                GPid      *session);
 KgxPidsResult   kgx_pids_get_pid_cmdline       (GPid       pid,
                                                 GStrv     *args);
 KgxPidsResult   kgx_pids_get_running_pids      (GPid     **pids,
                                                 size_t    *n_pids);
-KgxPidsResult   kgx_pids_get_session_pids     (GPid       session,
+KgxPidsResult   kgx_pids_get_session_pids      (GPid       session,
                                                 GPid     **pids,
                                                 size_t    *n_pids);
 

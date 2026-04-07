@@ -27,7 +27,10 @@
 
 
 KgxPidsResult
-kgx_gtop_get_pid_status (GPid pid, GPid *parent, uid_t *euid)
+kgx_gtop_get_pid_status (GPid pid,
+                         GPid *parent,
+                         uid_t *euid,
+                         GPid *session)
 {
   glibtop_proc_uid info;
 
@@ -35,6 +38,7 @@ kgx_gtop_get_pid_status (GPid pid, GPid *parent, uid_t *euid)
 
   *parent = info.ppid;
   *euid = info.euid;
+  *session = info.session;
 
   return KGX_PIDS_OK;
 }

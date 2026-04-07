@@ -437,94 +437,6 @@ setup_menu (AdwTabView *view,
 }
 
 
-static gint
-compare_process_pid (gconstpointer a, gconstpointer b)
-{
-  GPid pa = kgx_process_get_pid (*(KgxProcess **) a);
-  GPid pb = kgx_process_get_pid (*(KgxProcess **) b);
-
-  return pa < pb ? -1 : pa > pb ? 1 : 0;
-}
-
-
-static char *
-fallback_title (G_GNUC_UNUSED GObject *self,
-                KgxTrain              *train,
-                int                    activity_frame)
-{
-  if (train) {
-    g_autofree char *shell_name = NULL;
-    GPid pid = kgx_train_get_pid (train);
-
-    /* Get the shell process name */
-    if (pid > 0) {
-      g_autofree char *comm_path = g_strdup_printf ("/proc/%d/comm", pid);
-
-      if (g_file_get_contents (comm_path, &shell_name, NULL, NULL) && shell_name)
-        g_strstrip (shell_name);
-    }
-
-    /* If there are child processes, build full chain: >shell>child>grandchild */
-    {
-      static const char *activity_chars[] = { "⠂", "⠒", "⠲", "⠰", "⠠", "⠤", "⠦", "⠆" };
-      g_autoptr(GPtrArray) children = kgx_train_get_children (train);
-
-      if (children && children->len > 0) {
-        g_autoptr(GString) chain = g_string_new (NULL);
-        const char *indicator = activity_chars[activity_frame % G_N_ELEMENTS (activity_chars)];
-
-        g_ptr_array_sort (children, compare_process_pid);
-
-        {
-          g_autoptr(GHashTable) seen = g_hash_table_new (g_str_hash, g_str_equal);
-
-          if (shell_name && shell_name[0] != '\0') {
-            g_string_append_printf (chain, ">%s", shell_name);
-            g_hash_table_add (seen, shell_name);
-          }
-
-          for (guint i = 0; i < children->len; i++) {
-            KgxProcess *child = g_ptr_array_index (children, i);
-            GStrv argv = kgx_process_get_argv (child);
-
-            if (argv && argv[0]) {
-              g_autofree char *name = g_path_get_basename (argv[0]);
-
-              if (name && name[0] != '\0' &&
-                  !g_hash_table_contains (seen, name)) {
-                g_hash_table_add (seen, g_strdup (name));
-                g_string_append_printf (chain, ">%s", name);
-              }
-            }
-          }
-        }
-
-        if (chain->len > 0)
-          return g_strdup_printf ("%s %s", indicator, chain->str);
-      }
-    }
-
-    /* No active children — show last child if one ran */
-    {
-      const char *last = kgx_train_get_last_child_name (train);
-
-      if (last && last[0] != '\0') {
-        if (shell_name && shell_name[0] != '\0')
-          return g_strdup_printf ("%s: %s", shell_name, last);
-        else
-          return g_strdup (last);
-      }
-    }
-
-    /* No children ever ran — just the shell name */
-    if (shell_name && shell_name[0] != '\0')
-      return g_steal_pointer (&shell_name);
-  }
-
-  return g_strdup ("Terminal");
-}
-
-
 static gboolean
 object_accumulator (GSignalInvocationHint *ihint,
                     GValue                *return_value,
@@ -703,7 +615,6 @@ kgx_pages_class_init (KgxPagesClass *klass)
                                            "kgx_file_as_display", G_CALLBACK (kgx_file_as_display),
                                            "kgx_status_as_icon", G_CALLBACK (kgx_status_as_icon),
                                            "kgx_ringing_as_icon", G_CALLBACK (kgx_ringing_as_icon),
-                                           "fallback_title", G_CALLBACK (fallback_title),
                                            NULL);
 }
 
