@@ -476,6 +476,34 @@ test_settings_visual_bell (Fixture *fixture, gconstpointer unused)
 
 
 static void
+test_settings_command_complete_notifications (Fixture *fixture, gconstpointer unused)
+{
+  g_autoptr (KgxSettings) settings = g_object_new (KGX_TYPE_SETTINGS, NULL);
+  gboolean command_complete_notifications = TRUE;
+
+  g_settings_set_boolean (fixture->settings, "command-complete-notifications", TRUE);
+
+  kgx_test_property_notify (settings,
+                            "command-complete-notifications",
+                            FALSE,
+                            TRUE);
+
+  g_assert_true (kgx_settings_get_command_complete_notifications (settings));
+
+  g_object_get (settings,
+                "command-complete-notifications",
+                &command_complete_notifications,
+                NULL);
+  g_assert_true (command_complete_notifications);
+
+  g_object_set (settings, "command-complete-notifications", FALSE, NULL);
+  g_assert_false (kgx_settings_get_command_complete_notifications (settings));
+  g_assert_false (g_settings_get_boolean (fixture->settings,
+                                          "command-complete-notifications"));
+}
+
+
+static void
 test_settings_livery (Fixture *fixture, gconstpointer unused)
 {
   g_autoptr (KgxSettings) settings = g_object_new (KGX_TYPE_SETTINGS, NULL);
@@ -706,6 +734,7 @@ main (int argc, char *argv[])
 
   fixtured_test ("/kgx/settings/audible-bell", NULL, test_settings_audible_bell);
   fixtured_test ("/kgx/settings/visual-bell", NULL, test_settings_visual_bell);
+  fixtured_test ("/kgx/settings/command-complete-notifications", NULL, test_settings_command_complete_notifications);
   fixtured_test ("/kgx/settings/livery", NULL, test_settings_livery);
 
   fixtured_test ("/kgx/settings/scrollback/basic", NULL, test_settings_scrollback_basic);

@@ -861,34 +861,41 @@ child_removed (KgxTrain   *train,
 {
   KgxTab *self = KGX_TAB (user_data);
   KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
+  gboolean allow_desktop_notifications = TRUE;
+  g_autoptr (GNotification) noti = NULL;
+  g_autofree char *body = NULL;
+  g_autofree char *process_title = NULL;
+  g_autofree char *process_subtitle = NULL;
 
   if (!kgx_tab_is_active (self)) {
-    g_autoptr (GNotification) noti = NULL;
-    g_autofree char *body = NULL;
-    g_autofree char *process_title = NULL;
-    g_autofree char *process_subtitle = NULL;
-
-    noti = g_notification_new (_("Command completed"));
-
-    kgx_process_get_title (child, &process_title, &process_subtitle);
-    if (process_subtitle) {
-      body = g_strdup_printf ("%s, %s",
-                              process_title,
-                              process_subtitle);
-    } else {
-      body = g_steal_pointer (&process_title);
+    if (priv->settings) {
+      allow_desktop_notifications =
+        kgx_settings_get_command_complete_notifications (priv->settings);
     }
-    g_notification_set_body (noti, body);
 
-    g_notification_set_default_action_and_target (noti,
-                                                  "app.focus-page",
-                                                  "u",
-                                                  priv->id);
+    if (allow_desktop_notifications) {
+      noti = g_notification_new (_("Command completed"));
 
-    priv->notification_id = g_strdup_printf ("command-completed-%u", priv->id);
-    g_application_send_notification (G_APPLICATION (priv->application),
-                                     priv->notification_id,
-                                     noti);
+      kgx_process_get_title (child, &process_title, &process_subtitle);
+      if (process_subtitle) {
+        body = g_strdup_printf ("%s, %s",
+                                process_title,
+                                process_subtitle);
+      } else {
+        body = g_steal_pointer (&process_title);
+      }
+      g_notification_set_body (noti, body);
+
+      g_notification_set_default_action_and_target (noti,
+                                                    "app.focus-page",
+                                                    "u",
+                                                    priv->id);
+
+      priv->notification_id = g_strdup_printf ("command-completed-%u", priv->id);
+      g_application_send_notification (G_APPLICATION (priv->application),
+                                       priv->notification_id,
+                                       noti);
+    }
 
     if (!gtk_widget_get_mapped (GTK_WIDGET (self))) {
       g_object_set (self, "needs-attention", TRUE, NULL);

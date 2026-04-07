@@ -308,6 +308,12 @@
                                 </property>
                               </object>
                             </child>
+                            <child>
+                              <object class="AdwSwitchRow" id="command_complete_notifications">
+                                <property name="title" translatable="yes">Desktop _Notifications</property>
+                                <property name="use-underline">True</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
 

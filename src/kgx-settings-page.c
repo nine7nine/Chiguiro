@@ -106,6 +106,7 @@ struct _KgxSettingsPage {
 
   GtkWidget            *audible_bell;
   GtkWidget            *visual_bell;
+  GtkWidget            *command_complete_notifications;
   GtkWidget            *use_system_font;
   GtkWidget            *custom_font;
   GtkWidget            *text_scale;
@@ -1144,6 +1145,7 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, settings_binds);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, audible_bell);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, visual_bell);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, command_complete_notifications);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, use_system_font);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, custom_font);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, text_scale);
@@ -1602,6 +1604,9 @@ kgx_settings_page_init (KgxSettingsPage *self)
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   g_binding_group_bind (self->settings_binds, "visual-bell",
                         self->visual_bell, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind (self->settings_binds, "command-complete-notifications",
+                        self->command_complete_notifications, "active",
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   g_binding_group_bind (self->settings_binds, "use-system-font",
                         self->use_system_font, "active",

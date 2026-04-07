@@ -48,6 +48,7 @@ struct _KgxSettings {
   int                   scrollback_lines;
   gboolean              audible_bell;
   gboolean              visual_bell;
+  gboolean              command_complete_notifications;
   gboolean              use_system_font;
   PangoFontDescription *custom_font;
   int64_t               scrollback_limit;
@@ -141,6 +142,7 @@ enum {
   PROP_SCROLLBACK_LINES,
   PROP_AUDIBLE_BELL,
   PROP_VISUAL_BELL,
+  PROP_COMMAND_COMPLETE_NOTIFICATIONS,
   PROP_USE_SYSTEM_FONT,
   PROP_CUSTOM_FONT,
   PROP_SCROLLBACK_LIMIT,
@@ -328,6 +330,12 @@ kgx_settings_set_property (GObject      *object,
       kgx_set_boolean_prop (object,
                             pspec,
                             &self->visual_bell,
+                            value);
+      break;
+    case PROP_COMMAND_COMPLETE_NOTIFICATIONS:
+      kgx_set_boolean_prop (object,
+                            pspec,
+                            &self->command_complete_notifications,
                             value);
       break;
     case PROP_USE_SYSTEM_FONT:
@@ -540,6 +548,9 @@ kgx_settings_get_property (GObject    *object,
     case PROP_VISUAL_BELL:
       g_value_set_boolean (value, kgx_settings_get_visual_bell (self));
       break;
+    case PROP_COMMAND_COMPLETE_NOTIFICATIONS:
+      g_value_set_boolean (value, kgx_settings_get_command_complete_notifications (self));
+      break;
     case PROP_USE_SYSTEM_FONT:
       g_value_set_boolean (value, self->use_system_font);
       break;
@@ -697,6 +708,11 @@ kgx_settings_class_init (KgxSettingsClass *klass)
 
   pspecs[PROP_VISUAL_BELL] =
     g_param_spec_boolean ("visual-bell", NULL, NULL,
+                          TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_COMMAND_COMPLETE_NOTIFICATIONS] =
+    g_param_spec_boolean ("command-complete-notifications", NULL, NULL,
                           TRUE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -1046,6 +1062,9 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "visual-bell",
                    self, "visual-bell",
                    G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "command-complete-notifications",
+                   self, "command-complete-notifications",
+                   G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "use-system-font",
                    self, "use-system-font",
                    G_SETTINGS_BIND_DEFAULT);
@@ -1310,6 +1329,15 @@ kgx_settings_get_visual_bell (KgxSettings *self)
   g_return_val_if_fail (KGX_IS_SETTINGS (self), FALSE);
 
   return self->visual_bell;
+}
+
+
+gboolean
+kgx_settings_get_command_complete_notifications (KgxSettings *self)
+{
+  g_return_val_if_fail (KGX_IS_SETTINGS (self), FALSE);
+
+  return self->command_complete_notifications;
 }
 
 
