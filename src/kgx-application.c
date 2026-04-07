@@ -788,8 +788,14 @@ started (GObject      *src,
          gpointer      app)
 {
   g_autoptr (GError) error = NULL;
+  GtkRoot *root = NULL;
 
   kgx_tab_start_finish (KGX_TAB (src), res, &error);
+
+  root = gtk_widget_get_root (GTK_WIDGET (src));
+  if (KGX_IS_WINDOW (root)) {
+    kgx_window_finish_startup (KGX_WINDOW (root));
+  }
 
   if (error) {
     g_warning ("Failed to start %s: %s",
@@ -809,6 +815,7 @@ kgx_application_add_terminal (KgxApplication *self,
   g_autofree char *directory = NULL;
   GtkWindow *window;
   KgxTab *tab;
+  gboolean new_window = FALSE;
 
   if (working_directory) {
     directory = g_file_get_path (working_directory);
@@ -850,6 +857,11 @@ kgx_application_add_terminal (KgxApplication *self,
                            "default-height", height,
                            "maximized", maximised,
                            NULL);
+    new_window = TRUE;
+  }
+
+  if (new_window) {
+    kgx_window_begin_startup (KGX_WINDOW (window));
   }
 
   kgx_window_add_tab (KGX_WINDOW (window), tab);

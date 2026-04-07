@@ -57,8 +57,10 @@ struct _KgxWindowPrivate {
   gboolean              close_anyway;
 
   gboolean              settings_visible;
+  gboolean              startup_pending;
 
   /* Template widgets */
+  GtkWidget            *startup_stack;
   GtkWidget            *header_bar;
   GtkWidget            *tab_bar;
   GtkWidget            *pages;
@@ -503,6 +505,7 @@ kgx_window_update_glass_opacity (KgxWindow *self)
        * doesn't compound across layers when glass_opacity < 1.0. */
       ".terminal-window headerbar,"
       ".terminal-window tabbar,"
+      ".terminal-window .startup-placeholder,"
       ".terminal-window settings-page,"
       ".terminal-window scrollbar,"
       ".terminal-window scrollbar trough {"
@@ -1463,6 +1466,7 @@ kgx_window_class_init (KgxWindowClass *klass)
   gtk_widget_class_set_template_from_resource (widget_class,
                                                KGX_APPLICATION_PATH "kgx-window.ui");
 
+  gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, startup_stack);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, header_bar);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, tab_bar);
   gtk_widget_class_bind_template_child_private (widget_class, KgxWindow, pages);
@@ -1640,6 +1644,42 @@ kgx_window_get_working_dir (KgxWindow *self)
   g_object_get (priv->pages, "path", &file, NULL);
 
   return file;
+}
+
+
+void
+kgx_window_begin_startup (KgxWindow *self)
+{
+  KgxWindowPrivate *priv;
+
+  g_return_if_fail (KGX_IS_WINDOW (self));
+
+  priv = kgx_window_get_instance_private (self);
+
+  if (!priv->startup_stack || priv->startup_pending) {
+    return;
+  }
+
+  priv->startup_pending = TRUE;
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->startup_stack), "startup");
+}
+
+
+void
+kgx_window_finish_startup (KgxWindow *self)
+{
+  KgxWindowPrivate *priv;
+
+  g_return_if_fail (KGX_IS_WINDOW (self));
+
+  priv = kgx_window_get_instance_private (self);
+
+  if (!priv->startup_stack || !priv->startup_pending) {
+    return;
+  }
+
+  priv->startup_pending = FALSE;
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->startup_stack), "main");
 }
 
 

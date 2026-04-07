@@ -39,6 +39,8 @@ struct _KgxWindowClass {
 G_DECLARE_DERIVABLE_TYPE (KgxWindow, kgx_window, KGX, WINDOW, AdwApplicationWindow)
 
 GFile      *kgx_window_get_working_dir (KgxWindow    *self);
+void        kgx_window_begin_startup   (KgxWindow    *self);
+void        kgx_window_finish_startup  (KgxWindow    *self);
 void        kgx_window_add_tab         (KgxWindow    *self,
                                         KgxTab       *tab);
 

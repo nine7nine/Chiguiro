@@ -94,6 +94,11 @@ window.terminal-window.translucent.background.csd {
   background-color: color-mix(in srgb, currentColor 10%, transparent);
 }
 
+.terminal-window .startup-placeholder {
+  background-color: color-mix(in srgb, var(--view-bg-color) 94%, transparent);
+  background-image: none;
+}
+
 .terminal-window tabbar.kgx-tab-strip .tab-strip-item.needs-attention .tab-strip-label {
   color: var(--accent-bg-color);
 }
