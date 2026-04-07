@@ -115,10 +115,6 @@ window.terminal-window.translucent.background.csd {
   transition-duration: 40ms;
 }
 
-.terminal-window tabbar.kgx-tab-strip .tab-strip-label {
-  text-align: left;
-}
-
 .terminal-window tabbar.kgx-tab-strip .tab-strip-item:hover .tab-strip-select,
 .terminal-window tabbar.kgx-tab-strip .tab-strip-item:hover .tab-strip-close {
   color: var(--accent-bg-color);

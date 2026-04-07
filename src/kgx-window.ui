@@ -13,7 +13,6 @@
     <property name="height-request">294</property>
     <property name="content">
       <object class="GtkStack" id="startup_stack">
-        <property name="visible-child-name">main</property>
         <child>
           <object class="GtkStackPage">
             <property name="name">startup</property>

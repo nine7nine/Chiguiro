@@ -1552,6 +1552,7 @@ kgx_window_init (KgxWindow *self)
   g_autoptr (GtkWindowGroup) group = NULL;
 
   gtk_widget_init_template (GTK_WIDGET (self));
+  gtk_stack_set_visible_child_name (GTK_STACK (priv->startup_stack), "main");
 
   /* Always translucent */
   priv->translucent = TRUE;
