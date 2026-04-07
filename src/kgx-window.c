@@ -1196,7 +1196,7 @@ sync_active_page_state (KgxWindow *self)
    * lingering bursts competing with the tab handoff frame. */
   if (!priv->settings_visible)
     kgx_edge_stop_ambient_immediate (priv->edge);
- 
+
   /* Re-evaluate process glass for the newly active tab after the handoff
    * frame so AdwTabView's own relayout/transition gets first claim on it. */
   schedule_process_glass_idle_deferred (self);
