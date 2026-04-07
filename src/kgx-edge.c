@@ -237,10 +237,6 @@ kgx_edge_get_strip_extent (KgxEdge *self)
 {
   KgxEdge *root = kgx_edge_get_root (self);
   int extent = MAX (root->global.thickness, 1);
-  gboolean process_segment_active =
-    root->process_progress >= 0.0 &&
-    root->process_preset != KGX_PARTICLE_NONE &&
-    !firework_active (root);
   gboolean pending_process_segment =
     root->pending_change &&
     root->pending_preset != KGX_PARTICLE_NONE &&
@@ -250,13 +246,13 @@ kgx_edge_get_strip_extent (KgxEdge *self)
   for (int i = 0; i < N_PRESETS; i++)
     extent = MAX (extent, root->preset[i].thickness);
 
-  if (process_segment_active) {
+  if (root->process_preset != KGX_PARTICLE_NONE) {
     extent = MAX (extent, root->process_tune_snap.thickness);
-    extent = MAX (extent, root->process_thk_override);
+    extent = MAX (extent, root->process_overrides.thickness);
   }
 
-  if (pending_process_segment)
-    extent = MAX (extent, root->pending_thk_override);
+  if (pending_process_segment || (root->pending_change && root->pending_preset != KGX_PARTICLE_NONE))
+    extent = MAX (extent, root->pending_overrides.thickness);
 
   return MAX (extent + 2, 4);
 }

@@ -88,6 +88,20 @@ typedef struct {
   int     thk_curve;     /* thickness envelope curve: 1-3              */
 } KgxParticleTunables;
 
+typedef struct {
+  int shape;               /* -1 = preset default */
+  int gap;                 /* -1 = preset default */
+  int speed;               /* percent, 0 = preset default */
+  int thickness;           /* pixels,   0 = preset default */
+  int tail_length;         /* percent,  0 = preset default */
+  int env_attack;          /* percent,  0 = preset default */
+  int env_release;         /* percent,  0 = preset default */
+  int release_mode;        /* -1 = preset default */
+  int thk_attack;          /* percent,  0 = preset default */
+  int thk_release;         /* percent,  0 = preset default */
+  int thk_release_mode;    /* -1 = preset default */
+} KgxProcessParticleOverrides;
+
 void        kgx_particle_tunable_set_double (KgxParticleTunables       *t,
                                              int                        field,
                                              double                     value);
@@ -109,16 +123,14 @@ float       kgx_particle_thickness_envelope (double                     t,
 
 const char *kgx_particle_preset_to_string (KgxParticlePreset p);
 
-/* Parse extended process config: "glasscolor;preset;reverse;particlecolor[;shape;gap;speed;thk]"
+/* Parse extended process config:
+ * "glasscolor;preset;reverse;particlecolor[;shape;gap;speed;thk;tail;atk;rel;rls;tatk;trel;trls]"
  * Backward-compatible: plain "#hex" returns just the glass color. */
 void       kgx_parse_process_config     (const char        *value,
                                          char             **glass_color,
                                          KgxParticlePreset *preset,
                                          int               *reverse,
                                          GdkRGBA           *particle_color,
-                                         int               *shape_override,
-                                         int               *gap_override,
-                                         int               *speed_override,
-                                         int               *thk_override);
+                                         KgxProcessParticleOverrides *overrides);
 
 G_END_DECLS

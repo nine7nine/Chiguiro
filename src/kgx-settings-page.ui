@@ -220,24 +220,6 @@
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkLabel">
-                                        <property name="label">%</property>
-                                        <property name="valign">center</property>
-                                        <style>
-                                          <class name="dim-label" />
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label" translatable="yes">System</property>
-                                        <property name="valign">center</property>
-                                        <style>
-                                          <class name="dim-label" />
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
                                       <object class="GtkSwitch" id="use_system_font">
                                         <property name="valign">center</property>
                                         <property name="tooltip-text" translatable="yes">Use the system terminal font</property>
@@ -308,24 +290,6 @@
                                             <property name="step-increment">10</property>
                                           </object>
                                         </property>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label">%</property>
-                                        <property name="valign">center</property>
-                                        <style>
-                                          <class name="dim-label" />
-                                        </style>
-                                      </object>
-                                    </child>
-                                    <child>
-                                      <object class="GtkLabel">
-                                        <property name="label" translatable="yes">System</property>
-                                        <property name="valign">center</property>
-                                        <style>
-                                          <class name="dim-label" />
-                                        </style>
                                       </object>
                                     </child>
                                     <child>
@@ -506,7 +470,8 @@
                     <property name="child">
                       <object class="GtkGrid" id="app_glass_grid">
                         <property name="row-spacing">4</property>
-                        <property name="column-spacing">6</property>
+                        <property name="column-spacing">3</property>
+                        <property name="halign">center</property>
                         <style><class name="preset-row"/></style>
                         <!-- Indicator + process rows built programmatically -->
                       </object>

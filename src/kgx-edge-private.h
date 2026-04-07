@@ -34,6 +34,37 @@
 #define firework_active(s) ((s)->process_preset == KGX_PARTICLE_FIREWORKS || \
                             (s)->process_preset == KGX_PARTICLE_AMBIENT)
 
+static inline void
+kgx_edge_apply_process_overrides (KgxParticleTunables               *tune,
+                                  const KgxProcessParticleOverrides *overrides)
+{
+  if (!overrides)
+    return;
+
+  if (overrides->shape >= 0)
+    tune->shape = overrides->shape;
+  if (overrides->gap >= 0)
+    tune->gap = overrides->gap;
+  if (overrides->speed > 0)
+    tune->speed = overrides->speed / 100.0;
+  if (overrides->thickness > 0)
+    tune->thickness = overrides->thickness;
+  if (overrides->tail_length > 0)
+    tune->tail_length = overrides->tail_length / 100.0;
+  if (overrides->env_attack > 0)
+    tune->env_attack = overrides->env_attack / 100.0;
+  if (overrides->env_release > 0)
+    tune->env_release = overrides->env_release / 100.0;
+  if (overrides->release_mode >= 0)
+    tune->release_mode = overrides->release_mode;
+  if (overrides->thk_attack > 0)
+    tune->thk_attack = overrides->thk_attack / 100.0;
+  if (overrides->thk_release > 0)
+    tune->thk_release = overrides->thk_release / 100.0;
+  if (overrides->thk_release_mode >= 0)
+    tune->thk_release_mode = overrides->thk_release_mode;
+}
+
 struct _KgxEdge {
   GtkWidget       parent_instance;
 
@@ -97,10 +128,7 @@ struct _KgxEdge {
   KgxParticlePreset process_preset;
   GdkRGBA           process_color;
   gboolean          process_reverse;
-  int               process_shape_override;
-  int               process_gap_override;
-  int               process_speed_override;
-  int               process_thk_override;
+  KgxProcessParticleOverrides process_overrides;
   gboolean          process_reverse_toggle;
   int               process_reverse_mode;
   double            process_progress;
@@ -113,10 +141,7 @@ struct _KgxEdge {
   KgxParticlePreset pending_preset;
   GdkRGBA           pending_color;
   int               pending_reverse;
-  int               pending_shape_override;
-  int               pending_gap_override;
-  int               pending_speed_override;
-  int               pending_thk_override;
+  KgxProcessParticleOverrides pending_overrides;
 
   KgxParticleTunables process_tune_snap;
   KgxParticleTunables burst_tune_snap[MAX_BURSTS];

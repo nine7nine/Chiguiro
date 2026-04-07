@@ -32,10 +32,7 @@ kgx_edge_process_complete (KgxEdge *self,
                                    self->pending_preset,
                                    &self->pending_color,
                                    self->pending_reverse,
-                                   self->pending_shape_override,
-                                   self->pending_gap_override,
-                                   self->pending_speed_override,
-                                   self->pending_thk_override);
+                                   &self->pending_overrides);
     return;
   }
 
@@ -46,14 +43,8 @@ kgx_edge_process_complete (KgxEdge *self,
       self->process_reverse = !self->process_reverse;
 
     self->process_tune_snap = *kgx_edge_resolve_tunables (self, self->process_preset);
-    if (self->process_shape_override >= 0)
-      self->process_tune_snap.shape = self->process_shape_override;
-    if (self->process_gap_override >= 0)
-      self->process_tune_snap.gap = self->process_gap_override;
-    if (self->process_speed_override > 0)
-      self->process_tune_snap.speed = self->process_speed_override / 100.0;
-    if (self->process_thk_override > 0)
-      self->process_tune_snap.thickness = self->process_thk_override;
+    kgx_edge_apply_process_overrides (&self->process_tune_snap,
+                                      &self->process_overrides);
     self->process_start_us = now_us;
     self->process_progress = 0.0;
     self->process_last_snapshot_progress = -1.0;
@@ -152,10 +143,7 @@ kgx_edge_set_process_particle (KgxEdge            *self,
                                KgxParticlePreset   preset,
                                const GdkRGBA      *color,
                                int                 reverse,
-                               int                 shape_override,
-                               int                 gap_override,
-                               int                 speed_override,
-                               int                 thk_override)
+                               const KgxProcessParticleOverrides *overrides)
 {
   int old_extent;
   guint duration;
@@ -172,10 +160,21 @@ kgx_edge_set_process_particle (KgxEdge            *self,
     self->pending_change = TRUE;
     self->pending_preset = preset;
     self->pending_reverse = reverse;
-    self->pending_shape_override = shape_override;
-    self->pending_gap_override = gap_override;
-    self->pending_speed_override = speed_override;
-    self->pending_thk_override = thk_override;
+    self->pending_overrides = overrides
+      ? *overrides
+      : (KgxProcessParticleOverrides) {
+          .shape = -1,
+          .gap = -1,
+          .speed = 0,
+          .thickness = 0,
+          .tail_length = 0,
+          .env_attack = 0,
+          .env_release = 0,
+          .release_mode = -1,
+          .thk_attack = 0,
+          .thk_release = 0,
+          .thk_release_mode = -1,
+        };
     if (color)
       self->pending_color = *color;
     else
@@ -185,10 +184,21 @@ kgx_edge_set_process_particle (KgxEdge            *self,
 
   self->pending_change = FALSE;
   self->process_preset = preset;
-  self->process_shape_override = shape_override;
-  self->process_gap_override = gap_override;
-  self->process_speed_override = speed_override;
-  self->process_thk_override = thk_override;
+  self->process_overrides = overrides
+    ? *overrides
+    : (KgxProcessParticleOverrides) {
+        .shape = -1,
+        .gap = -1,
+        .speed = 0,
+        .thickness = 0,
+        .tail_length = 0,
+        .env_attack = 0,
+        .env_release = 0,
+        .release_mode = -1,
+        .thk_attack = 0,
+        .thk_release = 0,
+        .thk_release_mode = -1,
+      };
 
   self->process_reverse_mode = reverse;
   if (reverse == 2) {
@@ -218,14 +228,8 @@ kgx_edge_set_process_particle (KgxEdge            *self,
   }
 
   self->process_tune_snap = *kgx_edge_resolve_tunables (self, preset);
-  if (shape_override >= 0)
-    self->process_tune_snap.shape = shape_override;
-  if (gap_override >= 0)
-    self->process_tune_snap.gap = gap_override;
-  if (speed_override > 0)
-    self->process_tune_snap.speed = speed_override / 100.0;
-  if (thk_override > 0)
-    self->process_tune_snap.thickness = thk_override;
+  kgx_edge_apply_process_overrides (&self->process_tune_snap,
+                                    &self->process_overrides);
 
   spd = self->process_tune_snap.speed;
 

@@ -105,11 +105,11 @@ start_firework_burst (KgxEdge *self,
   else
     self->burst_color[index] = random_muted_color ();
 
-  bt = (self->process_preset == KGX_PARTICLE_FIREWORKS)
-         ? kgx_edge_resolve_tunables (self, KGX_PARTICLE_FIREWORKS)
-         : &self->global;
+  bt = kgx_edge_resolve_tunables (self, self->process_preset);
   self->burst_tune_snap[index] = *bt;
-  self->burst_duration_s[index] = 0.8 / bt->speed;
+  kgx_edge_apply_process_overrides (&self->burst_tune_snap[index],
+                                    &self->process_overrides);
+  self->burst_duration_s[index] = 0.8 / self->burst_tune_snap[index].speed;
   self->burst_start_us[index] = now_us;
   self->burst_progress[index] = 0.0;
 }
@@ -155,10 +155,10 @@ firework_schedule (KgxEdge *self,
   if (self->firework_due_us || !firework_active (self))
     return;
 
-  ft = (self->process_preset == KGX_PARTICLE_FIREWORKS)
-         ? kgx_edge_resolve_tunables (self, KGX_PARTICLE_FIREWORKS)
-         : &self->global;
+  ft = kgx_edge_resolve_tunables (self, self->process_preset);
   fw_spd = ft->speed;
+  if (self->process_overrides.speed > 0)
+    fw_spd = self->process_overrides.speed / 100.0;
   lo = (int) (600 * self->burst_spread / fw_spd);
   hi = (int) (1200 * self->burst_spread / fw_spd);
   delay = (!burst_track_active (self, 0))

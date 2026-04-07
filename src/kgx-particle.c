@@ -222,10 +222,7 @@ kgx_parse_process_config (const char        *value,
                           KgxParticlePreset *preset,
                           int               *reverse,
                           GdkRGBA           *particle_color,
-                          int               *shape_override,
-                          int               *gap_override,
-                          int               *speed_override,
-                          int               *thk_override)
+                          KgxProcessParticleOverrides *overrides)
 {
   g_auto (GStrv) parts = NULL;
   int n;
@@ -234,15 +231,26 @@ kgx_parse_process_config (const char        *value,
   if (preset)         *preset = KGX_PARTICLE_NONE;
   if (reverse)        *reverse = 0;
   if (particle_color) *particle_color = (GdkRGBA) { 0.5f, 0.5f, 0.5f, 1.0f };
-  if (shape_override) *shape_override = -1;
-  if (gap_override)   *gap_override = -1;
-  if (speed_override) *speed_override = 0;
-  if (thk_override)   *thk_override = 0;
+  if (overrides) {
+    *overrides = (KgxProcessParticleOverrides) {
+      .shape = -1,
+      .gap = -1,
+      .speed = 0,
+      .thickness = 0,
+      .tail_length = 0,
+      .env_attack = 0,
+      .env_release = 0,
+      .release_mode = -1,
+      .thk_attack = 0,
+      .thk_release = 0,
+      .thk_release_mode = -1,
+    };
+  }
 
   if (!value || !value[0])
     return;
 
-  parts = g_strsplit (value, ";", 9);
+  parts = g_strsplit (value, ";", 16);
   n = g_strv_length (parts);
 
   if (n >= 1 && glass_color)
@@ -257,15 +265,38 @@ kgx_parse_process_config (const char        *value,
   if (n >= 4 && particle_color)
     gdk_rgba_parse (particle_color, parts[3]);
 
-  if (n >= 5 && shape_override)
-    *shape_override = atoi (parts[4]);
+  if (overrides) {
+    if (n >= 5)
+      overrides->shape = atoi (parts[4]);
 
-  if (n >= 6 && gap_override)
-    *gap_override = atoi (parts[5]);
+    if (n >= 6)
+      overrides->gap = atoi (parts[5]);
 
-  if (n >= 7 && speed_override)
-    *speed_override = atoi (parts[6]);
+    if (n >= 7)
+      overrides->speed = atoi (parts[6]);
 
-  if (n >= 8 && thk_override)
-    *thk_override = atoi (parts[7]);
+    if (n >= 8)
+      overrides->thickness = atoi (parts[7]);
+
+    if (n >= 9)
+      overrides->tail_length = atoi (parts[8]);
+
+    if (n >= 10)
+      overrides->env_attack = atoi (parts[9]);
+
+    if (n >= 11)
+      overrides->env_release = atoi (parts[10]);
+
+    if (n >= 12)
+      overrides->release_mode = atoi (parts[11]);
+
+    if (n >= 13)
+      overrides->thk_attack = atoi (parts[12]);
+
+    if (n >= 14)
+      overrides->thk_release = atoi (parts[13]);
+
+    if (n >= 15)
+      overrides->thk_release_mode = atoi (parts[14]);
+  }
 }

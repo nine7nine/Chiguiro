@@ -96,10 +96,7 @@ struct _KgxWindowPrivate {
   KgxParticlePreset     deferred_preset;
   GdkRGBA               deferred_color;
   int                   deferred_reverse;
-  int                   deferred_shape;
-  int                   deferred_gap;
-  int                   deferred_speed;
-  int                   deferred_thk;
+  KgxProcessParticleOverrides deferred_overrides;
 
   GSignalGroup         *tab_signals;
   GSignalGroup         *train_signals;
@@ -870,10 +867,7 @@ glass_transition_done_cb (KgxWindow *self)
                                    priv->deferred_preset,
                                    &priv->deferred_color,
                                    priv->deferred_reverse,
-                                   priv->deferred_shape,
-                                   priv->deferred_gap,
-                                   priv->deferred_speed,
-                                   priv->deferred_thk);
+                                   &priv->deferred_overrides);
   }
 }
 
@@ -990,11 +984,22 @@ update_process_glass (KgxWindow *self)
     KgxParticlePreset preset = KGX_PARTICLE_NONE;
     int reverse = 0;
     GdkRGBA particle_color = { 0.5f, 0.5f, 0.5f, 1.0f };
-    int shape_override = -1, gap_override = -1, speed_override = 0, thk_override = 0;
+    KgxProcessParticleOverrides overrides = {
+      .shape = -1,
+      .gap = -1,
+      .speed = 0,
+      .thickness = 0,
+      .tail_length = 0,
+      .env_attack = 0,
+      .env_release = 0,
+      .release_mode = -1,
+      .thk_attack = 0,
+      .thk_release = 0,
+      .thk_release_mode = -1,
+    };
     if (match) {
       kgx_parse_process_config (match, &glass_hex, &preset, &reverse,
-                                &particle_color, &shape_override, &gap_override,
-                                &speed_override, &thk_override);
+                                &particle_color, &overrides);
     }
 
     /* Determine target glass color. */
@@ -1029,10 +1034,7 @@ update_process_glass (KgxWindow *self)
       priv->deferred_color = particle_color;
       priv->deferred_color.alpha = 1.0f;
       priv->deferred_reverse = reverse;
-      priv->deferred_shape = shape_override;
-      priv->deferred_gap = gap_override;
-      priv->deferred_speed = speed_override;
-      priv->deferred_thk = thk_override;
+      priv->deferred_overrides = overrides;
     } else {
       priv->deferred_particle = FALSE;
     }
@@ -1069,10 +1071,7 @@ update_process_glass (KgxWindow *self)
                                      priv->deferred_preset,
                                      &priv->deferred_color,
                                      priv->deferred_reverse,
-                                     priv->deferred_shape,
-                                     priv->deferred_gap,
-                                     priv->deferred_speed,
-                                     priv->deferred_thk);
+                                     &priv->deferred_overrides);
     }
     return G_SOURCE_REMOVE;
   }

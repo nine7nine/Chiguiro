@@ -39,9 +39,6 @@ void       kgx_edge_set_process_particle (KgxEdge          *self,
                                           KgxParticlePreset  preset,
                                           const GdkRGBA     *color,
                                           int                reverse,
-                                          int                shape_override,
-                                          int                gap_override,
-                                          int                speed_override,
-                                          int                thk_override);
+                                          const KgxProcessParticleOverrides *overrides);
 
 G_END_DECLS
