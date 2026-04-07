@@ -1156,6 +1156,10 @@ kgx_terminal_init (KgxTerminal *self)
   gtk_widget_action_set_enabled (GTK_WIDGET (self), "term.show-in-files", FALSE);
 
   vte_terminal_set_mouse_autohide (VTE_TERMINAL (self), TRUE);
+  /* Focused terminals otherwise inherit cursor blinking from the system,
+   * which adds extra VTE repaints right where edge-tail pacing is most
+   * noticeable. Keep the cursor steady unless we add an explicit setting. */
+  vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (self), VTE_CURSOR_BLINK_OFF);
   vte_terminal_search_set_wrap_around (VTE_TERMINAL (self), TRUE);
 
   for (int i = 0; i < KGX_TERMINAL_N_LINK_REGEX; i++) {
