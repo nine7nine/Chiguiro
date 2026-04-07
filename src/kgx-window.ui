@@ -177,19 +177,9 @@
               </object>
             </child>
             <child type="top">
-              <object class="AdwTabBar" id="tab_bar">
+              <object class="KgxTabStrip" id="tab_bar">
                 <property name="view" bind-source="pages" bind-property="tab-view"
                   bind-flags="sync-create" />
-                <binding name="inverted">
-                  <closure type='gboolean' function='kgx_decoration_layout_is_inverted'>
-                    <lookup name="gtk-decoration-layout">
-                      <closure type='GtkSettings' function='kgx_gtk_settings_for_display'>
-                        <lookup name="display">KgxWindow</lookup>
-                      </closure>
-                    </lookup>
-                  </closure>
-                </binding>
-                <signal name="extra-drag-drop" handler="extra_drag_drop" swapped="no" />
               </object>
             </child>
           </object>

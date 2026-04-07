@@ -70,6 +70,73 @@ window.terminal-window.translucent.background.csd {
   background-image: none;
 }
 
+.terminal-window tabbar.kgx-tab-strip,
+.terminal-window tabbar.kgx-tab-strip > scrolledwindow,
+.terminal-window tabbar.kgx-tab-strip > scrolledwindow > viewport,
+.terminal-window tabbar.kgx-tab-strip > scrolledwindow > viewport > box {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-box {
+  padding: 2px 4px;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item {
+  margin: 2px;
+  border-radius: 14px;
+  min-width: 0;
+  transition-duration: 40ms;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item.selected {
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item.needs-attention .tab-strip-label {
+  color: var(--accent-bg-color);
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-select,
+.terminal-window tabbar.kgx-tab-strip .tab-strip-select:hover,
+.terminal-window tabbar.kgx-tab-strip .tab-strip-select:active,
+.terminal-window tabbar.kgx-tab-strip .tab-strip-select.selected {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+  transition-duration: 40ms;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-label {
+  text-align: left;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item:hover .tab-strip-select,
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item:hover .tab-strip-close {
+  color: var(--accent-bg-color);
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-close {
+  margin: 4px 6px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  transition-duration: 40ms;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item.close-start .tab-strip-close {
+  margin-right: 2px;
+  margin-left: 6px;
+}
+
+.terminal-window tabbar.kgx-tab-strip .tab-strip-item.close-end .tab-strip-close {
+  margin-right: 6px;
+  margin-left: 2px;
+}
+
 .terminal-window scrolledwindow > undershoot,
 .terminal-window scrolledwindow > overshoot {
   background: none;

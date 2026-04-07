@@ -1,6 +1,7 @@
 /* kgx-train.c
  *
  * Copyright 2021-2025 Zander Brown
+ * Copyright 2026 jordan Johnston
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -181,14 +182,14 @@ build_fallback_title (KgxTrain *self)
 
   if (priv->last_child_name && priv->last_child_name[0] != '\0') {
     if (shell_name && shell_name[0] != '\0') {
-      return g_strdup_printf ("%s: %s", shell_name, priv->last_child_name);
+      return g_strdup_printf (">%s>%s", shell_name, priv->last_child_name);
     }
 
-    return g_strdup (priv->last_child_name);
+    return g_strdup_printf (">%s", priv->last_child_name);
   }
 
   if (shell_name && shell_name[0] != '\0') {
-    return g_strdup (shell_name);
+    return g_strdup_printf (">%s", shell_name);
   }
 
   return g_strdup ("Terminal");

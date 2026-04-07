@@ -1,6 +1,7 @@
 /* kgx-window.c
  *
  * Copyright 2019-2023 Zander Brown
+ * Copyright 2026 jordan Johnston
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,7 +40,7 @@
 
 #include "kgx-edge.h"
 #include "kgx-process.h"
-#include "kgx-terminal.h"
+#include "kgx-tab-strip.h"
 #include "kgx-train.h"
 #include "kgx-window.h"
 
@@ -277,7 +278,6 @@ kgx_window_set_property (GObject      *object,
          * ambient/settings run, and the re-check can wait until the stack
          * transition back to terminal has started to settle. */
         if (!priv->settings_visible) {
-          kgx_edge_stop_ambient_immediate (priv->edge);
           kgx_edge_reset_redraw_governor (priv->edge);
           schedule_process_glass_idle_deferred (KGX_WINDOW (object));
         }
@@ -935,9 +935,15 @@ update_process_glass (KgxWindow *self)
         !priv->process_glass_force_reconcile)
       return G_SOURCE_REMOVE;
 
-    /* Defer particle until glass transition completes. The previous
-     * active tab's process preset is stopped during the active-page
-     * handoff, so this path only decides what to start next. */
+    /* The resolved process-glass state changed for the active tab.
+     * Stop any currently running process preset now; this reconcile path
+     * also handles same-tab child churn where there is no active-page
+     * handoff to do the teardown for us. */
+    kgx_edge_stop_process_particle_immediate (priv->edge);
+
+    /* Defer particle until glass transition completes. The old preset is
+     * already torn down at this point, either by the active-page handoff
+     * or by the same-tab reconcile stop above. */
     if (preset != KGX_PARTICLE_NONE) {
       priv->deferred_particle = TRUE;
       priv->deferred_preset = preset;
@@ -1220,19 +1226,6 @@ ringing_changed (GObject *object, GParamSpec *pspec, gpointer data)
 
 
 
-static void
-extra_drag_drop (AdwTabBar        *bar,
-                 AdwTabPage       *page,
-                 GValue           *value,
-                 KgxWindow        *self)
-{
-  KgxTab *tab = KGX_TAB (adw_tab_page_get_child (page));
-
-  kgx_tab_extra_drop (tab, value);
-}
-
-
-
 /* Returns: (transfer full): caller must unref with g_object_unref */
 static VteTerminal *
 get_active_terminal (KgxWindow *self)
@@ -1462,6 +1455,7 @@ kgx_window_class_init (KgxWindowClass *klass)
   g_type_ensure (KGX_TYPE_FULLSCREEN_BOX);
   g_type_ensure (KGX_TYPE_PAGES);
   g_type_ensure (KGX_TYPE_SETTINGS_PAGE);
+  g_type_ensure (KGX_TYPE_TAB_STRIP);
   gtk_widget_class_set_template_from_resource (widget_class,
                                                KGX_APPLICATION_PATH "kgx-window.ui");
 
@@ -1485,7 +1479,6 @@ kgx_window_class_init (KgxWindowClass *klass)
   gtk_widget_class_bind_template_callback (widget_class, status_changed);
   gtk_widget_class_bind_template_callback (widget_class, active_page_changed);
   gtk_widget_class_bind_template_callback (widget_class, ringing_changed);
-  gtk_widget_class_bind_template_callback (widget_class, extra_drag_drop);
   gtk_widget_class_bind_template_callback (widget_class, search_enabled);
   gtk_widget_class_bind_template_callback (widget_class, search_changed);
   gtk_widget_class_bind_template_callback (widget_class, search_next);
@@ -1548,7 +1541,6 @@ static void
 kgx_window_init (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
-  GType drop_types[] = { GDK_TYPE_FILE_LIST, G_TYPE_STRING };
   g_autoptr (GtkWindowGroup) group = NULL;
 
   gtk_widget_init_template (GTK_WIDGET (self));
@@ -1614,14 +1606,6 @@ kgx_window_init (KgxWindow *self)
   #ifdef IS_DEVEL
   gtk_widget_add_css_class (GTK_WIDGET (self), "devel");
   #endif
-
-  /* Note this unfortunately doesn't allow us to workaround the portal
-     situation, but hopefully dropping folders on tabs is relatively rare */
-  adw_tab_bar_setup_extra_drop_target (ADW_TAB_BAR (priv->tab_bar),
-                                       GDK_ACTION_COPY,
-                                       drop_types,
-                                       G_N_ELEMENTS (drop_types));
-
 
   fullscreened_changed (self);
 
