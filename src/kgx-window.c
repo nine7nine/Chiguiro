@@ -228,6 +228,16 @@ kgx_window_set_property (GObject      *object,
                                  self,
                                  G_CONNECT_DEFAULT);
         g_signal_connect_object (priv->settings,
+                                 "notify::app-font",
+                                 G_CALLBACK (glass_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+        g_signal_connect_object (priv->settings,
+                                 "notify::app-font-scale",
+                                 G_CALLBACK (glass_opacity_changed),
+                                 self,
+                                 G_CONNECT_DEFAULT);
+        g_signal_connect_object (priv->settings,
                                  "notify::process-glass-colors",
                                  G_CALLBACK (process_glass_settings_changed),
                                  self,
@@ -455,16 +465,73 @@ fullscreened_changed (KgxWindow *self)
 
 
 static void
+append_app_font_css (GString               *css,
+                     PangoFontDescription  *font,
+                     double                 scale)
+{
+  const char *family;
+  g_autofree char *escaped_family = NULL;
+  double size = 11.0;
+  const char *unit = "pt";
+
+  if (!font) {
+    return;
+  }
+
+  family = pango_font_description_get_family (font);
+  if (!family || !family[0]) {
+    family = "Sans";
+  }
+
+  if (pango_font_description_get_size (font) > 0) {
+    size = (double) pango_font_description_get_size (font) / PANGO_SCALE;
+    if (pango_font_description_get_size_is_absolute (font)) {
+      unit = "px";
+    }
+  }
+
+  size *= scale;
+  escaped_family = g_strescape (family, NULL);
+
+  g_string_append_printf (css,
+                          ".terminal-window headerbar,"
+                          ".terminal-window headerbar *,"
+                          ".terminal-window tabbar,"
+                          ".terminal-window tabbar *,"
+                          ".terminal-window .top-bar,"
+                          ".terminal-window .top-bar *,"
+                          ".terminal-window .floating-bar,"
+                          ".terminal-window .floating-bar *,"
+                          ".terminal-window .startup-placeholder,"
+                          ".terminal-window .startup-placeholder *,"
+                          ".terminal-window settings-page,"
+                          ".terminal-window settings-page *,"
+                          ".terminal-window popover,"
+                          ".terminal-window popover *,"
+                          ".terminal-window dialog,"
+                          ".terminal-window dialog * {"
+                          "  font-family: \"%s\";"
+                          "  font-size: %.2f%s;"
+                          "}",
+                          escaped_family,
+                          size,
+                          unit);
+}
+
+
+static void
 kgx_window_update_glass_opacity (KgxWindow *self)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
   double glass_opacity = 1.0;
+  double app_font_scale = 1.0;
   g_autofree char *glass_color = NULL;
   g_autofree char *accent_color_raw = NULL;
-  g_autofree char *css = NULL;
+  PangoFontDescription *app_font = NULL;
   GdkRGBA rgba;
   GdkRGBA accent_rgba = { 53 / 255.0, 132 / 255.0, 228 / 255.0, 1.0 }; /* #3584e4 */
   char accent_safe[64];
+  g_autoptr (GString) css = NULL;
 
   if (!priv->settings || !glass_css) {
     return;
@@ -474,6 +541,8 @@ kgx_window_update_glass_opacity (KgxWindow *self)
                 "glass-opacity", &glass_opacity,
                 "glass-color", &glass_color,
                 "accent-color", &accent_color_raw,
+                "app-font", &app_font,
+                "app-font-scale", &app_font_scale,
                 NULL);
 
   /* Parse the hex color, default to black if invalid */
@@ -499,7 +568,8 @@ kgx_window_update_glass_opacity (KgxWindow *self)
     int b = (int)(rgba.blue * 255);
     double a = glass_opacity;
 
-    css = g_strdup_printf (
+    css = g_string_new (NULL);
+    g_string_append_printf (css,
       /* Only the headerbar, settings-page, and scrollbar get the glass
        * color — everything nested inside must be transparent so alpha
        * doesn't compound across layers when glass_opacity < 1.0. */
@@ -619,6 +689,8 @@ kgx_window_update_glass_opacity (KgxWindow *self)
 
   /* Apply accent color as CSS custom properties */
   {
+    g_autofree char *base_css = NULL;
+    g_autofree char *combined = NULL;
     g_autofree char *accent_css = g_strdup_printf (
       "@define-color accent_bg_color %s;"
       "@define-color accent_color %s;"
@@ -628,9 +700,13 @@ kgx_window_update_glass_opacity (KgxWindow *self)
       "  --accent-color: %s;"
       "  --accent-fg-color: white;"
       "}", accent_safe, accent_safe, accent_safe, accent_safe);
-    g_autofree char *combined = g_strconcat (css, accent_css, NULL);
+    append_app_font_css (css, app_font, app_font_scale);
+    base_css = g_string_free (g_steal_pointer (&css), FALSE);
+    combined = g_strconcat (base_css, accent_css, NULL);
     gtk_css_provider_load_from_string (glass_css, combined);
   }
+
+  g_clear_pointer (&app_font, pango_font_description_free);
 }
 
 

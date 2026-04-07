@@ -24,6 +24,7 @@
 #include "kgx-system-info.h"
 
 #define INTERFACE_SETTINGS_SCHEMA "org.gnome.desktop.interface"
+#define FONT_KEY_NAME "font-name"
 #define MONOSPACE_FONT_KEY_NAME "monospace-font-name"
 
 
@@ -31,6 +32,7 @@ struct _KgxSystemInfo {
   GObject parent;
 
   GSettings *desktop_interface;
+  PangoFontDescription *interface_font;
   PangoFontDescription *monospace_font;
 };
 
@@ -39,6 +41,7 @@ G_DEFINE_FINAL_TYPE (KgxSystemInfo, kgx_system_info, G_TYPE_OBJECT)
 
 enum {
   PROP_0,
+  PROP_INTERFACE_FONT,
   PROP_MONOSPACE_FONT,
   LAST_PROP
 };
@@ -51,6 +54,7 @@ kgx_system_info_dispose (GObject *object)
   KgxSystemInfo *self = KGX_SYSTEM_INFO (object);
 
   g_clear_object (&self->desktop_interface);
+  g_clear_pointer (&self->interface_font, pango_font_description_free);
   g_clear_pointer (&self->monospace_font, pango_font_description_free);
 
   G_OBJECT_CLASS (kgx_system_info_parent_class)->dispose (object);
@@ -66,6 +70,9 @@ kgx_system_info_get_property (GObject    *object,
   KgxSystemInfo *self = KGX_SYSTEM_INFO (object);
 
   switch (property_id) {
+    case PROP_INTERFACE_FONT:
+      g_value_set_boxed (value, self->interface_font);
+      break;
     case PROP_MONOSPACE_FONT:
       g_value_set_boxed (value, self->monospace_font);
       break;
@@ -84,11 +91,30 @@ kgx_system_info_class_init (KgxSystemInfoClass *klass)
   object_class->dispose = kgx_system_info_dispose;
   object_class->get_property = kgx_system_info_get_property;
 
+  pspecs[PROP_INTERFACE_FONT] = g_param_spec_boxed ("interface-font", NULL, NULL,
+                                                   PANGO_TYPE_FONT_DESCRIPTION,
+                                                   G_PARAM_READABLE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
   pspecs[PROP_MONOSPACE_FONT] = g_param_spec_boxed ("monospace-font", NULL, NULL,
                                                     PANGO_TYPE_FONT_DESCRIPTION,
                                                     G_PARAM_READABLE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, LAST_PROP, pspecs);
+}
+
+
+static void
+interface_font_changed (GSettings     *settings,
+                        const char    *key,
+                        KgxSystemInfo *self)
+{
+  g_autofree char *font = g_settings_get_string (self->desktop_interface,
+                                                 FONT_KEY_NAME);
+
+  g_clear_pointer (&self->interface_font, pango_font_description_free);
+  self->interface_font = pango_font_description_from_string (font);
+
+  g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_INTERFACE_FONT]);
 }
 
 
@@ -112,7 +138,11 @@ kgx_system_info_init (KgxSystemInfo *self)
 {
   self->desktop_interface = g_settings_new (INTERFACE_SETTINGS_SCHEMA);
   g_signal_connect_object (self->desktop_interface,
+                           "changed::" FONT_KEY_NAME, G_CALLBACK (interface_font_changed),
+                           self, G_CONNECT_DEFAULT);
+  g_signal_connect_object (self->desktop_interface,
                            "changed::" MONOSPACE_FONT_KEY_NAME, G_CALLBACK (monospace_changed),
                            self, G_CONNECT_DEFAULT);
+  interface_font_changed (self->desktop_interface, FONT_KEY_NAME, self);
   monospace_changed (self->desktop_interface, MONOSPACE_FONT_KEY_NAME, self);
 }

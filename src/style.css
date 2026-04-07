@@ -266,6 +266,10 @@ settings-page .dim-label {
   color: rgba(255, 255, 255, 0.5);
 }
 
+settings-page .settings-value-accent {
+  color: var(--accent-bg-color);
+}
+
 settings-page .title-1 {
   color: var(--accent-bg-color);
 }

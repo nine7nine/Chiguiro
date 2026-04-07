@@ -39,18 +39,23 @@
 #define AUDIBLE_BELL "audible-bell"
 
 #define CUSTOM_FONT "custom-font"
+#define APP_CUSTOM_FONT "app-custom-font"
 
 struct _KgxSettings {
   GObject               parent_instance;
 
   PangoFontDescription *font;
   double                scale;
+  PangoFontDescription *app_font;
+  double                app_scale;
   int                   scrollback_lines;
   gboolean              audible_bell;
   gboolean              visual_bell;
   gboolean              command_complete_notifications;
   gboolean              use_system_font;
   PangoFontDescription *custom_font;
+  gboolean              app_use_system_font;
+  PangoFontDescription *app_custom_font;
   int64_t               scrollback_limit;
   gboolean              ignore_scrollback_limit;
   gboolean              software_flow_control;
@@ -137,6 +142,8 @@ enum {
   PROP_0,
   PROP_FONT,
   PROP_FONT_SCALE,
+  PROP_APP_FONT,
+  PROP_APP_FONT_SCALE,
   PROP_SCALE_CAN_INCREASE,
   PROP_SCALE_CAN_DECREASE,
   PROP_SCROLLBACK_LINES,
@@ -145,6 +152,8 @@ enum {
   PROP_COMMAND_COMPLETE_NOTIFICATIONS,
   PROP_USE_SYSTEM_FONT,
   PROP_CUSTOM_FONT,
+  PROP_APP_USE_SYSTEM_FONT,
+  PROP_APP_CUSTOM_FONT,
   PROP_SCROLLBACK_LIMIT,
   PROP_IGNORE_SCROLLBACK_LIMIT,
   PROP_SOFTWARE_FLOW_CONTROL,
@@ -217,7 +226,9 @@ kgx_settings_dispose (GObject *object)
   kgx_templated_dispose_template (KGX_TEMPLATED (object), KGX_TYPE_SETTINGS);
 
   g_clear_pointer (&self->font, pango_font_description_free);
+  g_clear_pointer (&self->app_font, pango_font_description_free);
   g_clear_pointer (&self->custom_font, pango_font_description_free);
+  g_clear_pointer (&self->app_custom_font, pango_font_description_free);
   g_clear_pointer (&self->livery, kgx_livery_unref);
   g_clear_pointer (&self->process_glass_colors, g_hash_table_unref);
   g_clear_pointer (&self->process_glass_lookup, g_hash_table_unref);
@@ -243,6 +254,21 @@ update_scale (KgxSettings *self, double value)
   g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_FONT_SCALE]);
   g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_SCALE_CAN_INCREASE]);
   g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_SCALE_CAN_DECREASE]);
+}
+
+
+static void
+update_app_scale (KgxSettings *self, double value)
+{
+  double clamped = CLAMP (value, KGX_FONT_SCALE_MIN, KGX_FONT_SCALE_MAX);
+
+  if (self->app_scale == clamped) {
+    return;
+  }
+
+  self->app_scale = clamped;
+
+  g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_APP_FONT_SCALE]);
 }
 
 
@@ -310,6 +336,14 @@ kgx_settings_set_property (GObject      *object,
     case PROP_FONT_SCALE:
       update_scale (self, g_value_get_double (value));
       break;
+    case PROP_APP_FONT:
+      g_clear_pointer (&self->app_font, pango_font_description_free);
+      self->app_font = g_value_dup_boxed (value);
+      g_object_notify_by_pspec (object, pspec);
+      break;
+    case PROP_APP_FONT_SCALE:
+      update_app_scale (self, g_value_get_double (value));
+      break;
     case PROP_SCROLLBACK_LINES:
       {
         int new_value = g_value_get_int (value);
@@ -346,6 +380,15 @@ kgx_settings_set_property (GObject      *object,
       break;
     case PROP_CUSTOM_FONT:
       kgx_settings_set_custom_font (self, g_value_get_boxed (value));
+      break;
+    case PROP_APP_USE_SYSTEM_FONT:
+      kgx_set_boolean_prop (object,
+                            pspec,
+                            &self->app_use_system_font,
+                            value);
+      break;
+    case PROP_APP_CUSTOM_FONT:
+      kgx_settings_set_app_custom_font (self, g_value_get_boxed (value));
       break;
     case PROP_SCROLLBACK_LIMIT:
       kgx_settings_set_scrollback_limit (self, g_value_get_int64 (value));
@@ -533,6 +576,12 @@ kgx_settings_get_property (GObject    *object,
     case PROP_FONT_SCALE:
       g_value_set_double (value, self->scale);
       break;
+    case PROP_APP_FONT:
+      g_value_set_boxed (value, self->app_font);
+      break;
+    case PROP_APP_FONT_SCALE:
+      g_value_set_double (value, self->app_scale);
+      break;
     case PROP_SCALE_CAN_INCREASE:
       g_value_set_boolean (value, self->scale < KGX_FONT_SCALE_MAX);
       break;
@@ -556,6 +605,12 @@ kgx_settings_get_property (GObject    *object,
       break;
     case PROP_CUSTOM_FONT:
       g_value_take_boxed (value, kgx_settings_dup_custom_font (self));
+      break;
+    case PROP_APP_USE_SYSTEM_FONT:
+      g_value_set_boolean (value, self->app_use_system_font);
+      break;
+    case PROP_APP_CUSTOM_FONT:
+      g_value_take_boxed (value, kgx_settings_dup_app_custom_font (self));
       break;
     case PROP_SCROLLBACK_LIMIT:
       g_value_set_int64 (value, self->scrollback_limit);
@@ -679,6 +734,18 @@ kgx_settings_class_init (KgxSettingsClass *klass)
                          KGX_FONT_SCALE_DEFAULT,
                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
+  pspecs[PROP_APP_FONT] =
+    g_param_spec_boxed ("app-font", NULL, NULL,
+                        PANGO_TYPE_FONT_DESCRIPTION,
+                        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_APP_FONT_SCALE] =
+    g_param_spec_double ("app-font-scale", NULL, NULL,
+                         KGX_FONT_SCALE_MIN,
+                         KGX_FONT_SCALE_MAX,
+                         KGX_FONT_SCALE_DEFAULT,
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
   pspecs[PROP_SCALE_CAN_INCREASE] =
     g_param_spec_boolean ("scale-can-increase", NULL, NULL,
                           TRUE,
@@ -723,6 +790,16 @@ kgx_settings_class_init (KgxSettingsClass *klass)
 
   pspecs[PROP_CUSTOM_FONT] =
     g_param_spec_boxed ("custom-font", NULL, NULL,
+                        PANGO_TYPE_FONT_DESCRIPTION,
+                        G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_APP_USE_SYSTEM_FONT] =
+    g_param_spec_boolean ("app-use-system-font", NULL, NULL,
+                          TRUE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  pspecs[PROP_APP_CUSTOM_FONT] =
+    g_param_spec_boxed ("app-custom-font", NULL, NULL,
                         PANGO_TYPE_FONT_DESCRIPTION,
                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
@@ -1056,6 +1133,9 @@ kgx_settings_init (KgxSettings *self)
   g_settings_bind (self->settings, "font-scale",
                    self, "font-scale",
                    G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind (self->settings, "app-font-scale",
+                   self, "app-font-scale",
+                   G_SETTINGS_BIND_DEFAULT);
   g_settings_bind (self->settings, "audible-bell",
                    self, "audible-bell",
                    G_SETTINGS_BIND_DEFAULT);
@@ -1070,6 +1150,15 @@ kgx_settings_init (KgxSettings *self)
                    G_SETTINGS_BIND_DEFAULT);
   g_settings_bind_with_mapping (self->settings, "custom-font",
                                 self, "custom-font",
+                                G_SETTINGS_BIND_DEFAULT,
+                                decode_font,
+                                encode_font,
+                                NULL, NULL);
+  g_settings_bind (self->settings, "app-use-system-font",
+                   self, "app-use-system-font",
+                   G_SETTINGS_BIND_DEFAULT);
+  g_settings_bind_with_mapping (self->settings, "app-custom-font",
+                                self, "app-custom-font",
                                 G_SETTINGS_BIND_DEFAULT,
                                 decode_font,
                                 encode_font,
@@ -1371,6 +1460,34 @@ kgx_settings_set_custom_font (KgxSettings          *self,
   self->custom_font = pango_font_description_copy (custom_font);
 
   g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_CUSTOM_FONT]);
+}
+
+
+PangoFontDescription *
+kgx_settings_dup_app_custom_font (KgxSettings *self)
+{
+  g_return_val_if_fail (KGX_IS_SETTINGS (self), NULL);
+
+  return pango_font_description_copy (self->app_custom_font);
+}
+
+
+void
+kgx_settings_set_app_custom_font (KgxSettings          *self,
+                                  PangoFontDescription *custom_font)
+{
+  g_return_if_fail (KGX_IS_SETTINGS (self));
+
+  if (self->app_custom_font == custom_font ||
+      (self->app_custom_font && custom_font &&
+       pango_font_description_equal (self->app_custom_font, custom_font))) {
+    return;
+  }
+
+  g_clear_pointer (&self->app_custom_font, pango_font_description_free);
+  self->app_custom_font = pango_font_description_copy (custom_font);
+
+  g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_APP_CUSTOM_FONT]);
 }
 
 

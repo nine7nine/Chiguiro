@@ -107,9 +107,14 @@ struct _KgxSettingsPage {
   GtkWidget            *audible_bell;
   GtkWidget            *visual_bell;
   GtkWidget            *command_complete_notifications;
+  GtkWidget            *settings_root;
+  GtkWidget            *about_content;
   GtkWidget            *use_system_font;
   GtkWidget            *custom_font;
   GtkWidget            *text_scale;
+  GtkWidget            *app_use_system_font;
+  GtkWidget            *app_font;
+  GtkWidget            *app_text_scale;
   GtkWidget            *transparency_level;
   GtkWidget            *glass_color;
   GtkWidget            *glass_opacity;
@@ -117,6 +122,7 @@ struct _KgxSettingsPage {
   GtkWidget            *accent_color;
   GtkWidget            *unlimited_scrollback;
   GtkWidget            *scrollback;
+  GtkWidget            *page_header;
   GtkWidget            *overscroll_switch;
   GtkWidget            *overscroll_color_btn;
   GtkWidget            *overscroll_preset_btn;
@@ -139,6 +145,10 @@ struct _KgxSettingsPage {
   GtkWidget            *ag_gaps[APP_GLASS_SLOTS];
   GtkWidget            *ag_speeds[APP_GLASS_SLOTS];
   GtkWidget            *ag_thks[APP_GLASS_SLOTS];
+  GtkWidget            *general_page_clamp;
+  GtkWidget            *app_glass_page_clamp;
+  GtkWidget            *particles_page_clamp;
+  GtkWidget            *shortcuts_page_clamp;
   GtkWidget            *logo_picture;
   GtkWidget            *version_label;
   GtkWidget            *page_title;
@@ -148,6 +158,7 @@ struct _KgxSettingsPage {
   KgxSprite            *sprite;
 
   GtkExpressionWatch   *font_watch;
+  GtkExpressionWatch   *app_font_watch;
 };
 
 
@@ -170,6 +181,84 @@ static GParamSpec *pspecs[LAST_PROP] = { NULL, };
 
 
 static void
+set_page_clamp_margins (GtkWidget *widget,
+                        int        top,
+                        int        bottom,
+                        int        start,
+                        int        end)
+{
+  gtk_widget_set_margin_top (widget, top);
+  gtk_widget_set_margin_bottom (widget, bottom);
+  gtk_widget_set_margin_start (widget, start);
+  gtk_widget_set_margin_end (widget, end);
+}
+
+
+static void
+update_layout_mode (KgxSettingsPage *self)
+{
+  int width = gtk_widget_get_width (GTK_WIDGET (self));
+  int height = gtk_widget_get_height (GTK_WIDGET (self));
+  gboolean compact;
+
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  compact = width < 680 || height < 720;
+
+  if (compact) {
+    gtk_widget_add_css_class (GTK_WIDGET (self), "compact");
+  } else {
+    gtk_widget_remove_css_class (GTK_WIDGET (self), "compact");
+  }
+
+  gtk_box_set_spacing (GTK_BOX (self->settings_root), compact ? 4 : 8);
+  gtk_box_set_spacing (GTK_BOX (self->about_content), compact ? 2 : 4);
+  gtk_box_set_spacing (GTK_BOX (self->page_header), compact ? 2 : 4);
+
+  gtk_widget_set_margin_top (self->about_content, compact ? 8 : 16);
+  gtk_widget_set_margin_top (self->page_header, compact ? 0 : 4);
+  gtk_widget_set_margin_bottom (self->page_header, compact ? 2 : 4);
+
+  gtk_picture_set_can_shrink (GTK_PICTURE (self->logo_picture), compact);
+  gtk_widget_set_size_request (self->logo_picture,
+                               compact ? 88 : -1,
+                               compact ? 104 : -1);
+
+  set_page_clamp_margins (self->general_page_clamp,
+                          compact ? 4 : 8,
+                          compact ? 8 : 12,
+                          compact ? 16 : 24,
+                          compact ? 16 : 24);
+  set_page_clamp_margins (self->app_glass_page_clamp,
+                          compact ? 4 : 8,
+                          compact ? 8 : 12,
+                          compact ? 16 : 24,
+                          compact ? 16 : 24);
+  set_page_clamp_margins (self->particles_page_clamp,
+                          compact ? 12 : 24,
+                          compact ? 8 : 12,
+                          compact ? 16 : 24,
+                          compact ? 16 : 24);
+  set_page_clamp_margins (self->shortcuts_page_clamp,
+                          compact ? 4 : 8,
+                          compact ? 8 : 12,
+                          compact ? 16 : 24,
+                          compact ? 16 : 24);
+}
+
+
+static void
+settings_page_size_changed (GObject    *object,
+                            GParamSpec *pspec,
+                            gpointer    user_data)
+{
+  update_layout_mode (KGX_SETTINGS_PAGE (user_data));
+}
+
+
+static void
 kgx_settings_page_dispose (GObject *object)
 {
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (object);
@@ -182,6 +271,10 @@ kgx_settings_page_dispose (GObject *object)
   if (self->font_watch) {
     gtk_expression_watch_unwatch (self->font_watch);
     self->font_watch = NULL;
+  }
+  if (self->app_font_watch) {
+    gtk_expression_watch_unwatch (self->app_font_watch);
+    self->app_font_watch = NULL;
   }
 
   g_clear_handle_id (&self->app_glass_save_timeout, g_source_remove);
@@ -330,8 +423,43 @@ font_selected (KgxFontPicker   *picker,
                KgxSettingsPage *self)
 {
   kgx_settings_set_custom_font (self->settings, font);
+}
 
-  /* Font picker is currently one-shot — future: use AdwDialog */
+
+static void
+app_font_selected (KgxFontPicker        *picker,
+                   PangoFontDescription *font,
+                   KgxSettingsPage      *self)
+{
+  kgx_settings_set_app_custom_font (self->settings, font);
+}
+
+
+static void
+present_font_picker (GtkWidget             *widget,
+                     PangoFontDescription  *initial_value,
+                     GCallback              selected_callback,
+                     gpointer               user_data,
+                     const char            *title)
+{
+  g_autoptr (AdwDialog) dialog = NULL;
+  AdwNavigationPage *picker;
+
+  picker = g_object_connect (g_object_new (KGX_TYPE_FONT_PICKER,
+                                           "initial-font", initial_value,
+                                           NULL),
+                             "object-signal::selected", selected_callback, user_data,
+                             NULL);
+
+  dialog = g_object_new (ADW_TYPE_DIALOG,
+                         "child", picker,
+                         "title", title,
+                         "follows-content-size", FALSE,
+                         "content-width", 520,
+                         "content-height", 640,
+                         NULL);
+
+  adw_dialog_present (g_steal_pointer (&dialog), widget);
 }
 
 
@@ -342,26 +470,30 @@ select_font_activated (GtkWidget  *widget,
 {
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
   g_autoptr (PangoFontDescription) initial_value = NULL;
-  g_autoptr (AdwDialog) dialog = NULL;
-  AdwNavigationPage *picker;
 
   initial_value = kgx_settings_dup_custom_font (self->settings);
+  present_font_picker (widget,
+                       initial_value,
+                       G_CALLBACK (font_selected),
+                       self,
+                       _("Select Terminal Font"));
+}
 
-  picker = g_object_connect (g_object_new (KGX_TYPE_FONT_PICKER,
-                                           "initial-font", initial_value,
-                                           NULL),
-                             "object-signal::selected", G_CALLBACK (font_selected), self,
-                             NULL);
 
-  dialog = g_object_new (ADW_TYPE_DIALOG,
-                         "child", picker,
-                         "title", "Select Font",
-                         "follows-content-size", FALSE,
-                         "content-width", 520,
-                         "content-height", 640,
-                         NULL);
+static void
+select_app_font_activated (GtkWidget  *widget,
+                           const char *action_name,
+                           GVariant   *parameter)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
+  g_autoptr (PangoFontDescription) initial_value = NULL;
 
-  adw_dialog_present (g_steal_pointer (&dialog), widget);
+  initial_value = kgx_settings_dup_app_custom_font (self->settings);
+  present_font_picker (widget,
+                       initial_value,
+                       G_CALLBACK (app_font_selected),
+                       self,
+                       _("Select Chiguiro Font"));
 }
 
 
@@ -1151,9 +1283,14 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, audible_bell);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, visual_bell);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, command_complete_notifications);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, settings_root);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, about_content);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, use_system_font);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, custom_font);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, text_scale);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_use_system_font);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_font);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_text_scale);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, transparency_level);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, glass_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, glass_opacity);
@@ -1161,12 +1298,17 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, accent_color);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, unlimited_scrollback);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, scrollback);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_header);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, ambient_switch);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particle_throttle_switch);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particle_hz_row);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particle_hz);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, tunables_grid);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_grid);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, general_page_clamp);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, app_glass_page_clamp);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, particles_page_clamp);
+  gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, shortcuts_page_clamp);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, logo_picture);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, version_label);
   gtk_widget_class_bind_template_child (widget_class, KgxSettingsPage, page_title);
@@ -1180,6 +1322,10 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
                                    "settings.select-font",
                                    NULL,
                                    select_font_activated);
+  gtk_widget_class_install_action (widget_class,
+                                   "settings.select-app-font",
+                                   NULL,
+                                   select_app_font_activated);
 
   gtk_widget_class_set_css_name (widget_class, "settings-page");
 }
@@ -1188,6 +1334,7 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
 struct _WatchData {
   KgxSettingsPage      *page;
   GtkExpressionWatch   *watch;
+  const char           *action_name;
 };
 
 
@@ -1213,13 +1360,38 @@ notify_use_system (gpointer user_data)
 
   if (G_LIKELY (gtk_expression_watch_evaluate (data->watch, &value))) {
     gtk_widget_action_set_enabled (GTK_WIDGET (data->page),
-                                   "settings.select-font",
+                                   data->action_name,
                                    !g_value_get_boolean (&value));
   } else {
     gtk_widget_action_set_enabled (GTK_WIDGET (data->page),
-                                   "settings.select-font",
+                                   data->action_name,
                                    FALSE);
   }
+}
+
+
+static void
+bind_font_action_watch (KgxSettingsPage    *self,
+                        const char         *property_name,
+                        const char         *action_name,
+                        GtkExpressionWatch **watch_slot)
+{
+  g_autoptr (GtkExpression) expression = NULL;
+  g_autoptr (WatchData) data = watch_data_alloc ();
+
+  g_set_weak_pointer (&data->page, self);
+  data->action_name = action_name;
+
+  expression =
+    gtk_property_expression_new (KGX_TYPE_SETTINGS,
+                                 gtk_property_expression_new (G_TYPE_BINDING_GROUP,
+                                                              gtk_object_expression_new (G_OBJECT (self->settings_binds)),
+                                                              "source"),
+                                 property_name);
+
+  *watch_slot = gtk_expression_watch (expression, self, notify_use_system, data, watch_data_free);
+  data->watch = *watch_slot;
+  g_steal_pointer (&data);
 }
 
 
@@ -1501,12 +1673,14 @@ carousel_page_changed (AdwCarousel     *carousel,
 static void
 kgx_settings_page_init (KgxSettingsPage *self)
 {
-  g_autoptr (GtkExpression) expression = NULL;
-  g_autoptr (WatchData) data = watch_data_alloc ();
-
   self->app_glass_inhibit_save = TRUE;
 
   gtk_widget_init_template (GTK_WIDGET (self));
+
+  g_signal_connect (self, "notify::width",
+                    G_CALLBACK (settings_page_size_changed), self);
+  g_signal_connect (self, "notify::height",
+                    G_CALLBACK (settings_page_size_changed), self);
 
   /* Set version label from build-time PACKAGE_VERSION */
   {
@@ -1589,20 +1763,14 @@ kgx_settings_page_init (KgxSettingsPage *self)
                                  24, 28, 10, 96, 10.0);
   gtk_picture_set_paintable (GTK_PICTURE (self->logo_picture),
                              GDK_PAINTABLE (self->sprite));
+  update_layout_mode (self);
 
-  g_set_weak_pointer (&data->page, self);
-
-  expression =
-    gtk_property_expression_new (KGX_TYPE_SETTINGS,
-                                 gtk_property_expression_new (G_TYPE_BINDING_GROUP,
-                                                              gtk_object_expression_new (G_OBJECT (self->settings_binds)),
-                                                              "source"),
-                                 "use-system-font");
-
-  self->font_watch =
-    gtk_expression_watch (expression, self, notify_use_system, data, watch_data_free);
-  data->watch = self->font_watch;
-  g_steal_pointer (&data); /* this is actually stolen by the watch */
+  bind_font_action_watch (self, "use-system-font",
+                          "settings.select-font",
+                          &self->font_watch);
+  bind_font_action_watch (self, "app-use-system-font",
+                          "settings.select-app-font",
+                          &self->app_font_watch);
 
   g_binding_group_bind (self->settings_binds, "audible-bell",
                         self->audible_bell, "active",
@@ -1618,6 +1786,15 @@ kgx_settings_page_init (KgxSettingsPage *self)
                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
   g_binding_group_bind_full (self->settings_binds, "font-scale",
                              self->text_scale, "value",
+                             G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+                             value_to_percent,
+                             percent_to_value,
+                             NULL, NULL);
+  g_binding_group_bind (self->settings_binds, "app-use-system-font",
+                        self->app_use_system_font, "active",
+                        G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  g_binding_group_bind_full (self->settings_binds, "app-font-scale",
+                             self->app_text_scale, "value",
                              G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
                              value_to_percent,
                              percent_to_value,

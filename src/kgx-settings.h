@@ -77,6 +77,9 @@ gboolean              kgx_settings_get_command_complete_notifications (KgxSettin
 PangoFontDescription *kgx_settings_dup_custom_font           (KgxSettings           *self);
 void                  kgx_settings_set_custom_font      (KgxSettings           *self,
                                                          PangoFontDescription  *custom_font);
+PangoFontDescription *kgx_settings_dup_app_custom_font      (KgxSettings           *self);
+void                  kgx_settings_set_app_custom_font      (KgxSettings           *self,
+                                                             PangoFontDescription  *custom_font);
 gboolean              kgx_settings_get_software_flow_control (KgxSettings      *self);
 KgxLivery            *kgx_settings_get_livery                (KgxSettings           *self);
 void                  kgx_settings_set_livery                (KgxSettings           *self,

@@ -12,7 +12,7 @@
             <property name="propagate-natural-width">True</property>
             <property name="propagate-natural-height">False</property>
             <property name="child">
-      <object class="GtkBox">
+      <object class="GtkBox" id="settings_root">
             <property name="orientation">vertical</property>
             <property name="valign">start</property>
             <property name="spacing">8</property>
@@ -25,7 +25,7 @@
             <property name="halign">center</property>
             <property name="valign">start</property>
             <child>
-              <object class="GtkBox">
+              <object class="GtkBox" id="about_content">
                 <property name="orientation">vertical</property>
                 <property name="halign">center</property>
                 <property name="valign">start</property>
@@ -94,7 +94,7 @@
 
         <!-- ═══ Page indicator + dots ═══ -->
         <child>
-          <object class="GtkBox">
+          <object class="GtkBox" id="page_header">
             <property name="orientation">vertical</property>
             <property name="halign">center</property>
             <property name="valign">start</property>
@@ -109,7 +109,7 @@
                 </style>
                 <attributes>
                   <attribute name="weight" value="bold" />
-                  <attribute name="scale" value="1.4" />
+                  <attribute name="scale" value="1.2" />
                 </attributes>
               </object>
             </child>
@@ -139,7 +139,7 @@
                 <property name="hexpand">True</property>
                 <property name="halign">fill</property>
                 <child>
-                  <object class="AdwClamp">
+                  <object class="AdwClamp" id="general_page_clamp">
                     <property name="maximum-size">900</property>
                     <property name="valign">start</property>
                     <property name="hexpand">True</property>
@@ -157,46 +157,90 @@
                           <object class="AdwPreferencesGroup">
                             <property name="title" translatable="yes">Font</property>
                             <child>
-                              <object class="AdwSwitchRow" id="use_system_font">
-                                <property name="title" translatable="yes">Use _System Default</property>
-                                <property name="use-underline">True</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="AdwActionRow" id="custom_font">
-                                <property name="title" translatable="yes">Custom _Font</property>
-                                <property name="use-underline">True</property>
-                                <property name="activatable">True</property>
-                                <property name="action-name">settings.select-font</property>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Terminal Font</property>
                                 <child type="suffix">
                                   <object class="GtkBox">
-                                    <property name="spacing">6</property>
+                                    <property name="spacing">10</property>
+                                    <child>
+                                      <object class="GtkButton" id="custom_font">
+                                        <property name="action-name">settings.select-font</property>
+                                        <style>
+                                          <class name="flat" />
+                                        </style>
+                                        <property name="child">
+                                          <object class="GtkBox">
+                                            <property name="spacing">6</property>
+                                            <child>
+                                              <object class="GtkLabel">
+                                                <binding name="attributes">
+                                                  <closure type="PangoAttrList" function="font_as_attributes">
+                                                    <lookup name="font">
+                                                      <lookup name="settings">KgxSettingsPage</lookup>
+                                                    </lookup>
+                                                  </closure>
+                                                </binding>
+                                                <binding name="label">
+                                                  <closure type="gchararray" function="font_as_label">
+                                                    <lookup name="font">
+                                                      <lookup name="settings">KgxSettingsPage</lookup>
+                                                    </lookup>
+                                                  </closure>
+                                                </binding>
+                                                <property name="ellipsize">middle</property>
+                                                <style>
+                                                  <class name="settings-value-accent" />
+                                                </style>
+                                              </object>
+                                            </child>
+                                            <child>
+                                              <object class="GtkImage">
+                                                <property name="icon-name">go-next-symbolic</property>
+                                                <property name="pixel-size">16</property>
+                                              </object>
+                                            </child>
+                                          </object>
+                                        </property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkSpinButton" id="text_scale">
+                                        <property name="valign">center</property>
+                                        <property name="numeric">True</property>
+                                        <property name="digits">0</property>
+                                        <property name="width-chars">3</property>
+                                        <property name="adjustment">
+                                          <object class="GtkAdjustment">
+                                            <property name="lower">50</property>
+                                            <property name="upper">400</property>
+                                            <property name="page-increment">25</property>
+                                            <property name="step-increment">10</property>
+                                          </object>
+                                        </property>
+                                      </object>
+                                    </child>
                                     <child>
                                       <object class="GtkLabel">
-                                        <binding name="attributes">
-                                          <closure type="PangoAttrList" function="font_as_attributes">
-                                            <lookup name="custom-font">
-                                              <lookup name="settings">KgxSettingsPage</lookup>
-                                            </lookup>
-                                          </closure>
-                                        </binding>
-                                        <binding name="label">
-                                          <closure type="gchararray" function="font_as_label">
-                                            <lookup name="custom-font">
-                                              <lookup name="settings">KgxSettingsPage</lookup>
-                                            </lookup>
-                                          </closure>
-                                        </binding>
-                                        <property name="ellipsize">middle</property>
+                                        <property name="label">%</property>
+                                        <property name="valign">center</property>
                                         <style>
                                           <class name="dim-label" />
                                         </style>
                                       </object>
                                     </child>
                                     <child>
-                                      <object class="GtkImage">
-                                        <property name="icon-name">go-next-symbolic</property>
-                                        <property name="pixel-size">16</property>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">System</property>
+                                        <property name="valign">center</property>
+                                        <style>
+                                          <class name="dim-label" />
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkSwitch" id="use_system_font">
+                                        <property name="valign">center</property>
+                                        <property name="tooltip-text" translatable="yes">Use the system terminal font</property>
                                       </object>
                                     </child>
                                   </object>
@@ -204,19 +248,94 @@
                               </object>
                             </child>
                             <child>
-                              <object class="AdwSpinRow" id="text_scale">
-                                <property name="title" translatable="yes">Text _Scale</property>
-                                <property name="use-underline">True</property>
-                                <property name="numeric">True</property>
-                                <property name="digits">0</property>
-                                <property name="adjustment">
-                                  <object class="GtkAdjustment">
-                                    <property name="lower">50</property>
-                                    <property name="upper">400</property>
-                                    <property name="page-increment">25</property>
-                                    <property name="step-increment">10</property>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Chiguiro Font</property>
+                                <child type="suffix">
+                                  <object class="GtkBox">
+                                    <property name="spacing">10</property>
+                                    <child>
+                                      <object class="GtkButton" id="app_font">
+                                        <property name="action-name">settings.select-app-font</property>
+                                        <style>
+                                          <class name="flat" />
+                                        </style>
+                                        <property name="child">
+                                          <object class="GtkBox">
+                                            <property name="spacing">6</property>
+                                            <child>
+                                              <object class="GtkLabel">
+                                                <binding name="attributes">
+                                                  <closure type="PangoAttrList" function="font_as_attributes">
+                                                    <lookup name="app-font">
+                                                      <lookup name="settings">KgxSettingsPage</lookup>
+                                                    </lookup>
+                                                  </closure>
+                                                </binding>
+                                                <binding name="label">
+                                                  <closure type="gchararray" function="font_as_label">
+                                                    <lookup name="app-font">
+                                                      <lookup name="settings">KgxSettingsPage</lookup>
+                                                    </lookup>
+                                                  </closure>
+                                                </binding>
+                                                <property name="ellipsize">middle</property>
+                                                <style>
+                                                  <class name="settings-value-accent" />
+                                                </style>
+                                              </object>
+                                            </child>
+                                            <child>
+                                              <object class="GtkImage">
+                                                <property name="icon-name">go-next-symbolic</property>
+                                                <property name="pixel-size">16</property>
+                                              </object>
+                                            </child>
+                                          </object>
+                                        </property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkSpinButton" id="app_text_scale">
+                                        <property name="valign">center</property>
+                                        <property name="numeric">True</property>
+                                        <property name="digits">0</property>
+                                        <property name="width-chars">3</property>
+                                        <property name="adjustment">
+                                          <object class="GtkAdjustment">
+                                            <property name="lower">50</property>
+                                            <property name="upper">400</property>
+                                            <property name="page-increment">25</property>
+                                            <property name="step-increment">10</property>
+                                          </object>
+                                        </property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">%</property>
+                                        <property name="valign">center</property>
+                                        <style>
+                                          <class name="dim-label" />
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label" translatable="yes">System</property>
+                                        <property name="valign">center</property>
+                                        <style>
+                                          <class name="dim-label" />
+                                        </style>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkSwitch" id="app_use_system_font">
+                                        <property name="valign">center</property>
+                                        <property name="tooltip-text" translatable="yes">Use the system application font</property>
+                                      </object>
+                                    </child>
                                   </object>
-                                </property>
+                                </child>
                               </object>
                             </child>
                           </object>
@@ -376,7 +495,7 @@
                 <property name="hexpand">True</property>
                 <property name="halign">fill</property>
                 <child>
-                  <object class="AdwClamp">
+                  <object class="AdwClamp" id="app_glass_page_clamp">
                     <property name="maximum-size">900</property>
                     <property name="valign">start</property>
                     <property name="hexpand">True</property>
@@ -404,7 +523,7 @@
                 <property name="hexpand">True</property>
                 <property name="halign">fill</property>
                 <child>
-                  <object class="AdwClamp">
+                  <object class="AdwClamp" id="particles_page_clamp">
                     <property name="maximum-size">900</property>
                     <property name="valign">start</property>
                     <property name="hexpand">True</property>
@@ -528,7 +647,7 @@
                 <property name="hexpand">True</property>
                 <property name="halign">fill</property>
                 <child>
-                  <object class="AdwClamp">
+                  <object class="AdwClamp" id="shortcuts_page_clamp">
                     <property name="maximum-size">900</property>
                     <property name="valign">start</property>
                     <property name="hexpand">True</property>
