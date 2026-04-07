@@ -22,10 +22,10 @@
 #include <gio/gio.h>
 #include <vte/vte.h>
 
-#include "kgx-edge.h"
 #include "kgx-livery-manager.h"
 #include "kgx-livery.h"
 #include "kgx-marshals.h"
+#include "kgx-particle.h"
 #include "kgx-system-info.h"
 #include "kgx-templated.h"
 #include "kgx-utils.h"
@@ -207,71 +207,6 @@ static const struct {
   [TUNE_THK_CURVE]    = { 0,   0,   0,   0,   1, 3, 2, 2, TRUE },
 };
 
-/* ── Tunable field accessors ──────────────────────────────── */
-
-static inline double
-get_tunable_double_field (const KgxParticleTunables *t, int field)
-{
-  switch (field) {
-  case TUNE_SPEED:       return t->speed;
-  case TUNE_TAIL_LENGTH: return t->tail_length;
-  case TUNE_PULSE_DEPTH: return t->pulse_depth;
-  case TUNE_PULSE_SPEED: return t->pulse_speed;
-  case TUNE_ENV_ATTACK:  return t->env_attack;
-  case TUNE_ENV_RELEASE: return t->env_release;
-  case TUNE_THK_ATTACK:  return t->thk_attack;
-  case TUNE_THK_RELEASE: return t->thk_release;
-  default:               return 0.0;
-  }
-}
-
-static inline void
-set_tunable_double_field (KgxParticleTunables *t, int field, double v)
-{
-  switch (field) {
-  case TUNE_SPEED:       t->speed       = v; break;
-  case TUNE_TAIL_LENGTH: t->tail_length = v; break;
-  case TUNE_PULSE_DEPTH: t->pulse_depth = v; break;
-  case TUNE_PULSE_SPEED: t->pulse_speed = v; break;
-  case TUNE_ENV_ATTACK:  t->env_attack  = v; break;
-  case TUNE_ENV_RELEASE: t->env_release = v; break;
-  case TUNE_THK_ATTACK:  t->thk_attack  = v; break;
-  case TUNE_THK_RELEASE: t->thk_release = v; break;
-  default: break;
-  }
-}
-
-static inline int
-get_tunable_int_field (const KgxParticleTunables *t, int field)
-{
-  switch (field) {
-  case TUNE_THICKNESS:        return t->thickness;
-  case TUNE_RELEASE_MODE:     return t->release_mode;
-  case TUNE_SHAPE:            return t->shape;
-  case TUNE_ENV_CURVE:        return t->env_curve;
-  case TUNE_GAP:              return t->gap;
-  case TUNE_THK_RELEASE_MODE: return t->thk_release_mode;
-  case TUNE_THK_CURVE:        return t->thk_curve;
-  default:                return 0;
-  }
-}
-
-static inline void
-set_tunable_int_field (KgxParticleTunables *t, int field, int v)
-{
-  switch (field) {
-  case TUNE_THICKNESS:        t->thickness        = v; break;
-  case TUNE_RELEASE_MODE:     t->release_mode     = v; break;
-  case TUNE_SHAPE:            t->shape            = v; break;
-  case TUNE_ENV_CURVE:        t->env_curve        = v; break;
-  case TUNE_GAP:              t->gap              = v; break;
-  case TUNE_THK_RELEASE_MODE: t->thk_release_mode = v; break;
-  case TUNE_THK_CURVE:        t->thk_curve        = v; break;
-  default: break;
-  }
-}
-
-
 static void
 kgx_settings_dispose (GObject *object)
 {
@@ -327,15 +262,15 @@ kgx_settings_set_property (GObject      *object,
     if (tune_meta[field].is_int) {
       int nv = CLAMP (g_value_get_int (value),
                        tune_meta[field].imin, tune_meta[field].imax);
-      if (nv != get_tunable_int_field (t, field)) {
-        set_tunable_int_field (t, field, nv);
+      if (nv != kgx_particle_tunable_get_int (t, field)) {
+        kgx_particle_tunable_set_int (t, field, nv);
         g_object_notify_by_pspec (object, pspec);
       }
     } else {
       double nv = CLAMP (g_value_get_double (value),
                           tune_meta[field].dmin, tune_meta[field].dmax);
-      if (!G_APPROX_VALUE (get_tunable_double_field (t, field), nv, DBL_EPSILON)) {
-        set_tunable_double_field (t, field, nv);
+      if (!G_APPROX_VALUE (kgx_particle_tunable_get_double (t, field), nv, DBL_EPSILON)) {
+        kgx_particle_tunable_set_double (t, field, nv);
         g_object_notify_by_pspec (object, pspec);
       }
     }
@@ -349,15 +284,15 @@ kgx_settings_set_property (GObject      *object,
     if (tune_meta[field].is_int) {
       int nv = CLAMP (g_value_get_int (value),
                        tune_meta[field].imin, tune_meta[field].imax);
-      if (nv != get_tunable_int_field (t, field)) {
-        set_tunable_int_field (t, field, nv);
+      if (nv != kgx_particle_tunable_get_int (t, field)) {
+        kgx_particle_tunable_set_int (t, field, nv);
         g_object_notify_by_pspec (object, pspec);
       }
     } else {
       double nv = CLAMP (g_value_get_double (value),
                           tune_meta[field].dmin, tune_meta[field].dmax);
-      if (!G_APPROX_VALUE (get_tunable_double_field (t, field), nv, DBL_EPSILON)) {
-        set_tunable_double_field (t, field, nv);
+      if (!G_APPROX_VALUE (kgx_particle_tunable_get_double (t, field), nv, DBL_EPSILON)) {
+        kgx_particle_tunable_set_double (t, field, nv);
         g_object_notify_by_pspec (object, pspec);
       }
     }
@@ -566,9 +501,9 @@ kgx_settings_get_property (GObject    *object,
     int field = idx % N_TUNE_FIELDS;
     const KgxParticleTunables *t = &self->edge_preset[pi];
     if (tune_meta[field].is_int)
-      g_value_set_int (value, get_tunable_int_field (t, field));
+      g_value_set_int (value, kgx_particle_tunable_get_int (t, field));
     else
-      g_value_set_double (value, get_tunable_double_field (t, field));
+      g_value_set_double (value, kgx_particle_tunable_get_double (t, field));
     return;
   }
 
@@ -577,9 +512,9 @@ kgx_settings_get_property (GObject    *object,
     int field = property_id - PROP_EDGE_GLOBAL_BASE;
     const KgxParticleTunables *t = &self->edge_global;
     if (tune_meta[field].is_int)
-      g_value_set_int (value, get_tunable_int_field (t, field));
+      g_value_set_int (value, kgx_particle_tunable_get_int (t, field));
     else
-      g_value_set_double (value, get_tunable_double_field (t, field));
+      g_value_set_double (value, kgx_particle_tunable_get_double (t, field));
     return;
   }
 

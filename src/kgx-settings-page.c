@@ -22,7 +22,7 @@
 
 #include "kgx-about.h"
 #include "kgx-application.h"
-#include "kgx-edge.h"
+#include "kgx-particle.h"
 #include "kgx-settings.h"
 #include "kgx-sprite.h"
 #include "kgx-utils.h"
