@@ -230,6 +230,30 @@ kgx_settings_page_dispose (GObject *object)
 
 
 static void
+kgx_settings_page_map (GtkWidget *widget)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
+
+  GTK_WIDGET_CLASS (kgx_settings_page_parent_class)->map (widget);
+
+  if (self->sprite)
+    kgx_sprite_start (self->sprite, widget);
+}
+
+
+static void
+kgx_settings_page_unmap (GtkWidget *widget)
+{
+  KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
+
+  if (self->sprite)
+    kgx_sprite_stop (self->sprite);
+
+  GTK_WIDGET_CLASS (kgx_settings_page_parent_class)->unmap (widget);
+}
+
+
+static void
 kgx_settings_page_set_property (GObject      *object,
                                 guint         property_id,
                                 const GValue *value,
@@ -1146,6 +1170,8 @@ kgx_settings_page_class_init (KgxSettingsPageClass *klass)
   object_class->dispose = kgx_settings_page_dispose;
   object_class->set_property = kgx_settings_page_set_property;
   object_class->get_property = kgx_settings_page_get_property;
+  widget_class->map = kgx_settings_page_map;
+  widget_class->unmap = kgx_settings_page_unmap;
 
 
   pspecs[PROP_SETTINGS] =
@@ -1592,7 +1618,6 @@ kgx_settings_page_init (KgxSettingsPage *self)
                                  24, 28, 10, 96, 10.0);
   gtk_picture_set_paintable (GTK_PICTURE (self->logo_picture),
                              GDK_PAINTABLE (self->sprite));
-  kgx_sprite_start (self->sprite, GTK_WIDGET (self));
 
   g_set_weak_pointer (&data->page, self);
 

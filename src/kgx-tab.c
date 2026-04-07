@@ -1021,8 +1021,13 @@ kgx_tab_start_finish (KgxTab        *self,
   gtk_stack_set_visible_child (GTK_STACK (priv->stack), priv->content);
   gtk_widget_grab_focus (GTK_WIDGET (self));
 
+  if (g_set_object (&priv->train, train)) {
+    g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_TRAIN]);
+  }
+
   /* If this tab isn't active yet (deferred from add_tab), select it now
-   * that the terminal content is ready — avoids a blank flash. */
+   * that the terminal content and train state are ready — avoids a blank
+   * flash and keeps the active-page handoff to one process-glass pass. */
   {
     GtkWidget *pages = gtk_widget_get_ancestor (GTK_WIDGET (self), KGX_TYPE_PAGES);
     if (pages) {
@@ -1035,10 +1040,6 @@ kgx_tab_start_finish (KgxTab        *self,
   gtk_widget_remove_css_class (GTK_WIDGET (self), "starting");
 
   kgx_tab_update_content_opacity (self);
-
-  if (g_set_object (&priv->train, train)) {
-    g_object_notify_by_pspec (G_OBJECT (self), pspecs[PROP_TRAIN]);
-  }
 }
 
 

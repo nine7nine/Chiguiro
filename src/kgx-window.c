@@ -67,7 +67,9 @@ struct _KgxWindowPrivate {
   GtkWidget            *settings_page;
   KgxEdge              *edge;
   char                 *process_glass_override;
+  gboolean              process_glass_force_reconcile;
   guint                 process_glass_idle;
+  gboolean              process_glass_idle_deferred;
   GtkCssProvider       *override_css;
   char                 *window_css_class;
   char                 *override_css_selectors; /* pre-built CSS selector list */
@@ -126,10 +128,16 @@ static void kgx_window_update_glass_opacity (KgxWindow *self);
 static void glass_opacity_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
 static void process_glass_settings_changed (GObject *object, GParamSpec *pspec, KgxWindow *self);
 static gboolean update_process_glass (KgxWindow *self);
+static gboolean update_process_glass_idle (gpointer data);
+static void schedule_process_glass_idle_full (KgxWindow *self,
+                                              gboolean   deferred);
 static void schedule_process_glass_idle (KgxWindow *self);
+static void schedule_process_glass_idle_deferred (KgxWindow *self);
 static gboolean sync_active_train_signals (KgxWindow *self,
                                            KgxTab    *active);
 static void sync_active_page_state (KgxWindow *self);
+
+#define PROCESS_GLASS_TAB_SWITCH_DELAY_MS 16
 
 
 static void
@@ -155,7 +163,6 @@ kgx_window_dispose (GObject *object)
   }
 
   g_clear_handle_id (&priv->process_glass_idle, g_source_remove);
-
   /* glass_css is a process-lifetime singleton — don't clear it */
   if (priv->override_css) {
     gtk_style_context_remove_provider_for_display (
@@ -181,7 +188,7 @@ kgx_window_dispose (GObject *object)
 
   /* Stop all edge animations before parent disposes the widget tree. */
   if (priv->edge) {
-    kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL, 0, -1, -1, 0, 0);
+    kgx_edge_stop_process_particle_immediate (priv->edge);
     kgx_edge_set_ambient (priv->edge, FALSE);
   }
 
@@ -242,6 +249,10 @@ kgx_window_set_property (GObject      *object,
       break;
     case PROP_SETTINGS_VISIBLE:
       if (kgx_set_boolean_prop (object, pspec, &priv->settings_visible, value)) {
+        if (priv->settings_visible) {
+          g_clear_handle_id (&priv->process_glass_idle, g_source_remove);
+          priv->process_glass_idle_deferred = FALSE;
+        }
         if (priv->content_stack) {
           /* Lazily create the settings page on first use — avoids
            * icon lookup warnings during initial window show. */
@@ -262,10 +273,14 @@ kgx_window_set_property (GObject      *object,
         /* Toggle ambient bursts with settings page visibility. */
         kgx_edge_set_ambient (priv->edge, priv->settings_visible);
 
-        /* When leaving settings, re-check process glass so the correct
-         * particle fires for the now-visible tab. */
-        if (!priv->settings_visible)
-          schedule_process_glass_idle (KGX_WINDOW (object));
+        /* Leaving settings should not inherit governor slowdown from the
+         * ambient/settings run, and the re-check can wait until the stack
+         * transition back to terminal has started to settle. */
+        if (!priv->settings_visible) {
+          kgx_edge_stop_ambient_immediate (priv->edge);
+          kgx_edge_reset_redraw_governor (priv->edge);
+          schedule_process_glass_idle_deferred (KGX_WINDOW (object));
+        }
       }
       break;
     default:
@@ -916,16 +931,13 @@ update_process_glass (KgxWindow *self)
      * The timer and idle callbacks re-enter here frequently; without
      * this guard each re-entry kills and restarts the particle, which
      * flips the alternating-mode toggle mid-animation. */
-    if (g_strcmp0 (match, priv->process_glass_override) == 0)
+    if (g_strcmp0 (match, priv->process_glass_override) == 0 &&
+        !priv->process_glass_force_reconcile)
       return G_SOURCE_REMOVE;
 
-    /* Defer particle until glass transition completes — firing both on
-     * the same frame causes a visible stall as particle snapshot and
-     * glass CSS/VTE updates compete for the frame budget.
-     * Stop the old particle immediately so it doesn't keep rendering
-     * during the transition. */
-    kgx_edge_set_process_particle (priv->edge, KGX_PARTICLE_NONE, NULL,
-                                   0, -1, -1, 0, 0);
+    /* Defer particle until glass transition completes. The previous
+     * active tab's process preset is stopped during the active-page
+     * handoff, so this path only decides what to start next. */
     if (preset != KGX_PARTICLE_NONE) {
       priv->deferred_particle = TRUE;
       priv->deferred_preset = preset;
@@ -943,6 +955,7 @@ update_process_glass (KgxWindow *self)
 
   g_free (priv->process_glass_override);
   priv->process_glass_override = match ? g_strdup (match) : NULL;
+  priv->process_glass_force_reconcile = FALSE;
 
   /* Seed glass_current on first call so transitions have a start point. */
   if (!priv->glass_has_current) {
@@ -1026,6 +1039,7 @@ update_process_glass_idle (gpointer data)
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
   priv->process_glass_idle = 0;
+  priv->process_glass_idle_deferred = FALSE;
   update_process_glass (self);
 
   return G_SOURCE_REMOVE;
@@ -1033,15 +1047,50 @@ update_process_glass_idle (gpointer data)
 
 
 static void
-schedule_process_glass_idle (KgxWindow *self)
+schedule_process_glass_idle_full (KgxWindow *self,
+                                  gboolean   deferred)
 {
   KgxWindowPrivate *priv = kgx_window_get_instance_private (self);
 
-  if (priv->process_glass_idle == 0)
+  if (priv->process_glass_idle != 0) {
+    if (deferred || !priv->process_glass_idle_deferred)
+      return;
+
+    g_clear_handle_id (&priv->process_glass_idle, g_source_remove);
+  }
+
+  priv->process_glass_idle_deferred = deferred;
+
+  if (deferred) {
+    priv->process_glass_idle = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE,
+                                                   PROCESS_GLASS_TAB_SWITCH_DELAY_MS,
+                                                   update_process_glass_idle,
+                                                   g_object_ref (self),
+                                                   g_object_unref);
+    g_source_set_name_by_id (priv->process_glass_idle,
+                             "[kgx] process glass deferred");
+  } else {
     priv->process_glass_idle = g_idle_add_full (G_PRIORITY_HIGH_IDLE,
-                                                 update_process_glass_idle,
-                                                 g_object_ref (self),
-                                                 g_object_unref);
+                                                update_process_glass_idle,
+                                                g_object_ref (self),
+                                                g_object_unref);
+    g_source_set_name_by_id (priv->process_glass_idle,
+                             "[kgx] process glass");
+  }
+}
+
+
+static void
+schedule_process_glass_idle (KgxWindow *self)
+{
+  schedule_process_glass_idle_full (self, FALSE);
+}
+
+
+static void
+schedule_process_glass_idle_deferred (KgxWindow *self)
+{
+  schedule_process_glass_idle_full (self, TRUE);
 }
 
 
@@ -1105,6 +1154,16 @@ sync_active_page_state (KgxWindow *self)
   g_signal_group_set_target (priv->tab_signals, active);
   sync_active_train_signals (self, active);
 
+  /* The process preset belongs to the previously active tab. Stop it as
+   * soon as ownership changes; process-glass reconciliation will decide
+   * what, if anything, to start for the newly active tab. */
+  kgx_edge_stop_process_particle_immediate (priv->edge);
+  priv->process_glass_force_reconcile = TRUE;
+
+  /* Tab handoff churn should not leave the edge governor in a degraded mode
+   * after the close/open animation is over. */
+  kgx_edge_reset_redraw_governor (priv->edge);
+
   /* Immediately snap the new terminal's background to the current
    * glass color so there's no flash between the tab switch (which
    * makes the new terminal visible) and the glass transition start
@@ -1125,9 +1184,16 @@ sync_active_page_state (KgxWindow *self)
         kgx_terminal_apply_bg_immediate (terminal, &target_bg);
     }
   }
+
+  /* Ambient is allowed to finish gracefully when leaving settings, but once
+   * the user starts switching/opening/closing tabs again, don't keep those
+   * lingering bursts competing with the tab handoff frame. */
+  if (!priv->settings_visible)
+    kgx_edge_stop_ambient_immediate (priv->edge);
  
-  /* Re-evaluate process glass for the newly active tab. */
-  schedule_process_glass_idle (self);
+  /* Re-evaluate process glass for the newly active tab after the handoff
+   * frame so AdwTabView's own relayout/transition gets first claim on it. */
+  schedule_process_glass_idle_deferred (self);
 }
 
 static void

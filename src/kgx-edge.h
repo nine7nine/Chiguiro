@@ -96,6 +96,9 @@ void       kgx_edge_fire_overscroll (KgxEdge         *self,
                                      GtkPositionType  edge);
 void       kgx_edge_set_ambient    (KgxEdge         *self,
                                      gboolean         ambient);
+void       kgx_edge_stop_ambient_immediate (KgxEdge *self);
+void       kgx_edge_reset_redraw_governor (KgxEdge *self);
+void       kgx_edge_stop_process_particle_immediate (KgxEdge *self);
 void       kgx_edge_set_process_particle (KgxEdge          *self,
                                           KgxParticlePreset  preset,
                                           const GdkRGBA     *color,

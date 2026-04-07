@@ -2254,6 +2254,42 @@ kgx_edge_set_ambient (KgxEdge  *self,
 }
 
 
+void
+kgx_edge_stop_ambient_immediate (KgxEdge *self)
+{
+  g_return_if_fail (KGX_IS_EDGE (self));
+
+  self = kgx_edge_get_root (self);
+
+  if (self->ambient_timeout) {
+    g_source_remove (self->ambient_timeout);
+    self->ambient_timeout = 0;
+  }
+
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    if (self->ambient_burst_timeout[i]) {
+      g_source_remove (self->ambient_burst_timeout[i]);
+      self->ambient_burst_timeout[i] = 0;
+    }
+    self->ambient_progress[i] = -1.0;
+    if (self->ambient_anim[i])
+      adw_animation_reset (self->ambient_anim[i]);
+  }
+
+  kgx_edge_mark_dirty (self);
+}
+
+
+void
+kgx_edge_reset_redraw_governor (KgxEdge *self)
+{
+  g_return_if_fail (KGX_IS_EDGE (self));
+
+  self = kgx_edge_get_root (self);
+  kgx_edge_reset_governor (self);
+}
+
+
 /* ── process config parser ───────────────────────────────── */
 
 static KgxParticlePreset
@@ -2415,6 +2451,56 @@ process_particle_done_cb (KgxEdge *self)
 }
 
 
+static void
+kgx_edge_stop_process_particle_now (KgxEdge *self,
+                                    int      old_extent)
+{
+  self->pending_change = FALSE;
+  self->process_preset = KGX_PARTICLE_NONE;
+  self->process_progress = -1.0;
+  self->process_last_snapshot_progress = -1.0;
+  self->process_start_us = 0;
+  self->process_duration_s = 0.0;
+  self->process_linear = FALSE;
+
+  if (self->process_anim)
+    adw_animation_reset (self->process_anim);
+
+  /* Stop process-owned burst state immediately. Ambient uses a separate
+   * engine and is intentionally left running. */
+  if (self->firework_timeout) {
+    g_source_remove (self->firework_timeout);
+    self->firework_timeout = 0;
+  }
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    if (self->burst_timeout[i]) {
+      g_source_remove (self->burst_timeout[i]);
+      self->burst_timeout[i] = 0;
+    }
+    self->burst_progress[i] = -1.0;
+    if (self->burst_anim[i])
+      adw_animation_reset (self->burst_anim[i]);
+  }
+
+  kgx_edge_queue_resize_views_if_needed (self, old_extent);
+  kgx_edge_mark_dirty (self);
+}
+
+
+void
+kgx_edge_stop_process_particle_immediate (KgxEdge *self)
+{
+  int old_extent;
+
+  g_return_if_fail (KGX_IS_EDGE (self));
+
+  self = kgx_edge_get_root (self);
+  old_extent = kgx_edge_get_strip_extent (self);
+
+  kgx_edge_stop_process_particle_now (self, old_extent);
+}
+
+
 void
 kgx_edge_set_process_particle (KgxEdge          *self,
                                KgxParticlePreset  preset,
@@ -2476,26 +2562,7 @@ kgx_edge_set_process_particle (KgxEdge          *self,
     self->process_color = *color;
 
   if (preset == KGX_PARTICLE_NONE) {
-    self->process_progress = -1.0;
-    self->process_start_us = 0;
-    if (self->process_anim)
-      adw_animation_reset (self->process_anim);
-    /* Stop firework cycle and all in-flight bursts */
-    if (self->firework_timeout) {
-      g_source_remove (self->firework_timeout);
-      self->firework_timeout = 0;
-    }
-    for (int i = 0; i < MAX_BURSTS; i++) {
-      if (self->burst_timeout[i]) {
-        g_source_remove (self->burst_timeout[i]);
-        self->burst_timeout[i] = 0;
-      }
-      self->burst_progress[i] = -1.0;
-      if (self->burst_anim[i])
-        adw_animation_reset (self->burst_anim[i]);
-    }
-    kgx_edge_queue_resize_views_if_needed (self, old_extent);
-    kgx_edge_mark_dirty (self);
+    kgx_edge_stop_process_particle_now (self, old_extent);
     return;
   }
 
