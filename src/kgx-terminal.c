@@ -1,6 +1,7 @@
 /* kgx-terminal.c
  *
  * Copyright 2019-2025 Zander Brown
+ * Copyright 2026 jordan Johnston
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -887,8 +888,6 @@ kgx_terminal_root (GtkWidget *widget)
 static void
 kgx_terminal_unroot (GtkWidget *widget)
 {
-  KgxTerminal *self = KGX_TERMINAL (widget);
-
   /* Keep translucent=TRUE even when unrooted */
 
   GTK_WIDGET_CLASS (kgx_terminal_parent_class)->unroot (widget);

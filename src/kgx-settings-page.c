@@ -1,6 +1,6 @@
 /* kgx-settings-page.c
  *
- * Copyright 2024 Zander Brown
+ * Copyright 2024-2026 jordan Johnston
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -489,56 +489,6 @@ double_to_int (GBinding     *binding,
 }
 
 
-/* Map KgxParticlePreset enum (1-6) <-> alphabetical indicator dropdown index (0-5).
- * Enum: 1=FIREWORKS 2=CORNERS 3=PULSE_OUT 4=ROTATE 5=PING_PONG 6=AMBIENT
- * Alpha: 0=ambient 1=corners 2=fireworks 3=ping-pong 4=pulse-out 5=rotate */
-static const guint preset_enum_to_indicator[] = {
-  [0] = 0,
-  [KGX_PARTICLE_FIREWORKS] = 2,
-  [KGX_PARTICLE_CORNERS]   = 1,
-  [KGX_PARTICLE_PULSE_OUT] = 4,
-  [KGX_PARTICLE_ROTATE]    = 5,
-  [KGX_PARTICLE_PING_PONG] = 3,
-  [KGX_PARTICLE_AMBIENT]   = 0,
-};
-
-static const int indicator_to_preset_enum[] = {
-  KGX_PARTICLE_AMBIENT,   /* 0: ambient */
-  KGX_PARTICLE_CORNERS,   /* 1: corners */
-  KGX_PARTICLE_FIREWORKS, /* 2: fireworks */
-  KGX_PARTICLE_PING_PONG, /* 3: ping-pong */
-  KGX_PARTICLE_PULSE_OUT, /* 4: pulse-out */
-  KGX_PARTICLE_ROTATE,    /* 5: rotate */
-};
-
-static gboolean
-preset_int_to_selected (GBinding     *binding,
-                        const GValue *from,
-                        GValue       *to,
-                        gpointer      user_data)
-{
-  int v = g_value_get_int (from);
-  if (v < 1 || v > (int) G_N_ELEMENTS (indicator_to_preset_enum))
-    v = KGX_PARTICLE_FIREWORKS;
-  g_value_set_uint (to, preset_enum_to_indicator[v]);
-  return TRUE;
-}
-
-
-static gboolean
-selected_to_preset_int (GBinding     *binding,
-                        const GValue *from,
-                        GValue       *to,
-                        gpointer      user_data)
-{
-  guint sel = g_value_get_uint (from);
-  if (sel >= G_N_ELEMENTS (indicator_to_preset_enum))
-    sel = 0;
-  g_value_set_int (to, indicator_to_preset_enum[sel]);
-  return TRUE;
-}
-
-
 static const char *shape_labels[] = { "\u25A0", "\u25CF", "\u25C6", "\u25B6" };
 
 
@@ -659,11 +609,12 @@ sync_all_release_modes (KgxSettingsPage *self)
   for (int ci = 0; ci < (int) G_N_ELEMENTS (release_cols); ci++) {
     int col = release_cols[ci];
     for (int r = 0; r < N_PRESET_ROWS; r++) {
+      const PresetRowDesc *pr;
+      char prop[64];
       GtkWidget *w = self->tune_widgets[r][col];
       if (!w)
         continue;
-      const PresetRowDesc *pr = &preset_rows[r];
-      char prop[64];
+      pr = &preset_rows[r];
       if (pr->settings_suffix)
         g_snprintf (prop, sizeof prop, "edge-%s-%s", release_fields[ci], pr->settings_suffix);
       else
@@ -721,11 +672,12 @@ static void
 sync_all_gaps (KgxSettingsPage *self)
 {
   for (int r = 0; r < N_PRESET_ROWS; r++) {
+    const PresetRowDesc *pr;
+    char prop[64];
     GtkWidget *w = self->tune_widgets[r][COL_GAP];
     if (!w)
       continue;
-    const PresetRowDesc *pr = &preset_rows[r];
-    char prop[64];
+    pr = &preset_rows[r];
     if (pr->settings_suffix)
       g_snprintf (prop, sizeof prop, "edge-gap-%s", pr->settings_suffix);
     else
@@ -788,11 +740,12 @@ sync_all_curves (KgxSettingsPage *self)
   for (int ci = 0; ci < (int) G_N_ELEMENTS (curve_cols); ci++) {
     int col = curve_cols[ci];
     for (int r = 0; r < N_PRESET_ROWS; r++) {
+      const PresetRowDesc *pr;
+      char prop[64];
       GtkWidget *w = self->tune_widgets[r][col];
       if (!w)
         continue;
-      const PresetRowDesc *pr = &preset_rows[r];
-      char prop[64];
+      pr = &preset_rows[r];
       if (pr->settings_suffix)
         g_snprintf (prop, sizeof prop, "edge-%s-%s", curve_fields[ci], pr->settings_suffix);
       else
@@ -939,9 +892,10 @@ reverse_clicked_cb (GtkButton *button, gpointer user_data)
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
   const char *current = gtk_button_get_label (button);
   int cur = 0;
+  int next;
   if (current && g_str_equal (current, reverse_labels[1])) cur = 1;
   else if (current && g_str_equal (current, reverse_labels[2])) cur = 2;
-  int next = (cur + 1) % 3;
+  next = (cur + 1) % 3;
   gtk_button_set_label (button, reverse_labels[next]);
   app_glass_save (self);
 }
@@ -957,10 +911,11 @@ app_shape_clicked_cb (GtkButton *button, gpointer user_data)
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
   const char *current = gtk_button_get_label (button);
   int cur = 0;
+  int next;
   for (int k = 1; k < (int) G_N_ELEMENTS (app_shape_labels); k++) {
     if (current && g_str_equal (current, app_shape_labels[k])) { cur = k; break; }
   }
-  int next = (cur + 1) % (int) G_N_ELEMENTS (app_shape_labels);
+  next = (cur + 1) % (int) G_N_ELEMENTS (app_shape_labels);
   gtk_button_set_label (button, app_shape_labels[next]);
   app_glass_save (self);
 }
@@ -976,10 +931,11 @@ app_gap_clicked_cb (GtkButton *button, gpointer user_data)
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
   const char *current = gtk_button_get_label (button);
   int cur = 0;
+  int next;
   for (int k = 1; k < (int) G_N_ELEMENTS (app_gap_labels); k++) {
     if (current && g_str_equal (current, app_gap_labels[k])) { cur = k; break; }
   }
-  int next = (cur + 1) % (int) G_N_ELEMENTS (app_gap_labels);
+  next = (cur + 1) % (int) G_N_ELEMENTS (app_gap_labels);
   gtk_button_set_label (button, app_gap_labels[next]);
   app_glass_save (self);
 }
@@ -1014,9 +970,10 @@ overscroll_reverse_clicked_cb (GtkButton *button, gpointer user_data)
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (user_data);
   static const char *labels[] = { "\u25B6", "\u25C0", "\u21C6" };  /* ▶ ◀ ⇆ */
   int cur = 0;
+  int next;
   if (self->settings)
     g_object_get (self->settings, "edge-overscroll-reverse", &cur, NULL);
-  int next = (cur + 1) % 3;
+  next = (cur + 1) % 3;
   gtk_button_set_label (button, labels[next]);
   if (self->settings)
     g_object_set (self->settings, "edge-overscroll-reverse", next, NULL);
@@ -1281,50 +1238,57 @@ static const GdkRGBA glass_default_colors[APP_GLASS_SLOTS] = {
 static void
 app_glass_save (KgxSettingsPage *self)
 {
+  g_autoptr (GHashTable) ht = NULL;
+
   if (self->app_glass_inhibit_save)
     return;
 
-  g_autoptr (GHashTable) ht = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                                      g_free, g_free);
+  ht = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
 
   for (int i = 0; i < APP_GLASS_SLOTS; i++) {
     const char *name = gtk_editable_get_text (GTK_EDITABLE (self->ag_entries[i]));
     if (name && name[0] != '\0') {
-      const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (
-                               GTK_COLOR_DIALOG_BUTTON (self->ag_colors[i]));
+      const GdkRGBA *rgba;
       guint preset_idx = gtk_drop_down_get_selected (GTK_DROP_DOWN (self->ag_presets[i]));
+      const char *rev_label;
+      int rev = 0;
+      const GdkRGBA *pc;
+      const char *shp_label;
+      int shape = -1;
+      const char *gap_label;
+      int gap = -1;
+      int speed;
+      int thk   = (int) gtk_spin_button_get_value (GTK_SPIN_BUTTON (self->ag_thks[i]));
+      const char *preset_names[] = { "none", "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate" };
+      const char *preset_str;
+      char *value;
+
+      rgba = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_colors[i]));
 
       /* Reverse: ▶=0, ◀=1, ◆=2 */
-      const char *rev_label = gtk_button_get_label (GTK_BUTTON (self->ag_reverses[i]));
-      int rev = 0;
+      rev_label = gtk_button_get_label (GTK_BUTTON (self->ag_reverses[i]));
       if (rev_label && g_str_equal (rev_label, reverse_labels[1])) rev = 1;
       else if (rev_label && g_str_equal (rev_label, reverse_labels[2])) rev = 2;
 
-      const GdkRGBA *pc = gtk_color_dialog_button_get_rgba (
-                             GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[i]));
+      pc = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (self->ag_pcolors[i]));
 
       /* Shape: —=-1, ■=0, ●=1, ◆=2, ▶=3 */
-      const char *shp_label = gtk_button_get_label (GTK_BUTTON (self->ag_shapes[i]));
-      int shape = -1;
+      shp_label = gtk_button_get_label (GTK_BUTTON (self->ag_shapes[i]));
       for (int k = 1; k < (int) G_N_ELEMENTS (app_shape_labels); k++) {
         if (shp_label && g_str_equal (shp_label, app_shape_labels[k])) { shape = k - 1; break; }
       }
 
       /* Gap: —=-1, □=0, ■=1 */
-      const char *gap_label = gtk_button_get_label (GTK_BUTTON (self->ag_gaps[i]));
-      int gap = -1;
+      gap_label = gtk_button_get_label (GTK_BUTTON (self->ag_gaps[i]));
       for (int k = 1; k < (int) G_N_ELEMENTS (app_gap_labels); k++) {
         if (gap_label && g_str_equal (gap_label, app_gap_labels[k])) { gap = k - 1; break; }
       }
 
-      int speed = (int) gtk_spin_button_get_value (GTK_SPIN_BUTTON (self->ag_speeds[i]));
-      int thk   = (int) gtk_spin_button_get_value (GTK_SPIN_BUTTON (self->ag_thks[i]));
+      speed = (int) gtk_spin_button_get_value (GTK_SPIN_BUTTON (self->ag_speeds[i]));
+      preset_str = (preset_idx < G_N_ELEMENTS (preset_names))
+                     ? preset_names[preset_idx] : "none";
 
-      const char *preset_names[] = { "none", "ambient", "corners", "fireworks", "ping-pong", "pulse-out", "rotate" };
-      const char *preset_str = (preset_idx < G_N_ELEMENTS (preset_names))
-                                 ? preset_names[preset_idx] : "none";
-
-      char *value = g_strdup_printf ("#%02x%02x%02x;%s;%d;#%02x%02x%02x;%d;%d;%d;%d",
+      value = g_strdup_printf ("#%02x%02x%02x;%s;%d;#%02x%02x%02x;%d;%d;%d;%d",
         (int)(rgba->red * 255), (int)(rgba->green * 255), (int)(rgba->blue * 255),
         preset_str, rev,
         (int)(pc->red * 255), (int)(pc->green * 255), (int)(pc->blue * 255),

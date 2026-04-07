@@ -664,19 +664,19 @@ test_settings_transparency_level (Fixture *fixture, gconstpointer unused)
 
 
 static void
-test_settings_content_opacity (Fixture *fixture, gconstpointer unused)
+test_settings_glass_opacity (Fixture *fixture, gconstpointer unused)
 {
   g_autoptr (KgxSettings) settings = g_object_new (KGX_TYPE_SETTINGS, NULL);
   double result = 0.0;
 
-  g_settings_set_double (fixture->settings, "content-opacity", 0.85);
+  g_settings_set_double (fixture->settings, "glass-opacity", 0.85);
 
-  g_object_get (settings, "content-opacity", &result, NULL);
+  g_object_get (settings, "glass-opacity", &result, NULL);
   g_assert_cmpfloat (result, ==, 0.85);
 
-  kgx_test_property_notify (settings, "content-opacity", 0.7, 0.9);
+  kgx_test_property_notify (settings, "glass-opacity", 0.7, 0.9);
 
-  g_object_get (settings, "content-opacity", &result, NULL);
+  g_object_get (settings, "glass-opacity", &result, NULL);
   g_assert_cmpfloat (result, ==, 0.9);
 }
 
@@ -721,7 +721,7 @@ main (int argc, char *argv[])
   fixtured_test ("/kgx/settings/software-flow-control", NULL, test_settings_software_flow_control);
   fixtured_test ("/kgx/settings/transparency", NULL, test_settings_transparency);
   fixtured_test ("/kgx/settings/transparency-level", NULL, test_settings_transparency_level);
-  fixtured_test ("/kgx/settings/content-opacity", NULL, test_settings_content_opacity);
+  fixtured_test ("/kgx/settings/glass-opacity", NULL, test_settings_glass_opacity);
 
   return g_test_run ();
 }

@@ -1,6 +1,7 @@
 /* kgx-tab.c
  *
  * Copyright 2019-2023 Zander Brown
+ * Copyright 2026 jordan Johnston
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -156,15 +157,6 @@ static void
 content_opacity_changed (G_GNUC_UNUSED GObject    *object,
                          G_GNUC_UNUSED GParamSpec *pspec,
                          KgxTab                   *self)
-{
-  kgx_tab_update_content_opacity (self);
-}
-
-
-static void
-translucent_changed (G_GNUC_UNUSED GObject    *object,
-                     G_GNUC_UNUSED GParamSpec *pspec,
-                     KgxTab                   *self)
 {
   kgx_tab_update_content_opacity (self);
 }
@@ -543,7 +535,6 @@ spad_thrown (KgxSpadSource *source,
              GVariant      *bundle,
              KgxTab        *self)
 {
-  KgxTabPrivate *priv = kgx_tab_get_instance_private (self);
   AdwToast *toast = g_object_new (ADW_TYPE_TOAST,
                                   "title", title,
                                   "button-label", C_("toast-button", "_Details"),

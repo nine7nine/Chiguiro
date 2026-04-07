@@ -1,6 +1,6 @@
 /* kgx-sprite.c
  *
- * Copyright 2024 Chigüiro Contributors
+ * Copyright 2024-2026 jordan Johnston
  * Capybara sprite credit: https://rainloaf.itch.io/capybara-sprite-sheet
  *
  * This program is free software: you can redistribute it and/or modify

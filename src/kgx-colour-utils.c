@@ -30,9 +30,10 @@ static inline gboolean
 read_component (const char **const ptr, float *out)
 {
   int first = g_unichar_xdigit_value (g_utf8_get_char (*ptr));
+  int second;
 
   *ptr = g_utf8_next_char (*ptr);
-  int second = g_unichar_xdigit_value (g_utf8_get_char (*ptr));
+  second = g_unichar_xdigit_value (g_utf8_get_char (*ptr));
   *ptr = g_utf8_next_char (*ptr);
 
   if (first < 0 || second < 0)
