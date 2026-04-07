@@ -20,6 +20,24 @@
 
 #include "kgx-edge-private.h"
 
+static guint
+schedule_burst_timeout (guint       interval_ms,
+                        GSourceFunc function,
+                        gpointer    data,
+                        const char *name)
+{
+  guint source_id;
+
+  source_id = g_timeout_add_full (G_PRIORITY_LOW,
+                                  interval_ms,
+                                  function,
+                                  data,
+                                  NULL);
+  g_source_set_name_by_id (source_id, name);
+
+  return source_id;
+}
+
 static GdkRGBA
 random_muted_color (void)
 {
@@ -113,10 +131,11 @@ firework_fire (gpointer data)
 
     lo = (int) (150 * i * self->burst_spread);
     hi = (int) (600 * i * self->burst_spread);
-    self->burst_timeout[i] = g_timeout_add (
+    self->burst_timeout[i] = schedule_burst_timeout (
       g_random_int_range (MAX (lo, 50), MAX (hi, 100)),
       burst_fire,
-      &self->burst_data[i]);
+      &self->burst_data[i],
+      "[kgx] edge firework burst");
   }
 
   firework_schedule (self);
@@ -147,7 +166,10 @@ firework_schedule (KgxEdge *self)
         ? 200
         : g_random_int_range (MAX (lo, 200), MAX (hi, 400));
 
-  self->firework_timeout = g_timeout_add (delay, firework_fire, self);
+  self->firework_timeout = schedule_burst_timeout (delay,
+                                                   firework_fire,
+                                                   self,
+                                                   "[kgx] edge firework");
 }
 
 static void
@@ -223,10 +245,11 @@ ambient_fire (gpointer data)
 
     lo = (int) (150 * i * self->ambient_burst_spread);
     hi = (int) (600 * i * self->ambient_burst_spread);
-    self->ambient_burst_timeout[i] = g_timeout_add (
+    self->ambient_burst_timeout[i] = schedule_burst_timeout (
       g_random_int_range (MAX (lo, 50), MAX (hi, 100)),
       ambient_burst_fire,
-      &self->ambient_burst_data[i]);
+      &self->ambient_burst_data[i],
+      "[kgx] edge ambient burst");
   }
 
   ambient_schedule (self);
@@ -255,7 +278,10 @@ ambient_schedule (KgxEdge *self)
         ? 200
         : g_random_int_range (MAX (lo, 200), MAX (hi, 400));
 
-  self->ambient_timeout = g_timeout_add (delay, ambient_fire, self);
+  self->ambient_timeout = schedule_burst_timeout (delay,
+                                                  ambient_fire,
+                                                  self,
+                                                  "[kgx] edge ambient");
 }
 
 void
@@ -367,7 +393,10 @@ kgx_edge_set_ambient (KgxEdge *self,
       return;
 
     if (!self->ambient_timeout)
-      self->ambient_timeout = g_timeout_add (50, ambient_fire, self);
+      self->ambient_timeout = schedule_burst_timeout (50,
+                                                      ambient_fire,
+                                                      self,
+                                                      "[kgx] edge ambient");
     return;
   }
 
