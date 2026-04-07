@@ -21,7 +21,7 @@
               <object class="GtkButton">
                 <property name="label" translatable="yes">_Cancel</property>
                 <property name="use-underline">True</property>
-                <property name="action-name">navigation.pop</property>
+                <property name="action-name">picker.cancel</property>
               </object>
             </child>
             <child type="end">

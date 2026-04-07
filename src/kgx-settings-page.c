@@ -342,6 +342,7 @@ select_font_activated (GtkWidget  *widget,
 {
   KgxSettingsPage *self = KGX_SETTINGS_PAGE (widget);
   g_autoptr (PangoFontDescription) initial_value = NULL;
+  g_autoptr (AdwDialog) dialog = NULL;
   AdwNavigationPage *picker;
 
   initial_value = kgx_settings_dup_custom_font (self->settings);
@@ -352,11 +353,15 @@ select_font_activated (GtkWidget  *widget,
                              "object-signal::selected", G_CALLBACK (font_selected), self,
                              NULL);
 
-  adw_dialog_present (ADW_DIALOG (g_object_new (ADW_TYPE_DIALOG,
-                                                 "child", picker,
-                                                 "title", "Select Font",
-                                                 NULL)),
-                      widget);
+  dialog = g_object_new (ADW_TYPE_DIALOG,
+                         "child", picker,
+                         "title", "Select Font",
+                         "follows-content-size", FALSE,
+                         "content-width", 520,
+                         "content-height", 640,
+                         NULL);
+
+  adw_dialog_present (g_steal_pointer (&dialog), widget);
 }
 
 

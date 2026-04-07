@@ -236,6 +236,18 @@ activate (KgxFontPicker *self)
 }
 
 
+static void
+close_parent_dialog (GtkWidget *widget)
+{
+  GtkWidget *dialog;
+
+  dialog = gtk_widget_get_ancestor (widget, ADW_TYPE_DIALOG);
+  if (dialog) {
+    adw_dialog_close (ADW_DIALOG (dialog));
+  }
+}
+
+
 static char *
 preview_text (void)
 {
@@ -251,6 +263,16 @@ select_activated (GtkWidget  *widget,
   KgxFontPicker *self = KGX_FONT_PICKER (widget);
 
   g_signal_emit (self, signals[SELECTED], 0, self->current);
+  close_parent_dialog (widget);
+}
+
+
+static void
+cancel_activated (GtkWidget  *widget,
+                  const char *action_name,
+                  GVariant   *parameter)
+{
+  close_parent_dialog (widget);
 }
 
 
@@ -307,6 +329,7 @@ kgx_font_picker_class_init (KgxFontPickerClass *klass)
   gtk_widget_class_bind_template_callback (widget_class, activate);
   gtk_widget_class_bind_template_callback (widget_class, preview_text);
 
+  gtk_widget_class_install_action (widget_class, "picker.cancel", NULL, cancel_activated);
   gtk_widget_class_install_action (widget_class, "picker.select", NULL, select_activated);
 }
 
