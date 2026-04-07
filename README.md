@@ -5,10 +5,10 @@ A GTK4 terminal emulator with event-driven glass backgrounds and a single-dimens
 ## Features
 
 - **App Glass** — per-process translucent backgrounds with smooth animated color transitions triggered by process detection
-- **Edge Particles** — single-dimension particle system rendering along window edges with 7 animation presets, per-block envelope shaping, and per-app overrides
+- **Edge Particles** — single-dimension particle system rendering along window edges with 7 animation presets, strip-based rendering, per-block envelope shaping, and per-app overrides
 - **Overscroll Presets** — Scroll 1 (corner burst snakes) and Scroll 2 (full-bar edge fill) with independent tunables
 - **Per-App Configuration** — comma-separated process names with overrides for preset, direction, shape, gap, speed, thickness, glass color, and particle color
-- **Dynamic Tab Titles** — running process name with braille activity indicator (`bash: htop ⠲`)
+- **Custom Tab Strip** — Chigüiro-specific tab strip with process-chain fallback titles like `>bash` and `>bash>top`
 - **Paginated Settings** — carousel-based overlay with clickable page dots (General, App Glass, Particles, Shortcuts)
 - **Headless Server Mode** — systemd user service for instant window startup via D-Bus
 - **GTK4 + libadwaita** — always-dark theme, VTE terminal, configurable scrollback, bell, and fonts
@@ -18,6 +18,8 @@ A GTK4 terminal emulator with event-driven glass backgrounds and a single-dimens
 Seven animation presets, each with independently tunable parameters:
 
 **Presets:** Ambient, Corners, Fireworks, Ping-Pong, Pulse Out, Rotate, Scroll 2
+
+Global redraw controls let you cap particle pacing in Hz or disable throttling entirely, while the edge renderer automatically scales work down more gracefully under heavier load.
 
 | Column | Range | Description |
 |--------|-------|-------------|
@@ -40,6 +42,10 @@ Seven animation presets, each with independently tunable parameters:
 ### App Glass Per-Process Overrides
 
 Each process entry supports: glass color, preset, reverse direction, shape, gap, speed, thickness, and particle color. Reverse has three modes: forward, reverse, and alternating (diamond mode).
+
+### Tab Titles
+
+When no explicit terminal title is available, Chigüiro falls back to the active process chain for the tab label, for example `>bash`, `>bash>pwsh`, or `>bash>top`.
 
 ## Building
 
