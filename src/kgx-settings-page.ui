@@ -3,70 +3,88 @@
   <requires lib="gtk" version="4.0" />
   <template class="KgxSettingsPage" parent="AdwBin">
     <property name="child">
+      <object class="GtkScrolledWindow">
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <property name="hscrollbar-policy">never</property>
+            <property name="vscrollbar-policy">automatic</property>
+            <property name="has-frame">False</property>
+            <property name="propagate-natural-width">True</property>
+            <property name="propagate-natural-height">False</property>
+            <property name="child">
       <object class="GtkBox">
             <property name="orientation">vertical</property>
+            <property name="valign">start</property>
             <property name="spacing">8</property>
-            <property name="margin-bottom">260</property>
+            <property name="margin-bottom">24</property>
 
         <!-- ═══ Static About Section (always visible) ═══ -->
         <child>
           <object class="GtkBox">
-            <property name="orientation">vertical</property>
+            <property name="orientation">horizontal</property>
             <property name="halign">center</property>
-            <property name="spacing">4</property>
-            <property name="margin-top">16</property>
-            <child>
-              <object class="GtkPicture" id="logo_picture">
-                <property name="can-shrink">False</property>
-                <property name="halign">center</property>
-                <property name="content-fit">contain</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkLabel">
-                <property name="label" translatable="yes">· C h i g ü i r o ·</property>
-                <property name="use-markup">True</property>
-                <style>
-                  <class name="title-1" />
-                </style>
-                <attributes>
-                  <attribute name="weight" value="bold" />
-                  <attribute name="scale" value="1.4" />
-                  <attribute name="letter-spacing" value="4096" />
-                </attributes>
-              </object>
-            </child>
-            <child>
-              <object class="GtkLabel" id="version_label">
-                <property name="label">v0.01-alpha</property>
-                <style>
-                  <class name="about-accent" />
-                </style>
-              </object>
-            </child>
-            <child>
-              <object class="GtkLabel">
-                <property name="label" translatable="yes">© 2026 Jordan Johnston</property>
-                <style>
-                  <class name="about-accent" />
-                </style>
-              </object>
-            </child>
+            <property name="valign">start</property>
             <child>
               <object class="GtkBox">
-                <property name="orientation">horizontal</property>
+                <property name="orientation">vertical</property>
                 <property name="halign">center</property>
-                <property name="spacing">12</property>
+                <property name="valign">start</property>
+                <property name="spacing">4</property>
+                <property name="margin-top">16</property>
                 <child>
-                  <object class="GtkLinkButton">
-                    <property name="label" translatable="yes">Github</property>
-                    <property name="uri">https://github.com/nine7nine/Chiguiro</property>
+                  <object class="GtkPicture" id="logo_picture">
+                    <property name="can-shrink">False</property>
+                    <property name="halign">center</property>
+                    <property name="content-fit">contain</property>
                   </object>
                 </child>
                 <child>
-                  <object class="GtkLinkButton">
-                    <property name="label" translatable="yes">Issues</property>
-                    <property name="uri">https://github.com/nine7nine/Chiguiro/issues</property>
+                  <object class="GtkLabel">
+                    <property name="label" translatable="yes">· C h i g ü i r o ·</property>
+                    <property name="use-markup">True</property>
+                    <style>
+                      <class name="title-1" />
+                    </style>
+                    <attributes>
+                      <attribute name="weight" value="bold" />
+                      <attribute name="scale" value="1.4" />
+                      <attribute name="letter-spacing" value="4096" />
+                    </attributes>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="version_label">
+                    <property name="label">v0.01-alpha</property>
+                    <style>
+                      <class name="about-accent" />
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label" translatable="yes">© 2026 Jordan Johnston</property>
+                    <style>
+                      <class name="about-accent" />
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="halign">center</property>
+                    <property name="spacing">12</property>
+                    <child>
+                      <object class="GtkLinkButton">
+                        <property name="label" translatable="yes">Github</property>
+                        <property name="uri">https://github.com/nine7nine/Chiguiro</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLinkButton">
+                        <property name="label" translatable="yes">Issues</property>
+                        <property name="uri">https://github.com/nine7nine/Chiguiro/issues</property>
+                      </object>
+                    </child>
                   </object>
                 </child>
               </object>
@@ -79,6 +97,7 @@
           <object class="GtkBox">
             <property name="orientation">vertical</property>
             <property name="halign">center</property>
+            <property name="valign">start</property>
             <property name="spacing">4</property>
             <property name="margin-top">4</property>
             <property name="margin-bottom">4</property>
@@ -107,6 +126,7 @@
         <child>
           <object class="AdwCarousel" id="carousel">
             <property name="hexpand">True</property>
+            <property name="valign">start</property>
             <property name="allow-mouse-drag">True</property>
             <property name="allow-scroll-wheel">False</property>
             <property name="allow-long-swipes">True</property>
@@ -114,18 +134,23 @@
 
             <!-- ── Page 1: General ── -->
             <child>
-              <object class="AdwClamp">
-                <property name="maximum-size">900</property>
-                <property name="valign">start</property>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
                 <property name="hexpand">True</property>
-                <property name="margin-top">8</property>
-                <property name="margin-bottom">12</property>
-                <property name="margin-start">24</property>
-                <property name="margin-end">24</property>
-                <property name="child">
-                  <object class="GtkBox">
-                    <property name="orientation">vertical</property>
-                    <property name="spacing">16</property>
+                <property name="halign">fill</property>
+                <child>
+                  <object class="AdwClamp">
+                    <property name="maximum-size">900</property>
+                    <property name="valign">start</property>
+                    <property name="hexpand">True</property>
+                    <property name="margin-top">8</property>
+                    <property name="margin-bottom">12</property>
+                    <property name="margin-start">24</property>
+                    <property name="margin-end">24</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">16</property>
 
                         <!-- Font Group -->
                         <child>
@@ -338,45 +363,59 @@
                         </child>
 
                       </object>
-                  </property>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
 
             <!-- ── Page 2: App Glass ── -->
             <child>
-              <object class="AdwClamp">
-                <property name="maximum-size">900</property>
-                <property name="valign">start</property>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
                 <property name="hexpand">True</property>
-                <property name="margin-top">8</property>
-                <property name="margin-bottom">12</property>
-                <property name="margin-start">24</property>
-                <property name="margin-end">24</property>
-                <property name="child">
-                  <object class="GtkGrid" id="app_glass_grid">
-                    <property name="row-spacing">4</property>
-                    <property name="column-spacing">6</property>
-                    <style><class name="preset-row"/></style>
-                    <!-- Indicator + process rows built programmatically -->
+                <property name="halign">fill</property>
+                <child>
+                  <object class="AdwClamp">
+                    <property name="maximum-size">900</property>
+                    <property name="valign">start</property>
+                    <property name="hexpand">True</property>
+                    <property name="margin-top">8</property>
+                    <property name="margin-bottom">12</property>
+                    <property name="margin-start">24</property>
+                    <property name="margin-end">24</property>
+                    <property name="child">
+                      <object class="GtkGrid" id="app_glass_grid">
+                        <property name="row-spacing">4</property>
+                        <property name="column-spacing">6</property>
+                        <style><class name="preset-row"/></style>
+                        <!-- Indicator + process rows built programmatically -->
+                      </object>
+                    </property>
                   </object>
-                </property>
+                </child>
               </object>
             </child>
 
             <!-- ── Page 3: Particles ── -->
             <child>
-              <object class="AdwClamp">
-                <property name="maximum-size">900</property>
-                <property name="valign">start</property>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
                 <property name="hexpand">True</property>
-                <property name="margin-top">24</property>
-                <property name="margin-bottom">12</property>
-                <property name="margin-start">24</property>
-                <property name="margin-end">24</property>
-                <property name="child">
-                  <object class="GtkBox">
-                    <property name="orientation">vertical</property>
-                    <property name="spacing">16</property>
+                <property name="halign">fill</property>
+                <child>
+                  <object class="AdwClamp">
+                    <property name="maximum-size">900</property>
+                    <property name="valign">start</property>
+                    <property name="hexpand">True</property>
+                    <property name="margin-top">24</property>
+                    <property name="margin-bottom">12</property>
+                    <property name="margin-start">24</property>
+                    <property name="margin-end">24</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">16</property>
 
                     <!-- Ambient animation toggle -->
                     <child>
@@ -475,25 +514,32 @@
                       </object>
                     </child>
 
+                      </object>
+                    </property>
                   </object>
-                </property>
+                </child>
               </object>
             </child>
 
             <!-- ── Page 4: Shortcuts ── -->
             <child>
-              <object class="AdwClamp">
-                <property name="maximum-size">900</property>
-                <property name="valign">start</property>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
                 <property name="hexpand">True</property>
-                <property name="margin-top">8</property>
-                <property name="margin-bottom">12</property>
-                <property name="margin-start">24</property>
-                <property name="margin-end">24</property>
-                <property name="child">
-                  <object class="GtkBox">
-                    <property name="orientation">vertical</property>
-                    <property name="spacing">16</property>
+                <property name="halign">fill</property>
+                <child>
+                  <object class="AdwClamp">
+                    <property name="maximum-size">900</property>
+                    <property name="valign">start</property>
+                    <property name="hexpand">True</property>
+                    <property name="margin-top">8</property>
+                    <property name="margin-bottom">12</property>
+                    <property name="margin-start">24</property>
+                    <property name="margin-end">24</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <property name="spacing">16</property>
                         <child>
                           <object class="AdwPreferencesGroup">
                             <property name="title" translatable="yes">Application</property>
@@ -639,13 +685,17 @@
                           </object>
                         </child>
                       </object>
-                  </property>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
 
           </object>
         </child>
 
+      </object>
+            </property>
       </object>
     </property>
   </template>
