@@ -207,7 +207,10 @@ schedule_timeout (KgxWatcher *self,
 
   g_clear_handle_id (&self->timeout, g_source_remove);
 
-  self->timeout = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE,
+  /* /proc scans are maintenance work, not frame-critical UI work.
+   * Keep them out of the way of animation/tick handling when the main
+   * loop is under pressure. */
+  self->timeout = g_timeout_add_full (G_PRIORITY_LOW,
                                       interval_ms,
                                       watch,
                                       g_object_ref (self),

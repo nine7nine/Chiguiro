@@ -1068,7 +1068,9 @@ schedule_process_glass_idle_full (KgxWindow *self,
   priv->process_glass_idle_deferred = deferred;
 
   if (deferred) {
-    priv->process_glass_idle = g_timeout_add_full (G_PRIORITY_DEFAULT_IDLE,
+    /* Tab-handoff and deferred process-glass work should yield to visual
+     * updates first; it can lag a frame without harming correctness. */
+    priv->process_glass_idle = g_timeout_add_full (G_PRIORITY_LOW,
                                                    PROCESS_GLASS_TAB_SWITCH_DELAY_MS,
                                                    update_process_glass_idle,
                                                    g_object_ref (self),
@@ -1076,7 +1078,9 @@ schedule_process_glass_idle_full (KgxWindow *self,
     g_source_set_name_by_id (priv->process_glass_idle,
                              "[kgx] process glass deferred");
   } else {
-    priv->process_glass_idle = g_idle_add_full (G_PRIORITY_HIGH_IDLE,
+    /* Process-glass reconcile is still UI work, but it should not preempt
+     * frame pacing just to run before other idles. */
+    priv->process_glass_idle = g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
                                                 update_process_glass_idle,
                                                 g_object_ref (self),
                                                 g_object_unref);
