@@ -21,54 +21,8 @@
 #include "kgx-edge-private.h"
 
 static void
-process_particle_value_cb (double value,
-                           KgxEdge *self)
-{
-  if (self->pending_change && (self->process_linear || value >= 0.5)) {
-    adw_animation_skip (self->process_anim);
-    return;
-  }
-
-  self->process_progress = value;
-  kgx_edge_mark_dirty (self);
-}
-
-static void
-kgx_edge_stop_process_particle_now (KgxEdge *self,
-                                    int      old_extent)
-{
-  self->pending_change = FALSE;
-  self->process_preset = KGX_PARTICLE_NONE;
-  self->process_progress = -1.0;
-  self->process_last_snapshot_progress = -1.0;
-  self->process_start_us = 0;
-  self->process_duration_s = 0.0;
-  self->process_linear = FALSE;
-
-  if (self->process_anim)
-    adw_animation_reset (self->process_anim);
-
-  if (self->firework_timeout) {
-    g_source_remove (self->firework_timeout);
-    self->firework_timeout = 0;
-  }
-
-  for (int i = 0; i < MAX_BURSTS; i++) {
-    if (self->burst_timeout[i]) {
-      g_source_remove (self->burst_timeout[i]);
-      self->burst_timeout[i] = 0;
-    }
-    self->burst_progress[i] = -1.0;
-    if (self->burst_anim[i])
-      adw_animation_reset (self->burst_anim[i]);
-  }
-
-  kgx_edge_queue_resize_views_if_needed (self, old_extent);
-  kgx_edge_mark_dirty (self);
-}
-
-static void
-process_particle_done_cb (KgxEdge *self)
+kgx_edge_process_complete (KgxEdge *self,
+                           gint64   now_us)
 {
   int old_extent = kgx_edge_get_strip_extent (self);
 
@@ -100,16 +54,85 @@ process_particle_done_cb (KgxEdge *self)
       self->process_tune_snap.speed = self->process_speed_override / 100.0;
     if (self->process_thk_override > 0)
       self->process_tune_snap.thickness = self->process_thk_override;
-    self->process_start_us = g_get_monotonic_time ();
-    adw_animation_reset (self->process_anim);
-    adw_animation_play (self->process_anim);
+    self->process_start_us = now_us;
+    self->process_progress = 0.0;
+    self->process_last_snapshot_progress = -1.0;
     return;
   }
 
   self->process_progress = -1.0;
+  self->process_last_snapshot_progress = -1.0;
   self->process_start_us = 0;
+  self->process_duration_s = 0.0;
+  self->process_linear = FALSE;
+  kgx_edge_queue_resize_views_if_needed (self, old_extent);
+}
+
+static void
+kgx_edge_stop_process_particle_now (KgxEdge *self,
+                                    int      old_extent)
+{
+  self->pending_change = FALSE;
+  self->process_preset = KGX_PARTICLE_NONE;
+  self->process_progress = -1.0;
+  self->process_last_snapshot_progress = -1.0;
+  self->process_start_us = 0;
+  self->process_duration_s = 0.0;
+  self->process_linear = FALSE;
+  self->firework_due_us = 0;
+
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    self->burst_due_us[i] = 0;
+    self->burst_progress[i] = -1.0;
+    self->burst_start_us[i] = 0;
+    self->burst_duration_s[i] = 0.0;
+  }
+
   kgx_edge_queue_resize_views_if_needed (self, old_extent);
   kgx_edge_mark_dirty (self);
+}
+
+gboolean
+kgx_edge_advance_process_timeline (KgxEdge *self,
+                                   gint64   now_us)
+{
+  double raw;
+  double progress;
+
+  g_return_val_if_fail (KGX_IS_EDGE (self), FALSE);
+
+  self = kgx_edge_get_root (self);
+
+  if (self->process_preset == KGX_PARTICLE_NONE ||
+      firework_active (self) ||
+      self->process_progress < 0.0 ||
+      self->process_start_us <= 0 ||
+      self->process_duration_s <= 0.0)
+    return FALSE;
+
+  raw = kgx_edge_timeline_progress (now_us,
+                                    self->process_start_us,
+                                    self->process_duration_s);
+  progress = self->process_linear
+           ? raw
+           : kgx_edge_timeline_ease_out_cubic (raw);
+
+  if (self->pending_change &&
+      (self->process_linear || progress >= 0.5 || raw >= 1.0)) {
+    kgx_edge_process_complete (self, now_us);
+    return TRUE;
+  }
+
+  if (raw >= 1.0) {
+    kgx_edge_process_complete (self, now_us);
+    return TRUE;
+  }
+
+  if (self->process_progress == progress)
+    return FALSE;
+
+  self->process_progress = progress;
+  return TRUE;
 }
 
 void
@@ -144,8 +167,7 @@ kgx_edge_set_process_particle (KgxEdge            *self,
   old_extent = kgx_edge_get_strip_extent (self);
 
   if (self->process_progress >= 0.0 &&
-      self->process_anim &&
-      adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING &&
+      !firework_active (self) &&
       (preset != self->process_preset || preset == KGX_PARTICLE_NONE)) {
     self->pending_change = TRUE;
     self->pending_preset = preset;
@@ -185,23 +207,14 @@ kgx_edge_set_process_particle (KgxEdge            *self,
   }
 
   if (preset == KGX_PARTICLE_FIREWORKS || preset == KGX_PARTICLE_AMBIENT) {
+    self->process_progress = -1.0;
+    self->process_last_snapshot_progress = -1.0;
+    self->process_start_us = 0;
+    self->process_duration_s = 0.0;
+    self->process_linear = FALSE;
     kgx_edge_start_process_bursts (self);
     kgx_edge_queue_resize_views_if_needed (self, old_extent);
     return;
-  }
-
-  if (!self->process_anim) {
-    AdwAnimationTarget *target = adw_callback_animation_target_new (
-      (AdwAnimationTargetFunc) process_particle_value_cb,
-      self,
-      NULL);
-
-    self->process_anim = adw_timed_animation_new (GTK_WIDGET (self),
-                                                  0.0, 1.0, 2000, target);
-    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
-                                    ADW_EASE_OUT_CUBIC);
-    g_signal_connect_swapped (self->process_anim, "done",
-                              G_CALLBACK (process_particle_done_cb), self);
   }
 
   self->process_tune_snap = *kgx_edge_resolve_tunables (self, preset);
@@ -215,11 +228,6 @@ kgx_edge_set_process_particle (KgxEdge            *self,
     self->process_tune_snap.thickness = thk_override;
 
   spd = self->process_tune_snap.speed;
-  adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->process_anim),
-                                  (preset == KGX_PARTICLE_ROTATE ||
-                                   preset == KGX_PARTICLE_PING_PONG)
-                                    ? ADW_LINEAR
-                                    : ADW_EASE_OUT_CUBIC);
 
   switch (preset) {
   case KGX_PARTICLE_ROTATE:
@@ -241,19 +249,17 @@ kgx_edge_set_process_particle (KgxEdge            *self,
     break;
   }
 
-  adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->process_anim),
-                                    duration);
   if (self->process_progress >= 0.0 &&
-      adw_animation_get_state (self->process_anim) == ADW_ANIMATION_PLAYING)
+      self->process_start_us > 0 &&
+      preset == self->process_preset)
     return;
 
   self->process_progress = 0.0;
+  self->process_last_snapshot_progress = -1.0;
   self->process_start_us = g_get_monotonic_time ();
   self->process_duration_s = duration / 1000.0;
   self->process_linear = (preset == KGX_PARTICLE_ROTATE ||
                           preset == KGX_PARTICLE_PING_PONG);
-  adw_animation_reset (self->process_anim);
-  adw_animation_play (self->process_anim);
   kgx_edge_queue_resize_views_if_needed (self, old_extent);
   kgx_edge_mark_dirty (self);
 }

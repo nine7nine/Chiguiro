@@ -34,12 +34,6 @@
 #define firework_active(s) ((s)->process_preset == KGX_PARTICLE_FIREWORKS || \
                             (s)->process_preset == KGX_PARTICLE_AMBIENT)
 
-typedef struct
-{
-  int index;
-  KgxEdge *self;
-} BurstData;
-
 struct _KgxEdge {
   GtkWidget       parent_instance;
 
@@ -57,15 +51,18 @@ struct _KgxEdge {
   KgxParticleTunables global;
   KgxParticleTunables preset[N_PRESETS];
 
-  AdwAnimation   *overscroll_anim;
   double          overscroll_progress;
   GtkPositionType overscroll_edge;
+  gint64          overscroll_start_us;
+  double          overscroll_duration_s;
 
   gboolean        ambient_enabled;
   gboolean        particle_throttle_enabled;
   int             particle_hz;
 
   guint           redraw_tick_id;
+  guint           timeline_timeout_id;
+  gint64          timeline_timeout_target_us;
   gboolean        redraw_pending;
   gint64          last_redraw_request_us;
   gint64          last_snapshot_end_us;
@@ -79,21 +76,21 @@ struct _KgxEdge {
 
   gboolean        ambient_active;
 
-  guint           firework_timeout;
-  AdwAnimation   *burst_anim[MAX_BURSTS];
+  gint64          firework_due_us;
   double          burst_progress[MAX_BURSTS];
   double          burst_head[MAX_BURSTS];
   GdkRGBA         burst_color[MAX_BURSTS];
-  guint           burst_timeout[MAX_BURSTS];
-  BurstData       burst_data[MAX_BURSTS];
+  gint64          burst_due_us[MAX_BURSTS];
+  gint64          burst_start_us[MAX_BURSTS];
+  double          burst_duration_s[MAX_BURSTS];
 
-  guint           ambient_timeout;
-  AdwAnimation   *ambient_anim[MAX_BURSTS];
+  gint64          ambient_due_us;
   double          ambient_progress[MAX_BURSTS];
   double          ambient_head[MAX_BURSTS];
   GdkRGBA         ambient_burst_color[MAX_BURSTS];
-  guint           ambient_burst_timeout[MAX_BURSTS];
-  BurstData       ambient_burst_data[MAX_BURSTS];
+  gint64          ambient_burst_due_us[MAX_BURSTS];
+  gint64          ambient_burst_start_us[MAX_BURSTS];
+  double          ambient_burst_duration_s[MAX_BURSTS];
   int             ambient_burst_count;
   double          ambient_burst_spread;
 
@@ -106,7 +103,6 @@ struct _KgxEdge {
   int               process_thk_override;
   gboolean          process_reverse_toggle;
   int               process_reverse_mode;
-  AdwAnimation     *process_anim;
   double            process_progress;
   double            process_last_snapshot_progress;
   gint64            process_start_us;
@@ -144,8 +140,36 @@ void                       kgx_edge_queue_resize_views_if_needed
                                                      (KgxEdge           *self,
                                                       int                old_extent);
 void                       kgx_edge_mark_dirty       (KgxEdge           *self);
+gboolean                   kgx_edge_advance_process_timeline
+                                                     (KgxEdge           *self,
+                                                      gint64             now_us);
 
 void                       kgx_edge_init_bursts      (KgxEdge           *self);
 void                       kgx_edge_clear_bursts     (KgxEdge           *self);
 void                       kgx_edge_start_process_bursts (KgxEdge        *self);
 void                       kgx_edge_resume_bursts    (KgxEdge           *self);
+gboolean                   kgx_edge_advance_bursts   (KgxEdge           *self,
+                                                      gint64             now_us);
+gboolean                   kgx_edge_has_scheduled_bursts
+                                                     (KgxEdge           *self);
+gint64                     kgx_edge_get_next_burst_wakeup_us
+                                                     (KgxEdge           *self);
+
+static inline double
+kgx_edge_timeline_progress (gint64 now_us,
+                            gint64 start_us,
+                            double duration_s)
+{
+  if (start_us <= 0 || duration_s <= 0.0)
+    return 1.0;
+
+  return CLAMP ((now_us - start_us) / (duration_s * G_USEC_PER_SEC), 0.0, 1.0);
+}
+
+static inline double
+kgx_edge_timeline_ease_out_cubic (double progress)
+{
+  double inv = 1.0 - CLAMP (progress, 0.0, 1.0);
+
+  return 1.0 - inv * inv * inv;
+}

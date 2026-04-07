@@ -20,24 +20,6 @@
 
 #include "kgx-edge-private.h"
 
-static guint
-schedule_burst_timeout (guint       interval_ms,
-                        GSourceFunc function,
-                        gpointer    data,
-                        const char *name)
-{
-  guint source_id;
-
-  source_id = g_timeout_add_full (G_PRIORITY_LOW,
-                                  interval_ms,
-                                  function,
-                                  data,
-                                  NULL);
-  g_source_set_name_by_id (source_id, name);
-
-  return source_id;
-}
-
 static GdkRGBA
 random_muted_color (void)
 {
@@ -51,100 +33,118 @@ random_muted_color (void)
   return colors[g_random_int_range (0, G_N_ELEMENTS (colors))];
 }
 
-static void firework_schedule (KgxEdge *self);
-static void ambient_schedule (KgxEdge *self);
-
-static void
-burst_value_cb (double value,
-                BurstData *bd)
+static inline gint64
+delay_to_due_us (gint64 now_us,
+                 guint  delay_ms)
 {
-  bd->self->burst_progress[bd->index] = value;
-  kgx_edge_mark_dirty (bd->self);
+  return now_us + ((gint64) delay_ms * 1000);
 }
 
-static void
-burst_done_cb (BurstData *bd)
+static void firework_schedule (KgxEdge *self,
+                               gint64   now_us);
+static void ambient_schedule (KgxEdge *self,
+                              gint64   now_us);
+
+static gboolean
+burst_track_active (KgxEdge *self,
+                    int      index)
 {
-  bd->self->burst_progress[bd->index] = -1.0;
-  kgx_edge_mark_dirty (bd->self);
+  return self->burst_start_us[index] > 0 ||
+         self->burst_due_us[index] > 0 ||
+         self->burst_progress[index] >= 0.0;
 }
 
 static gboolean
-burst_fire (gpointer data)
+ambient_burst_track_active (KgxEdge *self,
+                            int      index)
 {
-  BurstData *bd = data;
-  KgxEdge *self = bd->self;
+  return self->ambient_burst_start_us[index] > 0 ||
+         self->ambient_burst_due_us[index] > 0 ||
+         self->ambient_progress[index] >= 0.0;
+}
+
+static void
+clear_pending_firework_schedule (KgxEdge *self)
+{
+  self->firework_due_us = 0;
+
+  for (int i = 0; i < MAX_BURSTS; i++)
+    self->burst_due_us[i] = 0;
+}
+
+static void
+clear_pending_ambient_schedule (KgxEdge *self)
+{
+  self->ambient_due_us = 0;
+
+  for (int i = 0; i < MAX_BURSTS; i++)
+    self->ambient_burst_due_us[i] = 0;
+}
+
+static void
+start_firework_burst (KgxEdge *self,
+                      int      index,
+                      gint64   now_us)
+{
   const KgxParticleTunables *bt;
-  int i = bd->index;
   int width;
   int height;
   double perim;
 
-  self->burst_timeout[i] = 0;
+  self->burst_due_us[index] = 0;
 
   if (!firework_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
-    return G_SOURCE_REMOVE;
+    return;
 
   kgx_edge_get_canvas_size (GTK_WIDGET (self), &width, &height);
   perim = 2.0 * (width + height);
-  self->burst_head[i] = g_random_double () * perim;
+  self->burst_head[index] = g_random_double () * perim;
 
   if (self->process_preset == KGX_PARTICLE_FIREWORKS)
-    self->burst_color[i] = self->process_color;
+    self->burst_color[index] = self->process_color;
   else
-    self->burst_color[i] = random_muted_color ();
+    self->burst_color[index] = random_muted_color ();
 
   bt = (self->process_preset == KGX_PARTICLE_FIREWORKS)
          ? kgx_edge_resolve_tunables (self, KGX_PARTICLE_FIREWORKS)
          : &self->global;
-  self->burst_tune_snap[i] = *bt;
-  adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->burst_anim[i]),
-                                    (guint) (800.0 / bt->speed));
-  adw_animation_reset (self->burst_anim[i]);
-  adw_animation_play (self->burst_anim[i]);
-
-  return G_SOURCE_REMOVE;
+  self->burst_tune_snap[index] = *bt;
+  self->burst_duration_s[index] = 0.8 / bt->speed;
+  self->burst_start_us[index] = now_us;
+  self->burst_progress[index] = 0.0;
 }
 
-static gboolean
-firework_fire (gpointer data)
+static void
+firework_fire (KgxEdge *self,
+               gint64   now_us)
 {
-  KgxEdge *self = KGX_EDGE (data);
-
-  self->firework_timeout = 0;
+  self->firework_due_us = 0;
 
   if (!firework_active (self) || !gtk_widget_get_mapped (GTK_WIDGET (self)))
-    return G_SOURCE_REMOVE;
+    return;
 
-  self->burst_data[0].index = 0;
-  self->burst_data[0].self = self;
-  burst_fire (&self->burst_data[0]);
+  start_firework_burst (self, 0, now_us);
 
   for (int i = 1; i < self->burst_count; i++) {
     int lo;
     int hi;
 
-    self->burst_data[i].index = i;
-    self->burst_data[i].self = self;
-    if (self->burst_timeout[i] != 0)
+    if (burst_track_active (self, i))
       continue;
 
     lo = (int) (150 * i * self->burst_spread);
     hi = (int) (600 * i * self->burst_spread);
-    self->burst_timeout[i] = schedule_burst_timeout (
-      g_random_int_range (MAX (lo, 50), MAX (hi, 100)),
-      burst_fire,
-      &self->burst_data[i],
-      "[kgx] edge firework burst");
+    self->burst_due_us[i] = delay_to_due_us (
+      now_us,
+      g_random_int_range (MAX (lo, 50), MAX (hi, 100)));
   }
 
-  firework_schedule (self);
-
-  return G_SOURCE_REMOVE;
+  firework_schedule (self, now_us);
 }
 
 static void
-firework_schedule (KgxEdge *self)
+firework_schedule (KgxEdge *self,
+                   gint64   now_us)
 {
   const KgxParticleTunables *ft;
   double fw_spd;
@@ -152,7 +152,7 @@ firework_schedule (KgxEdge *self)
   int hi;
   guint delay;
 
-  if (self->firework_timeout)
+  if (self->firework_due_us || !firework_active (self))
     return;
 
   ft = (self->process_preset == KGX_PARTICLE_FIREWORKS)
@@ -161,104 +161,73 @@ firework_schedule (KgxEdge *self)
   fw_spd = ft->speed;
   lo = (int) (600 * self->burst_spread / fw_spd);
   hi = (int) (1200 * self->burst_spread / fw_spd);
-  delay = (self->burst_progress[0] < 0.0 &&
-           adw_animation_get_state (self->burst_anim[0]) == ADW_ANIMATION_IDLE)
+  delay = (!burst_track_active (self, 0))
         ? 200
         : g_random_int_range (MAX (lo, 200), MAX (hi, 400));
 
-  self->firework_timeout = schedule_burst_timeout (delay,
-                                                   firework_fire,
-                                                   self,
-                                                   "[kgx] edge firework");
+  self->firework_due_us = delay_to_due_us (now_us, delay);
 }
 
 static void
-ambient_burst_value_cb (double value,
-                        BurstData *bd)
+start_ambient_burst (KgxEdge *self,
+                     int      index,
+                     gint64   now_us)
 {
-  bd->self->ambient_progress[bd->index] = value;
-  kgx_edge_mark_dirty (bd->self);
-}
-
-static void
-ambient_burst_done_cb (BurstData *bd)
-{
-  bd->self->ambient_progress[bd->index] = -1.0;
-  kgx_edge_mark_dirty (bd->self);
-}
-
-static gboolean
-ambient_burst_fire (gpointer data)
-{
-  BurstData *bd = data;
-  KgxEdge *self = bd->self;
   const KgxParticleTunables *bt;
-  int i = bd->index;
   int width;
   int height;
   double perim;
 
-  self->ambient_burst_timeout[i] = 0;
+  self->ambient_burst_due_us[index] = 0;
 
   if (!self->ambient_active || !self->ambient_enabled ||
       !gtk_widget_get_mapped (GTK_WIDGET (self)))
-    return G_SOURCE_REMOVE;
+    return;
 
   kgx_edge_get_canvas_size (GTK_WIDGET (self), &width, &height);
   perim = 2.0 * (width + height);
-  self->ambient_head[i] = g_random_double () * perim;
-  self->ambient_burst_color[i] = random_muted_color ();
+  self->ambient_head[index] = g_random_double () * perim;
+  self->ambient_burst_color[index] = random_muted_color ();
 
   bt = &self->preset[KGX_PARTICLE_AMBIENT - 1];
-  self->ambient_tune_snap[i] = *bt;
-  adw_timed_animation_set_duration (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
-                                    (guint) (800.0 / bt->speed));
-  adw_animation_reset (self->ambient_anim[i]);
-  adw_animation_play (self->ambient_anim[i]);
-
-  return G_SOURCE_REMOVE;
+  self->ambient_tune_snap[index] = *bt;
+  self->ambient_burst_duration_s[index] = 0.8 / bt->speed;
+  self->ambient_burst_start_us[index] = now_us;
+  self->ambient_progress[index] = 0.0;
 }
 
-static gboolean
-ambient_fire (gpointer data)
+static void
+ambient_fire (KgxEdge *self,
+              gint64   now_us)
 {
-  KgxEdge *self = KGX_EDGE (data);
-
-  self->ambient_timeout = 0;
+  self->ambient_due_us = 0;
 
   if (!self->ambient_active || !self->ambient_enabled ||
       !gtk_widget_get_mapped (GTK_WIDGET (self)))
-    return G_SOURCE_REMOVE;
+    return;
 
-  self->ambient_burst_data[0].index = 0;
-  self->ambient_burst_data[0].self = self;
-  ambient_burst_fire (&self->ambient_burst_data[0]);
+  start_ambient_burst (self, 0, now_us);
 
   for (int i = 1; i < self->ambient_burst_count; i++) {
     int lo;
     int hi;
 
-    self->ambient_burst_data[i].index = i;
-    self->ambient_burst_data[i].self = self;
-    if (self->ambient_burst_timeout[i] != 0)
+    if (ambient_burst_track_active (self, i))
       continue;
 
     lo = (int) (150 * i * self->ambient_burst_spread);
     hi = (int) (600 * i * self->ambient_burst_spread);
-    self->ambient_burst_timeout[i] = schedule_burst_timeout (
-      g_random_int_range (MAX (lo, 50), MAX (hi, 100)),
-      ambient_burst_fire,
-      &self->ambient_burst_data[i],
-      "[kgx] edge ambient burst");
+    self->ambient_burst_due_us[i] = delay_to_due_us (
+      now_us,
+      g_random_int_range (MAX (lo, 50), MAX (hi, 100)));
   }
 
-  ambient_schedule (self);
-
-  return G_SOURCE_REMOVE;
+  ambient_schedule (self, now_us);
 }
 
 static void
-ambient_schedule (KgxEdge *self)
+ambient_schedule (KgxEdge *self,
+                  gint64   now_us)
 {
   const KgxParticleTunables *ft;
   double spd;
@@ -266,119 +235,147 @@ ambient_schedule (KgxEdge *self)
   int hi;
   guint delay;
 
-  if (self->ambient_timeout)
+  if (self->ambient_due_us || !self->ambient_active || !self->ambient_enabled)
     return;
 
   ft = &self->preset[KGX_PARTICLE_AMBIENT - 1];
   spd = ft->speed;
   lo = (int) (600 * self->ambient_burst_spread / spd);
   hi = (int) (1200 * self->ambient_burst_spread / spd);
-  delay = (self->ambient_progress[0] < 0.0 &&
-           adw_animation_get_state (self->ambient_anim[0]) == ADW_ANIMATION_IDLE)
+  delay = (!ambient_burst_track_active (self, 0))
         ? 200
         : g_random_int_range (MAX (lo, 200), MAX (hi, 400));
 
-  self->ambient_timeout = schedule_burst_timeout (delay,
-                                                  ambient_fire,
-                                                  self,
-                                                  "[kgx] edge ambient");
+  self->ambient_due_us = delay_to_due_us (now_us, delay);
+}
+
+static gboolean
+advance_burst_progress (double *progress,
+                        gint64 *start_us,
+                        double *duration_s,
+                        gint64  now_us)
+{
+  double raw;
+  double eased;
+
+  if (*start_us <= 0 || *progress < 0.0)
+    return FALSE;
+
+  raw = kgx_edge_timeline_progress (now_us, *start_us, *duration_s);
+  eased = kgx_edge_timeline_ease_out_cubic (raw);
+
+  if (raw >= 1.0) {
+    *progress = -1.0;
+    *start_us = 0;
+    *duration_s = 0.0;
+    return TRUE;
+  }
+
+  if (*progress == eased)
+    return FALSE;
+
+  *progress = eased;
+  return TRUE;
 }
 
 void
 kgx_edge_init_bursts (KgxEdge *self)
 {
+  self->firework_due_us = 0;
+  self->ambient_due_us = 0;
+
   for (int i = 0; i < MAX_BURSTS; i++) {
-    AdwAnimationTarget *target;
-    BurstData *bd = &self->burst_data[i];
-    BurstData *abd = &self->ambient_burst_data[i];
-
-    bd->index = i;
-    bd->self = self;
-    target = adw_callback_animation_target_new (
-      (AdwAnimationTargetFunc) burst_value_cb,
-      bd,
-      NULL);
-    self->burst_anim[i] = adw_timed_animation_new (GTK_WIDGET (self),
-                                                   0.0, 1.0, 800,
-                                                   target);
-    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->burst_anim[i]),
-                                    ADW_EASE_OUT_CUBIC);
-    g_signal_connect_swapped (self->burst_anim[i], "done",
-                              G_CALLBACK (burst_done_cb), bd);
     self->burst_progress[i] = -1.0;
+    self->burst_due_us[i] = 0;
+    self->burst_start_us[i] = 0;
+    self->burst_duration_s[i] = 0.0;
 
-    abd->index = i;
-    abd->self = self;
-    target = adw_callback_animation_target_new (
-      (AdwAnimationTargetFunc) ambient_burst_value_cb,
-      abd,
-      NULL);
-    self->ambient_anim[i] = adw_timed_animation_new (GTK_WIDGET (self),
-                                                     0.0, 1.0, 800,
-                                                     target);
-    adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->ambient_anim[i]),
-                                    ADW_EASE_OUT_CUBIC);
-    g_signal_connect_swapped (self->ambient_anim[i], "done",
-                              G_CALLBACK (ambient_burst_done_cb), abd);
     self->ambient_progress[i] = -1.0;
+    self->ambient_burst_due_us[i] = 0;
+    self->ambient_burst_start_us[i] = 0;
+    self->ambient_burst_duration_s[i] = 0.0;
   }
 }
 
 void
 kgx_edge_clear_bursts (KgxEdge *self)
 {
-  if (self->firework_timeout) {
-    g_source_remove (self->firework_timeout);
-    self->firework_timeout = 0;
-  }
-  if (self->ambient_timeout) {
-    g_source_remove (self->ambient_timeout);
-    self->ambient_timeout = 0;
-  }
+  clear_pending_firework_schedule (self);
+  clear_pending_ambient_schedule (self);
 
   for (int i = 0; i < MAX_BURSTS; i++) {
-    if (self->burst_timeout[i]) {
-      g_source_remove (self->burst_timeout[i]);
-      self->burst_timeout[i] = 0;
-    }
-    if (self->ambient_burst_timeout[i]) {
-      g_source_remove (self->ambient_burst_timeout[i]);
-      self->ambient_burst_timeout[i] = 0;
-    }
-    g_clear_object (&self->burst_anim[i]);
-    g_clear_object (&self->ambient_anim[i]);
+    self->burst_progress[i] = -1.0;
+    self->burst_start_us[i] = 0;
+    self->burst_duration_s[i] = 0.0;
+
+    self->ambient_progress[i] = -1.0;
+    self->ambient_burst_start_us[i] = 0;
+    self->ambient_burst_duration_s[i] = 0.0;
   }
 }
 
 void
 kgx_edge_resume_bursts (KgxEdge *self)
 {
-  if (firework_active (self) && self->burst_progress[0] < 0.0)
-    firework_schedule (self);
+  gint64 now_us;
+  gboolean need_driver = FALSE;
 
-  if (self->ambient_active && self->ambient_enabled &&
-      self->ambient_progress[0] < 0.0)
-    ambient_schedule (self);
+  now_us = g_get_monotonic_time ();
+
+  if (firework_active (self) && self->firework_due_us == 0) {
+    gboolean any_firework_activity = FALSE;
+
+    for (int i = 0; i < MAX_BURSTS && !any_firework_activity; i++)
+      any_firework_activity = burst_track_active (self, i);
+
+    if (!any_firework_activity)
+      firework_schedule (self, now_us);
+  }
+
+  if (self->ambient_active && self->ambient_enabled && self->ambient_due_us == 0) {
+    gboolean any_ambient_activity = FALSE;
+
+    for (int i = 0; i < MAX_BURSTS && !any_ambient_activity; i++)
+      any_ambient_activity = ambient_burst_track_active (self, i);
+
+    if (!any_ambient_activity)
+      ambient_schedule (self, now_us);
+  }
+
+  need_driver = firework_active (self) ||
+                self->ambient_active ||
+                kgx_edge_has_scheduled_bursts (self);
+
+  if (need_driver)
+    kgx_edge_mark_dirty (self);
 }
 
 void
 kgx_edge_start_process_bursts (KgxEdge *self)
 {
+  gint64 now_us;
+
   g_return_if_fail (KGX_IS_EDGE (self));
 
-  if (!gtk_widget_get_mapped (GTK_WIDGET (self)) || self->firework_timeout)
+  if (!gtk_widget_get_mapped (GTK_WIDGET (self)))
     return;
 
-  self->burst_data[0].index = 0;
-  self->burst_data[0].self = self;
-  burst_fire (&self->burst_data[0]);
-  firework_schedule (self);
+  now_us = g_get_monotonic_time ();
+
+  if (self->firework_due_us || burst_track_active (self, 0))
+    return;
+
+  start_firework_burst (self, 0, now_us);
+  firework_schedule (self, now_us);
+  kgx_edge_mark_dirty (self);
 }
 
 void
 kgx_edge_set_ambient (KgxEdge *self,
                       gboolean ambient)
 {
+  gint64 now_us;
+
   g_return_if_fail (KGX_IS_EDGE (self));
 
   self = kgx_edge_get_root (self);
@@ -387,30 +384,21 @@ kgx_edge_set_ambient (KgxEdge *self,
     return;
 
   self->ambient_active = ambient;
+  now_us = g_get_monotonic_time ();
 
   if (ambient) {
     if (!self->ambient_enabled)
       return;
 
-    if (!self->ambient_timeout)
-      self->ambient_timeout = schedule_burst_timeout (50,
-                                                      ambient_fire,
-                                                      self,
-                                                      "[kgx] edge ambient");
+    if (self->ambient_due_us == 0)
+      self->ambient_due_us = delay_to_due_us (now_us, 50);
+
+    kgx_edge_mark_dirty (self);
     return;
   }
 
-  if (self->ambient_timeout) {
-    g_source_remove (self->ambient_timeout);
-    self->ambient_timeout = 0;
-  }
-
-  for (int i = 0; i < MAX_BURSTS; i++) {
-    if (self->ambient_burst_timeout[i]) {
-      g_source_remove (self->ambient_burst_timeout[i]);
-      self->ambient_burst_timeout[i] = 0;
-    }
-  }
+  clear_pending_ambient_schedule (self);
+  kgx_edge_mark_dirty (self);
 }
 
 void
@@ -420,20 +408,144 @@ kgx_edge_stop_ambient_immediate (KgxEdge *self)
 
   self = kgx_edge_get_root (self);
 
-  if (self->ambient_timeout) {
-    g_source_remove (self->ambient_timeout);
-    self->ambient_timeout = 0;
-  }
+  clear_pending_ambient_schedule (self);
 
   for (int i = 0; i < MAX_BURSTS; i++) {
-    if (self->ambient_burst_timeout[i]) {
-      g_source_remove (self->ambient_burst_timeout[i]);
-      self->ambient_burst_timeout[i] = 0;
-    }
     self->ambient_progress[i] = -1.0;
-    if (self->ambient_anim[i])
-      adw_animation_reset (self->ambient_anim[i]);
+    self->ambient_burst_start_us[i] = 0;
+    self->ambient_burst_duration_s[i] = 0.0;
   }
 
   kgx_edge_mark_dirty (self);
+}
+
+gboolean
+kgx_edge_advance_bursts (KgxEdge *self,
+                         gint64   now_us)
+{
+  gboolean changed = FALSE;
+  gboolean firework_scheduled = FALSE;
+  gboolean ambient_scheduled = FALSE;
+
+  g_return_val_if_fail (KGX_IS_EDGE (self), FALSE);
+
+  self = kgx_edge_get_root (self);
+
+  firework_scheduled = (self->firework_due_us != 0);
+  ambient_scheduled = (self->ambient_due_us != 0);
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    firework_scheduled = firework_scheduled || self->burst_due_us[i] != 0;
+    ambient_scheduled = ambient_scheduled || self->ambient_burst_due_us[i] != 0;
+  }
+
+  if (!firework_active (self) && firework_scheduled) {
+    for (int i = 0; i < MAX_BURSTS; i++) {
+      if (self->burst_due_us[i] != 0) {
+        self->burst_due_us[i] = 0;
+        changed = TRUE;
+      }
+    }
+
+    if (self->firework_due_us != 0) {
+      self->firework_due_us = 0;
+      changed = TRUE;
+    }
+  }
+
+  if ((!self->ambient_active || !self->ambient_enabled) && ambient_scheduled) {
+    for (int i = 0; i < MAX_BURSTS; i++) {
+      if (self->ambient_burst_due_us[i] != 0) {
+        self->ambient_burst_due_us[i] = 0;
+        changed = TRUE;
+      }
+    }
+
+    if (self->ambient_due_us != 0) {
+      self->ambient_due_us = 0;
+      changed = TRUE;
+    }
+  }
+
+  if (self->firework_due_us > 0 && now_us >= self->firework_due_us) {
+    firework_fire (self, now_us);
+    changed = TRUE;
+  }
+
+  if (self->ambient_due_us > 0 && now_us >= self->ambient_due_us) {
+    ambient_fire (self, now_us);
+    changed = TRUE;
+  }
+
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    if (self->burst_due_us[i] > 0 && now_us >= self->burst_due_us[i]) {
+      start_firework_burst (self, i, now_us);
+      changed = TRUE;
+    }
+
+    if (advance_burst_progress (&self->burst_progress[i],
+                                &self->burst_start_us[i],
+                                &self->burst_duration_s[i],
+                                now_us))
+      changed = TRUE;
+
+    if (self->ambient_burst_due_us[i] > 0 && now_us >= self->ambient_burst_due_us[i]) {
+      start_ambient_burst (self, i, now_us);
+      changed = TRUE;
+    }
+
+    if (advance_burst_progress (&self->ambient_progress[i],
+                                &self->ambient_burst_start_us[i],
+                                &self->ambient_burst_duration_s[i],
+                                now_us))
+      changed = TRUE;
+  }
+
+  return changed;
+}
+
+gboolean
+kgx_edge_has_scheduled_bursts (KgxEdge *self)
+{
+  g_return_val_if_fail (KGX_IS_EDGE (self), FALSE);
+
+  self = kgx_edge_get_root (self);
+
+  if (self->firework_due_us > 0 || self->ambient_due_us > 0)
+    return TRUE;
+
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    if (self->burst_due_us[i] > 0 || self->ambient_burst_due_us[i] > 0)
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+gint64
+kgx_edge_get_next_burst_wakeup_us (KgxEdge *self)
+{
+  gint64 next_us = 0;
+
+  g_return_val_if_fail (KGX_IS_EDGE (self), 0);
+
+  self = kgx_edge_get_root (self);
+
+  if (self->firework_due_us > 0)
+    next_us = self->firework_due_us;
+
+  if (self->ambient_due_us > 0 &&
+      (next_us == 0 || self->ambient_due_us < next_us))
+    next_us = self->ambient_due_us;
+
+  for (int i = 0; i < MAX_BURSTS; i++) {
+    if (self->burst_due_us[i] > 0 &&
+        (next_us == 0 || self->burst_due_us[i] < next_us))
+      next_us = self->burst_due_us[i];
+
+    if (self->ambient_burst_due_us[i] > 0 &&
+        (next_us == 0 || self->ambient_burst_due_us[i] < next_us))
+      next_us = self->ambient_burst_due_us[i];
+  }
+
+  return next_us;
 }

@@ -63,6 +63,8 @@ G_DEFINE_FINAL_TYPE (KgxEdge, kgx_edge, GTK_TYPE_WIDGET)
 
 static void     kgx_edge_queue_resize_views (KgxEdge   *self);
 static gboolean kgx_edge_has_visible_content (KgxEdge *self);
+static inline void kgx_edge_ensure_redraw_tick (KgxEdge *self);
+static inline void kgx_edge_stop_redraw_tick (KgxEdge *self);
 
 /* ── tunables helpers ───────────────────────────────────── */
 
@@ -135,19 +137,8 @@ kgx_edge_get_tunable_into_value (const KgxParticleTunables *tune,
 static void
 kgx_edge_refresh_global_animation_speed (KgxEdge *state)
 {
-  if (state->overscroll_anim) {
-    adw_timed_animation_set_duration (
-      ADW_TIMED_ANIMATION (state->overscroll_anim),
-      (guint) (BASE_OVERSCROLL_MS / state->global.speed));
-  }
-
-  for (int i = 0; i < MAX_BURSTS; i++) {
-    if (state->burst_anim[i]) {
-      adw_timed_animation_set_duration (
-        ADW_TIMED_ANIMATION (state->burst_anim[i]),
-        (guint) (800.0 / state->global.speed));
-    }
-  }
+  if (state->overscroll_progress >= 0.0)
+    state->overscroll_duration_s = (BASE_OVERSCROLL_MS / state->global.speed) / 1000.0;
 }
 
 static void
@@ -296,6 +287,118 @@ kgx_edge_has_visible_content (KgxEdge *self)
   return FALSE;
 }
 
+static gboolean
+kgx_edge_has_scheduled_work (KgxEdge *self)
+{
+  self = kgx_edge_get_root (self);
+
+  return kgx_edge_has_scheduled_bursts (self);
+}
+
+static gint64
+kgx_edge_get_next_scheduled_wakeup_us (KgxEdge *self)
+{
+  self = kgx_edge_get_root (self);
+
+  return kgx_edge_get_next_burst_wakeup_us (self);
+}
+
+static void
+kgx_edge_cancel_timeline_wakeup (KgxEdge *self)
+{
+  if (self->timeline_timeout_id != 0) {
+    g_source_remove (self->timeline_timeout_id);
+    self->timeline_timeout_id = 0;
+    self->timeline_timeout_target_us = 0;
+  }
+}
+
+static gboolean
+kgx_edge_timeline_wakeup_cb (gpointer data)
+{
+  KgxEdge *self = KGX_EDGE (data);
+
+  self->timeline_timeout_id = 0;
+  self->timeline_timeout_target_us = 0;
+
+  if (!gtk_widget_get_mapped (GTK_WIDGET (self)))
+    return G_SOURCE_REMOVE;
+
+  self->redraw_pending = TRUE;
+  kgx_edge_ensure_redraw_tick (self);
+
+  return G_SOURCE_REMOVE;
+}
+
+static void
+kgx_edge_schedule_timeline_wakeup (KgxEdge *self,
+                                   gint64   now_us)
+{
+  gint64 target_us;
+  guint delay_ms;
+
+  self = kgx_edge_get_root (self);
+
+  if (!gtk_widget_get_mapped (GTK_WIDGET (self))) {
+    kgx_edge_cancel_timeline_wakeup (self);
+    return;
+  }
+
+  target_us = kgx_edge_get_next_scheduled_wakeup_us (self);
+  if (target_us <= 0) {
+    kgx_edge_cancel_timeline_wakeup (self);
+    return;
+  }
+
+  if (self->timeline_timeout_id != 0 &&
+      self->timeline_timeout_target_us == target_us)
+    return;
+
+  kgx_edge_cancel_timeline_wakeup (self);
+
+  delay_ms = MAX ((guint) 1,
+                  (guint) ((MAX (target_us - now_us, 0) + 999) / 1000));
+  self->timeline_timeout_id =
+    g_timeout_add_full (G_PRIORITY_LOW,
+                        delay_ms,
+                        kgx_edge_timeline_wakeup_cb,
+                        self,
+                        NULL);
+  self->timeline_timeout_target_us = target_us;
+  g_source_set_name_by_id (self->timeline_timeout_id, "[kgx] edge timeline");
+}
+
+static gboolean
+kgx_edge_advance_overscroll_timeline (KgxEdge *self,
+                                      gint64   now_us)
+{
+  double raw;
+  double progress;
+
+  if (self->overscroll_progress < 0.0 ||
+      self->overscroll_start_us <= 0 ||
+      self->overscroll_duration_s <= 0.0)
+    return FALSE;
+
+  raw = kgx_edge_timeline_progress (now_us,
+                                    self->overscroll_start_us,
+                                    self->overscroll_duration_s);
+  progress = kgx_edge_timeline_ease_out_cubic (raw);
+
+  if (raw >= 1.0) {
+    self->overscroll_progress = -1.0;
+    self->overscroll_start_us = 0;
+    self->overscroll_duration_s = 0.0;
+    return TRUE;
+  }
+
+  if (self->overscroll_progress == progress)
+    return FALSE;
+
+  self->overscroll_progress = progress;
+  return TRUE;
+}
+
 static inline void
 kgx_edge_reset_governor (KgxEdge *self)
 {
@@ -418,18 +521,51 @@ kgx_edge_redraw_tick_cb (GtkWidget     *widget,
 {
   KgxEdge *self = KGX_EDGE (user_data);
   gint64 now_us = gdk_frame_clock_get_frame_time (frame_clock);
+  gboolean timeline_changed;
+
+  timeline_changed = kgx_edge_advance_overscroll_timeline (self, now_us);
+  if (kgx_edge_advance_process_timeline (self, now_us))
+    timeline_changed = TRUE;
+  if (kgx_edge_advance_bursts (self, now_us))
+    timeline_changed = TRUE;
+
+  if (timeline_changed || kgx_edge_has_visible_content (self))
+    self->redraw_pending = TRUE;
 
   if (!self->particle_throttle_enabled) {
+    if (kgx_edge_has_visible_content (self) || self->redraw_pending) {
+      kgx_edge_cancel_timeline_wakeup (self);
+      self->redraw_pending = FALSE;
+      self->last_redraw_request_us = 0;
+      self->frame_draw_budget_remaining = 0;
+      kgx_edge_queue_draw_views (self);
+      return G_SOURCE_CONTINUE;
+    }
+
+    if (kgx_edge_has_scheduled_work (self)) {
+      kgx_edge_schedule_timeline_wakeup (self, now_us);
+      self->redraw_tick_id = 0;
+      return G_SOURCE_REMOVE;
+    }
+
     self->redraw_tick_id = 0;
     kgx_edge_reset_governor (self);
     return G_SOURCE_REMOVE;
   }
 
   if (!kgx_edge_has_visible_content (self) && !self->redraw_pending) {
+    if (kgx_edge_has_scheduled_work (self)) {
+      kgx_edge_schedule_timeline_wakeup (self, now_us);
+      self->redraw_tick_id = 0;
+      return G_SOURCE_REMOVE;
+    }
+
     self->redraw_tick_id = 0;
     kgx_edge_reset_governor (self);
     return G_SOURCE_REMOVE;
   }
+
+  kgx_edge_cancel_timeline_wakeup (self);
 
   if (self->frame_snapshot_cost_us > 0.0) {
     kgx_edge_note_snapshot (self, self->frame_snapshot_cost_us, now_us);
@@ -495,24 +631,33 @@ kgx_edge_mark_dirty (KgxEdge *self)
   if (!gtk_widget_get_mapped (widget))
     return;
 
-  if (!root->particle_throttle_enabled) {
-    root->redraw_pending = FALSE;
-    root->last_redraw_request_us = 0;
-    root->frame_draw_budget_remaining = 0;
-    kgx_edge_stop_redraw_tick (root);
-    kgx_edge_queue_draw_views (root);
+  if (kgx_edge_has_visible_content (root)) {
+    kgx_edge_cancel_timeline_wakeup (root);
+
+    if (!root->particle_throttle_enabled) {
+      root->redraw_pending = FALSE;
+      root->last_redraw_request_us = 0;
+      root->frame_draw_budget_remaining = 0;
+      kgx_edge_ensure_redraw_tick (root);
+      kgx_edge_queue_draw_views (root);
+      return;
+    }
+
+    root->redraw_pending = TRUE;
+    kgx_edge_ensure_redraw_tick (root);
     return;
   }
 
-  if (!kgx_edge_has_visible_content (root)) {
+  if (kgx_edge_has_scheduled_work (root)) {
     root->redraw_pending = FALSE;
     root->last_redraw_request_us = 0;
-    kgx_edge_queue_draw_views (root);
+    kgx_edge_schedule_timeline_wakeup (root, g_get_monotonic_time ());
     return;
   }
 
-  root->redraw_pending = TRUE;
-  kgx_edge_ensure_redraw_tick (root);
+  root->redraw_pending = FALSE;
+  root->last_redraw_request_us = 0;
+  kgx_edge_queue_draw_views (root);
 }
 
 /* ── colour helpers ──────────────────────────────────────── */
@@ -687,7 +832,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
     double tail_env;
     double seg;
 
-    /* Use AdwAnimation-driven progress when it's advancing normally.
+    /* Prefer the tick-driven progress as it advances.
      * Fall back to wall clock only when progress hasn't changed between
      * snapshots (frame clock stall during tab-switch layout). */
     if (root->process_progress != root->process_last_snapshot_progress) {
@@ -881,25 +1026,6 @@ kgx_edge_measure (GtkWidget      *widget,
 }
 
 
-/* ── animation callbacks ────────────────────────────────── */
-
-static void
-overscroll_value_cb (double   value,
-                     KgxEdge *self)
-{
-  self->overscroll_progress = value;
-  kgx_edge_mark_dirty (self);
-}
-
-
-static void
-overscroll_done_cb (KgxEdge *self)
-{
-  self->overscroll_progress = -1.0;
-  kgx_edge_mark_dirty (self);
-}
-
-
 /* ── map: resume firework if needed ───────────────────────── */
 
 static void
@@ -918,14 +1044,8 @@ kgx_edge_map (GtkWidget *widget)
 
   kgx_edge_resume_bursts (self);
 
-  if (kgx_edge_has_visible_content (self)) {
-    if (self->particle_throttle_enabled) {
-      self->redraw_pending = TRUE;
-      kgx_edge_ensure_redraw_tick (self);
-    } else {
-      kgx_edge_queue_draw_views (self);
-    }
-  }
+  if (kgx_edge_has_visible_content (self) || kgx_edge_has_scheduled_work (self))
+    kgx_edge_mark_dirty (self);
 }
 
 
@@ -934,8 +1054,10 @@ kgx_edge_unmap (GtkWidget *widget)
 {
   KgxEdge *self = KGX_EDGE (widget);
 
-  if (self == kgx_edge_get_root (self))
+  if (self == kgx_edge_get_root (self)) {
+    kgx_edge_cancel_timeline_wakeup (self);
     kgx_edge_stop_redraw_tick (self);
+  }
 
   GTK_WIDGET_CLASS (kgx_edge_parent_class)->unmap (widget);
 }
@@ -1138,14 +1260,10 @@ kgx_edge_dispose (GObject *object)
 {
   KgxEdge *self = KGX_EDGE (object);
 
+  kgx_edge_cancel_timeline_wakeup (self);
   kgx_edge_stop_redraw_tick (self);
-  g_clear_object (&self->overscroll_anim);
   self->process_preset = KGX_PARTICLE_NONE;
   self->process_progress = -1.0;
-  if (self->process_anim) {
-    adw_animation_reset (self->process_anim);
-    g_clear_object (&self->process_anim);
-  }
   g_clear_object (&self->master);
   g_clear_pointer (&self->overscroll_color, g_free);
   g_clear_pointer (&self->unit_triangle, gsk_path_unref);
@@ -1327,8 +1445,6 @@ kgx_edge_class_init (KgxEdgeClass *klass)
 static void
 kgx_edge_init (KgxEdge *self)
 {
-  AdwAnimationTarget *target;
-
   /* Defaults */
   self->overscroll_enabled  = TRUE;
   self->overscroll_color    = g_strdup ("");
@@ -1341,6 +1457,8 @@ kgx_edge_init (KgxEdge *self)
   self->ambient_burst_count = 8;
   self->ambient_burst_spread = 3.1;
   self->overscroll_progress = -1.0;
+  self->overscroll_start_us = 0;
+  self->overscroll_duration_s = 0.0;
   self->process_progress    = -1.0;
   self->process_preset      = KGX_PARTICLE_NONE;
   kgx_edge_reset_governor (self);
@@ -1388,19 +1506,6 @@ kgx_edge_init (KgxEdge *self)
 
   gtk_widget_set_can_target (GTK_WIDGET (self), FALSE);
   gtk_widget_set_can_focus (GTK_WIDGET (self), FALSE);
-
-  /* Overscroll animation */
-  target = adw_callback_animation_target_new (
-      (AdwAnimationTargetFunc) overscroll_value_cb, self, NULL);
-
-  self->overscroll_anim = adw_timed_animation_new (GTK_WIDGET (self),
-                                                   0.0, 1.0,
-                                                   BASE_OVERSCROLL_MS,
-                                                   target);
-  adw_timed_animation_set_easing (ADW_TIMED_ANIMATION (self->overscroll_anim),
-                                  ADW_EASE_OUT_CUBIC);
-  g_signal_connect_swapped (self->overscroll_anim, "done",
-                            G_CALLBACK (overscroll_done_cb), self);
   kgx_edge_init_bursts (self);
 }
 
@@ -1432,8 +1537,8 @@ kgx_edge_fire_overscroll (KgxEdge         *self,
     self->overscroll_reverse_toggle = !self->overscroll_reverse_toggle;
 
   self->overscroll_progress = 0.0;
-  adw_animation_reset (self->overscroll_anim);
-  adw_animation_play (self->overscroll_anim);
+  self->overscroll_start_us = g_get_monotonic_time ();
+  self->overscroll_duration_s = (BASE_OVERSCROLL_MS / self->global.speed) / 1000.0;
   kgx_edge_mark_dirty (self);
 }
 
