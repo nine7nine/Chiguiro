@@ -61,6 +61,9 @@ entity Settings {
     use_system_font: Boolean
     custom_font: String?
     font_scale: Decimal
+    app_use_system_font: Boolean
+    app_custom_font: String?
+    app_font_scale: Decimal
 
     -- Scrollback
     scrollback_lines: Integer
@@ -69,6 +72,9 @@ entity Settings {
     -- Bell
     audible_bell: Boolean
     visual_bell: Boolean
+    command_complete_notifications: Boolean
+    edge_particle_throttle: Boolean
+    edge_particle_hz: Integer
 
     -- Flow control
     software_flow_control: Boolean
@@ -612,6 +618,5 @@ surface TerminalView {
 -- Open Questions
 ------------------------------------------------------------
 
-open question "Should the watcher polling interval be configurable, or are 500ms/2s fixed?"
-
+open question "Should the adaptive watcher polling policy remain fixed, or be user-configurable?"
 open question "Should livery import/export (INI file format) be part of the core spec or a separate integration spec?"

@@ -7,7 +7,7 @@ A GTK4 terminal emulator with event-driven glass backgrounds and a single-dimens
 - **App Glass** — per-process translucent backgrounds with smooth animated color transitions triggered by process detection
 - **Edge Particles** — single-dimension particle system rendering along window edges with 7 animation presets, strip-based rendering, per-block envelope shaping, and per-app overrides
 - **Overscroll Presets** — Scroll 1 (corner burst snakes) and Scroll 2 (full-bar edge fill) with independent tunables
-- **Per-App Configuration** — comma-separated process names with overrides for preset, direction, shape, gap, speed, thickness, glass color, and particle color
+- **Per-App Configuration** — comma-separated process names with overrides for preset, direction, shape, gap, speed, thickness, tail, envelope timing, release modes, glass color, and particle color
 - **Custom Tab Strip** — Chigüiro-specific tab strip with process-chain fallback titles like `>bash` and `>bash>top`
 - **Paginated Settings** — carousel-based overlay with clickable page dots (General, App Glass, Particles, Shortcuts)
 - **Headless Server Mode** — systemd user service for instant window startup via D-Bus
@@ -36,12 +36,12 @@ Global redraw controls let you cap particle pacing in Hz or disable throttling e
 | Crv | ( / / / ) | Envelope curve: concave, linear, convex |
 | T.Atk | 0 – 50 | Thickness envelope attack |
 | T.Rel | 0 – 50 | Thickness envelope release |
-| T.Rls | U / R / S / G | Thickness release: Uniform, Retract (all blocks shrink), Shrink (per-block), Grow (per-block) |
+| T.Rls | U / R / S / G / A | Thickness release: Uniform, Retract, Spread, Grow, All |
 | T.Crv | ( / / / ) | Thickness envelope curve |
 
 ### App Glass Per-Process Overrides
 
-Each process entry supports: glass color, preset, reverse direction, shape, gap, speed, thickness, and particle color. Reverse has three modes: forward, reverse, and alternating (diamond mode).
+Each process entry supports: glass color, preset, reverse direction, shape, gap, speed, thickness, tail length, envelope attack/release, release mode, thickness attack/release, thickness release mode, and particle color. Reverse has three modes: forward, reverse, and alternating (diamond mode). Unused numeric overrides display as `--` and fall back to the preset default.
 
 ### Tab Titles
 

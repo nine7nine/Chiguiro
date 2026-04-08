@@ -128,6 +128,9 @@ rule CreateTab {
         -- If no window provided, create a new one first.
         -- If command is null, use shell from settings.
         -- If working_dir is null, use home directory.
+        -- A newly created window may reveal a glass startup placeholder
+        -- until the first tab finishes starting, so header chrome and
+        -- terminal content appear together on first reveal.
 }
 
 rule TabStarted {
@@ -559,25 +562,29 @@ surface SettingsPage {
         settings.use_system_font
         settings.custom_font
         settings.font_scale
+        settings.app_use_system_font
+        settings.app_custom_font
+        settings.app_font_scale
         settings.scrollback_lines
         settings.ignore_scrollback_limit
         settings.audible_bell
         settings.visual_bell
-        settings.transparency
+        settings.command_complete_notifications
         settings.transparency_level
         settings.glass_opacity
         settings.glass_color
         settings.use_glass_bg
         settings.accent_color
-        settings.restore_window_size
 
         -- Page 2: App Glass
         -- Per-process glass/particle config grid (APP_GLASS_SLOTS rows).
         -- Each row: process name(s), glass color, preset, reverse mode,
         -- particle color, shape override, gap override, speed override,
-        -- thickness override.
+        -- thickness override, tail override, envelope attack/release,
+        -- release mode, thickness attack/release, and thickness release mode.
         -- Process names support comma-separated matching.
-        -- Config format: "#glass;preset;reverse;#pcolor;shape;gap;speed;thk"
+        -- Config format:
+        -- "#glass;preset;reverse;#pcolor;shape;gap;speed;thk;tail;atk;rel;rls;tatk;trel;trls"
 
         -- Page 3: Particles
         settings.overscroll_enabled
@@ -585,11 +592,14 @@ surface SettingsPage {
         settings.overscroll_style
         settings.overscroll_reverse
         settings.settings_animation
+        settings.edge_particle_throttle
+        settings.edge_particle_hz
         -- Per-preset particle tunables (speed, thickness, gap, tail,
         -- pulse, envelope, release mode, shape, thickness envelope,
         -- curve) exposed via a programmatic grid (N_PRESET_ROWS x
         -- N_TUNE_COLS). Release mode cycles U/R/S (3 modes).
-        -- Thickness release mode cycles U/R/S/G (4 modes, includes grow).
+        -- Thickness release mode cycles U/R/S/G/A (5 modes, includes
+        -- grow and all-block release).
         -- See GSettings schema for the full list of edge-* keys.
 
         -- Page 4: Shortcuts (keyboard shortcut reference)

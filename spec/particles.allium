@@ -19,7 +19,7 @@ enum ParticlePreset { none | fireworks | corners | pulse_out | rotate | ping_pon
 
 enum ParticleShape { square | circle | diamond | triangle }
 
-enum ReleaseMode { uniform | retract | spread | grow }
+enum ReleaseMode { uniform | retract | spread | grow | all }
 
 -- Reverse direction mode for animations.
 -- forward: normal direction. reverse: opposite direction.
@@ -49,7 +49,7 @@ value ParticleTunables {
     gap: Integer                   -- 0 = gapped (default), 1 = solid (no gap)
     thk_attack: Decimal
     thk_release: Decimal
-    thk_release_mode: ReleaseMode  -- per-block thickness release: uniform/retract/spread/grow (4 modes)
+    thk_release_mode: ReleaseMode  -- per-block thickness release: uniform/retract/spread/grow/all
     thk_curve: Integer
 }
 
@@ -81,6 +81,13 @@ entity Particles {
     process_gap_override: Integer        -- -1 = use preset gap
     process_speed_override: Integer      -- 0 = use preset speed
     process_thk_override: Integer        -- 0 = use preset thickness
+    process_tail_override: Integer       -- 0 = use preset tail length
+    process_attack_override: Integer     -- 0 = use preset env attack
+    process_release_override: Integer    -- 0 = use preset env release
+    process_release_mode_override: Integer -- -1 = use preset release mode
+    process_thk_attack_override: Integer -- 0 = use preset thickness attack
+    process_thk_release_override: Integer -- 0 = use preset thickness release
+    process_thk_release_mode_override: Integer -- -1 = use preset thickness release mode
 
     -- Settings ambient layer (independent burst cycle)
     ambient_active: Boolean
@@ -101,6 +108,8 @@ config {
     overscroll_color: String = "#613583"
     overscroll_style: OverscrollStyle = scroll2
     overscroll_reverse: ReverseMode = forward   -- int: 0=forward, 1=reverse, 2=alternating
+    particle_throttle_enabled: Boolean = true
+    particle_hz: Integer = 30
 
     -- Particles: Settings Ambient
     settings_animation: Boolean = true
@@ -298,3 +307,25 @@ rule TabSwitchParticleCleanup {
     -- process, and ambient animations may all run at the same time
     -- without interference. Each layer manages its own lifecycle
     -- and does not gate on or cancel other layers.
+
+contract ParticleScheduling {
+    -- Scheduling and degradation policy for particle rendering.
+
+    @invariant ActiveEffectPreferred
+        -- When the active process particle competes with decorative
+        -- work for frame budget, smoothness of the active effect is
+        -- preserved before decorative ambient or burst work.
+
+    @invariant DecorativeWorkDeferrable
+        -- Ambient bursts, decorative firework scheduling, and similar
+        -- ornament may be delayed, reduced, or coalesced under load
+        -- without changing the meaning of the active process state.
+
+    @guidance
+        -- With particle redraw throttle enabled, particle_hz is the
+        -- nominal target rate and the governor may shed decorative
+        -- work first under pressure.
+        -- With particle redraw throttle disabled, redraw may occur
+        -- every frame, but maintenance and decorative work must still
+        -- yield before the active process effect.
+}

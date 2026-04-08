@@ -212,6 +212,9 @@ config {
     font_scale: Decimal = 1.0
     custom_font: String = ""
     use_system_font: Boolean = true
+    app_font_scale: Decimal = 1.0
+    app_custom_font: String = ""
+    app_use_system_font: Boolean = true
 
     -- Shell
     shell: List<String> = []
@@ -227,6 +230,7 @@ config {
     -- Bell
     audible_bell: Boolean = true
     visual_bell: Boolean = true
+    command_complete_notifications: Boolean = true
 
     -- Transparency
     transparency_enabled: Boolean = false
@@ -330,8 +334,11 @@ rule ChildDied {
             train.is_playbox = false
 
     @guidance
-        -- If this was the last child and the tab is not active,
-        -- a desktop notification should be shown with the child name.
+        -- If this was the last child on an inactive tab, the tab may
+        -- request attention and a desktop notification may be shown
+        -- with the child title.
+        -- Desktop notifications are gated by the
+        -- command_complete_notifications setting.
 }
 
 rule ShellDied {
@@ -365,12 +372,18 @@ rule WatcherPoll {
                 ensures: ChildDied(train: train, process: child)
 
     @guidance
-        -- Poll interval: 500ms when app is in foreground, 2000ms in background.
-        -- Each train's session is queried individually, returning only the
-        -- processes belonging to that shell's session (~5-20 PIDs) rather
-        -- than scanning all system processes. Session-scoped queries
-        -- naturally include the full process tree, so recursive descendant
-        -- tracking is unnecessary.
+        -- Poll interval is adaptive rather than fixed:
+        -- foreground-active 500ms, foreground-steady 1000ms,
+        -- background-active 2000ms, background-steady 5000ms,
+        -- background-idle 10000ms.
+        -- Each train begins with its shell session as the candidate set,
+        -- but ownership is only assigned to a tab when the candidate
+        -- process descends from that tab's shell via its parent chain.
+        -- This prevents sibling shells in the same session from borrowing
+        -- each other's status, title, or privilege updates.
+        -- Watcher polling is maintenance work. It may be deferred,
+        -- slowed, or coalesced under UI pressure as long as process
+        -- ownership and child lifecycle semantics remain correct.
         -- Only genuinely new children (not already in train.children) are
         -- pushed; known children are not re-announced each tick.
         -- The watcher is demand-driven: it starts when the first shell is

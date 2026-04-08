@@ -21,8 +21,8 @@ use "./particles.allium" as particles
 ------------------------------------------------------------
 
 value ProcessGlassConfig {
-    -- Extended config format (8 fields, semicolon-separated):
-    --   "#glasscolor;preset;reverse;#particlecolor;shape;gap;speed;thk"
+    -- Extended config format (15 fields, semicolon-separated):
+    --   "#glasscolor;preset;reverse;#particlecolor;shape;gap;speed;thk;tail;atk;rel;rls;tatk;trel;trls"
     -- Backward-compatible: plain "#hex" returns just the glass color.
     -- Process name keys support comma-separated matching
     --   (e.g. "su, sudo" matches either "su" or "sudo").
@@ -34,6 +34,13 @@ value ProcessGlassConfig {
     gap_override: Integer           -- -1 = use preset default
     speed_override: Integer         -- 0 = use preset default (percent scale: 70 = 0.7x)
     thk_override: Integer           -- 0 = use preset default (pixel value)
+    tail_override: Integer          -- 0 = use preset default (percent scale)
+    attack_override: Integer        -- 0 = use preset default (percent scale)
+    release_override: Integer       -- 0 = use preset default (percent scale)
+    release_mode_override: Integer  -- -1 = use preset default
+    thk_attack_override: Integer    -- 0 = use preset default (percent scale)
+    thk_release_override: Integer   -- 0 = use preset default (percent scale)
+    thk_release_mode_override: Integer -- -1 = use preset default
 }
 
 ------------------------------------------------------------
@@ -78,6 +85,13 @@ entity GlassTransition {
     deferred_gap: Integer                   -- per-app gap override (-1 = preset)
     deferred_speed: Integer                 -- per-app speed override (0 = preset)
     deferred_thk: Integer                   -- per-app thickness override (0 = preset)
+    deferred_tail: Integer                  -- per-app tail override (0 = preset)
+    deferred_attack: Integer                -- per-app env attack override (0 = preset)
+    deferred_release: Integer               -- per-app env release override (0 = preset)
+    deferred_release_mode: Integer          -- per-app release mode override (-1 = preset)
+    deferred_thk_attack: Integer            -- per-app thickness attack override (0 = preset)
+    deferred_thk_release: Integer           -- per-app thickness release override (0 = preset)
+    deferred_thk_release_mode: Integer      -- per-app thickness release mode override (-1 = preset)
 }
 
 ------------------------------------------------------------
@@ -134,7 +148,14 @@ rule ProcessGlassCheck {
                 shape: match.shape_override,
                 gap: match.gap_override,
                 speed: match.speed_override,
-                thk: match.thk_override
+                thk: match.thk_override,
+                tail: match.tail_override,
+                attack: match.attack_override,
+                release: match.release_override,
+                release_mode: match.release_mode_override,
+                thk_attack: match.thk_attack_override,
+                thk_release: match.thk_release_override,
+                thk_release_mode: match.thk_release_mode_override
             )
         else:
             window.process_glass_active = false
@@ -143,7 +164,10 @@ rule ProcessGlassCheck {
     @guidance
         -- Signal-driven: fires on idle callbacks when the active tab or
         -- session children change, with a 30-second safety-net timer.
-        -- Matches child process names against process_glass_colors map.
+        -- Matches owned child process names against process_glass_colors map.
+        -- Session membership is only the candidate set; a process must
+        -- still descend from the active tab's shell before it can drive
+        -- process glass or tab status.
         -- Process name keys support comma-separated matching
         -- (e.g. "su, sudo" matches either name via exact match per part).
         -- Glass color applies to headerbar, tab bar, and scrollbar.
@@ -168,7 +192,14 @@ rule StartGlassTransition {
             deferred_shape: -1,
             deferred_gap: -1,
             deferred_speed: 0,
-            deferred_thk: 0
+            deferred_thk: 0,
+            deferred_tail: 0,
+            deferred_attack: 0,
+            deferred_release: 0,
+            deferred_release_mode: -1,
+            deferred_thk_attack: 0,
+            deferred_thk_release: 0,
+            deferred_thk_release_mode: -1
         )
 
     @guidance
@@ -221,7 +252,14 @@ rule GlassTransitionComplete {
                 shape: transition.deferred_shape,
                 gap: transition.deferred_gap,
                 speed: transition.deferred_speed,
-                thk: transition.deferred_thk
+                thk: transition.deferred_thk,
+                tail: transition.deferred_tail,
+                attack: transition.deferred_attack,
+                release: transition.deferred_release,
+                release_mode: transition.deferred_release_mode,
+                thk_attack: transition.deferred_thk_attack,
+                thk_release: transition.deferred_thk_release,
+                thk_release_mode: transition.deferred_thk_release_mode
             )
 
     @guidance
@@ -374,17 +412,24 @@ contract FrameSync {
         -- the terminal still shows the old one (or vice versa).
 }
 
-contract IdlePriority {
-    -- Scheduling contract for process glass idle callbacks.
+contract SchedulingPriority {
+    -- Scheduling contract for glass reconciliation and transition work.
 
-    @invariant HighIdleBeforeRedraw
-        -- Process glass idle runs at G_PRIORITY_HIGH_IDLE (before
-        -- GDK_PRIORITY_REDRAW). This ensures glass state is resolved
-        -- before the compositor requests the next frame, preventing
-        -- one-frame lag between process detection and visual update.
+    @invariant RenderCriticalBeforeMaintenance
+        -- Process-glass reconciliation is deferrable maintenance work.
+        -- It must not preempt frame-critical layout or redraw work.
+        -- Glass state may be coalesced and applied at the next render
+        -- opportunity as long as the resolved visible state is preserved.
+
+    @invariant VisualUpdatesStayInLockstep
+        -- When glass work does run, chrome glass and terminal background
+        -- updates remain synchronized. Maintenance deferral must never
+        -- produce a frame where only one side of the glass update lands.
 
     @guidance
-        -- G_PRIORITY_HIGH_IDLE = 100, GDK_PRIORITY_REDRAW = 120.
-        -- Any idle source scheduling glass work must use the higher
-        -- priority to land before the redraw cycle.
+        -- Exact main-loop priority numbers are implementation detail.
+        -- The behavioral requirement is:
+        -- render-critical work first,
+        -- then glass reconcile,
+        -- then background maintenance.
 }
