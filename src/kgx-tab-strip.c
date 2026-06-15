@@ -336,46 +336,138 @@ kgx_tab_strip_drop (GtkDropTarget *target,
 }
 
 
-/* Drag-to-reorder. The payload is the row's AdwTabPage; the matching drop
- * target on each row reorders via the tab view. No new widgets/containers —
- * just controllers on the existing row. */
-static GdkContentProvider *
-kgx_tab_strip_drag_prepare (GtkDragSource *source,
-                            double         x,
-                            double         y,
-                            gpointer       data)
+/* Drag-to-reorder. Driven by a plain drag gesture, not a windowing DnD: the
+ * toolbar-view top bars sit inside a window handle, and a GtkDragSource does
+ * not stop that handle from also beginning a window move on the same press
+ * (both fire on the same press serial), which leaves a stranded move grab
+ * after the drop. A drag gesture that claims the press once it crosses the
+ * drag threshold denies the handle outright — the same way an interactive
+ * header-bar widget does — so no window move is ever started. The reorder is
+ * applied on release, deferred to an idle so rebuilding the strip doesn't
+ * destroy the gesture's own row mid-callback. Controllers only, no new
+ * widgets/containers. */
+typedef struct {
+  AdwTabView *view;
+  AdwTabPage *page;
+  int         position;
+} KgxTabStripReorder;
+
+
+static void
+kgx_tab_strip_reorder_free (gpointer data)
 {
-  KgxTabStripItem *item = data;
+  KgxTabStripReorder *reorder = data;
 
-  if (!item->page)
-    return NULL;
-
-  return gdk_content_provider_new_typed (ADW_TYPE_TAB_PAGE, item->page);
+  g_clear_object (&reorder->view);
+  g_clear_object (&reorder->page);
+  g_free (reorder);
 }
 
 
 static gboolean
-kgx_tab_strip_reorder_drop (GtkDropTarget *target,
-                            const GValue  *value,
-                            double         x,
-                            double         y,
-                            gpointer       data)
+kgx_tab_strip_finish_reorder (gpointer data)
+{
+  KgxTabStripReorder *reorder = data;
+  int n_pages = adw_tab_view_get_n_pages (reorder->view);
+
+  for (int i = 0; i < n_pages; i++) {
+    if (adw_tab_view_get_nth_page (reorder->view, i) == reorder->page) {
+      adw_tab_view_reorder_page (reorder->view, reorder->page, reorder->position);
+      break;
+    }
+  }
+
+  return G_SOURCE_REMOVE;
+}
+
+
+/* Number of rows whose centre is left of a pointer x in self->box
+ * coordinates, i.e. the gap the dragged row would be inserted into. */
+static int
+kgx_tab_strip_drop_gap (KgxTabStrip *self,
+                        double       box_x)
+{
+  GtkWidget *child = gtk_widget_get_first_child (self->box);
+  int gap = 0;
+
+  while (child) {
+    graphene_rect_t bounds;
+
+    if (gtk_widget_compute_bounds (child, self->box, &bounds) &&
+        box_x >= bounds.origin.x + bounds.size.width / 2.0)
+      gap++;
+
+    child = gtk_widget_get_next_sibling (child);
+  }
+
+  return gap;
+}
+
+
+static void
+kgx_tab_strip_reorder_update (GtkGestureDrag *gesture,
+                              double          offset_x,
+                              double          offset_y,
+                              gpointer        data)
 {
   KgxTabStripItem *item = data;
-  AdwTabView *view = item->strip ? item->strip->view : NULL;
-  AdwTabPage *dragged;
+  double start_x, start_y;
 
-  if (!view || !item->page || !G_VALUE_HOLDS (value, ADW_TYPE_TAB_PAGE))
-    return FALSE;
+  gtk_gesture_drag_get_start_point (gesture, &start_x, &start_y);
 
-  dragged = g_value_get_object (value);
-  if (!dragged || dragged == item->page)
-    return FALSE;
+  /* Claim the sequence as soon as it is a real drag, which denies the window
+   * handle and keeps it from starting a window move. */
+  if (gtk_drag_check_threshold (item->row, start_x, start_y,
+                                start_x + offset_x, start_y + offset_y))
+    gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+}
 
-  adw_tab_view_reorder_page (view, dragged,
-                             adw_tab_view_get_page_position (view, item->page));
 
-  return TRUE;
+static void
+kgx_tab_strip_reorder_end (GtkGestureDrag *gesture,
+                           double          offset_x,
+                           double          offset_y,
+                           gpointer        data)
+{
+  KgxTabStripItem *item = data;
+  KgxTabStrip *self = item->strip;
+  double start_x, start_y, box_x, box_y;
+  KgxTabStripReorder *reorder;
+  int from, gap, target;
+
+  if (!self->view || !item->page)
+    return;
+
+  gtk_gesture_drag_get_start_point (gesture, &start_x, &start_y);
+
+  /* A press that never crossed the threshold is a click, not a reorder. */
+  if (!gtk_drag_check_threshold (item->row, start_x, start_y,
+                                 start_x + offset_x, start_y + offset_y))
+    return;
+
+  if (!gtk_widget_translate_coordinates (item->row, self->box,
+                                         start_x + offset_x, start_y + offset_y,
+                                         &box_x, &box_y))
+    return;
+
+  /* The dragged row is still in place while we measure, so a gap past its own
+   * position maps to one index lower once it is lifted out. */
+  from = adw_tab_view_get_page_position (self->view, item->page);
+  gap = kgx_tab_strip_drop_gap (self, box_x);
+  target = gap > from ? gap - 1 : gap;
+
+  if (target == from)
+    return;
+
+  reorder = g_new0 (KgxTabStripReorder, 1);
+  reorder->view = g_object_ref (self->view);
+  reorder->page = g_object_ref (item->page);
+  reorder->position = target;
+
+  g_idle_add_full (G_PRIORITY_DEFAULT,
+                   kgx_tab_strip_finish_reorder,
+                   reorder,
+                   kgx_tab_strip_reorder_free);
 }
 
 
@@ -388,8 +480,7 @@ kgx_tab_strip_item_new (KgxTabStrip *self,
   GtkWidget *drop_widget;
   GtkDropTarget *file_target;
   GtkDropTarget *string_target;
-  GtkDropTarget *reorder_target;
-  GtkDragSource *drag_source;
+  GtkGesture *reorder_gesture;
 
   item->strip = self;
   item->page = page;
@@ -511,23 +602,21 @@ kgx_tab_strip_item_new (KgxTabStrip *self,
                     item);
   gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (string_target));
 
-  /* Reorder: a drag source on the row claims the press-drag before the
-   * surrounding window handle can treat it as a window move, and a drop
-   * target accepts another tab being dragged onto this one. */
-  drag_source = gtk_drag_source_new ();
-  gtk_drag_source_set_actions (drag_source, GDK_ACTION_MOVE);
-  g_signal_connect (drag_source,
-                    "prepare",
-                    G_CALLBACK (kgx_tab_strip_drag_prepare),
+  /* Reorder: a primary-button drag gesture that claims the press once it is a
+   * real drag (see kgx_tab_strip_reorder_* above), so the surrounding window
+   * handle never starts a window move, and applies the reorder on release. */
+  reorder_gesture = gtk_gesture_drag_new ();
+  gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (reorder_gesture),
+                                 GDK_BUTTON_PRIMARY);
+  g_signal_connect (reorder_gesture,
+                    "drag-update",
+                    G_CALLBACK (kgx_tab_strip_reorder_update),
                     item);
-  gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (drag_source));
-
-  reorder_target = gtk_drop_target_new (ADW_TYPE_TAB_PAGE, GDK_ACTION_MOVE);
-  g_signal_connect (reorder_target,
-                    "drop",
-                    G_CALLBACK (kgx_tab_strip_reorder_drop),
+  g_signal_connect (reorder_gesture,
+                    "drag-end",
+                    G_CALLBACK (kgx_tab_strip_reorder_end),
                     item);
-  gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (reorder_target));
+  gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (reorder_gesture));
 
   kgx_tab_strip_item_update (item);
 
