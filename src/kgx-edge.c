@@ -533,7 +533,7 @@ kgx_edge_redraw_tick_cb (GtkWidget     *widget,
       kgx_edge_cancel_timeline_wakeup (self);
       self->redraw_pending = FALSE;
       self->last_redraw_request_us = 0;
-      self->frame_draw_budget_remaining = 0;
+      self->frame_draw_budget_remaining = kgx_edge_get_block_budget (self);
       kgx_edge_queue_draw_views (self);
       return G_SOURCE_CONTINUE;
     }
@@ -633,7 +633,7 @@ kgx_edge_mark_dirty (KgxEdge *self)
     if (!root->particle_throttle_enabled) {
       root->redraw_pending = FALSE;
       root->last_redraw_request_us = 0;
-      root->frame_draw_budget_remaining = 0;
+      root->frame_draw_budget_remaining = kgx_edge_get_block_budget (root);
       kgx_edge_ensure_redraw_tick (root);
       kgx_edge_queue_draw_views (root);
       return;
@@ -697,8 +697,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
   int strip_extent;
   int *draw_budget;
   double perim;
-  GskPath *tri;
-  GskPath *dia;
+  const KgxParticleMasks *masks;
 
   /* Fast path: nothing animating — skip all rendering work. */
   if (!kgx_edge_has_visible_content (root))
@@ -716,11 +715,14 @@ kgx_edge_snapshot (GtkWidget   *widget,
     strip_extent = kgx_edge_get_strip_extent (root);
 
   perim = 2.0 * (width + height);
-  draw_budget = root->particle_throttle_enabled
-                  ? &root->frame_draw_budget_remaining
-                  : NULL;
-  tri = root->unit_triangle;
-  dia = root->unit_diamond;
+  /* Always cap per-frame block emission, even with the adaptive governor
+   * (edge-particle-throttle) off — the cap is cheap insurance against
+   * unbounded draw calls; the governor only adds further hz reduction. */
+  draw_budget = &root->frame_draw_budget_remaining;
+  /* Bake the shape mask textures once (and rebuild on scale change); shared
+   * by all four side widgets via the root. */
+  kgx_particle_masks_ensure (&root->masks, gtk_widget_get_scale_factor (widget));
+  masks = &root->masks;
 
   /* Overscroll beam */
   if (root->overscroll_progress >= 0.0 && root->overscroll_enabled) {
@@ -739,7 +741,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
                                 ? root->overscroll_reverse_toggle
                                 : (root->overscroll_reverse == 1),
                               width, height, perim, &color, os_tune,
-                              self->side, strip_extent, draw_budget, tri, dia,
+                              self->side, strip_extent, draw_budget, masks,
                               BASE_OVERSCROLL_SEG);
   }
 
@@ -769,10 +771,10 @@ kgx_edge_snapshot (GtkWidget   *widget,
 
         kgx_edge_draw_segment (snapshot, left_head, seg, a,
                                width, height, perim, &root->burst_color[i],
-                               l_trail, bt, p, self->side, strip_extent, draw_budget, tri, dia);
+                               l_trail, bt, p, self->side, strip_extent, draw_budget, masks);
         kgx_edge_draw_segment (snapshot, right_head, seg, a,
                                width, height, perim, &root->burst_color[i],
-                               r_trail, bt, p, self->side, strip_extent, draw_budget, tri, dia);
+                               r_trail, bt, p, self->side, strip_extent, draw_budget, masks);
       }
     }
   }
@@ -804,10 +806,10 @@ kgx_edge_snapshot (GtkWidget   *widget,
 
           kgx_edge_draw_segment (snapshot, left_head, seg, a,
                                  width, height, perim, &root->ambient_burst_color[i],
-                                 +1, abt, p, self->side, strip_extent, draw_budget, tri, dia);
+                                 +1, abt, p, self->side, strip_extent, draw_budget, masks);
           kgx_edge_draw_segment (snapshot, right_head, seg, a,
                                  width, height, perim, &root->ambient_burst_color[i],
-                                 -1, abt, p, self->side, strip_extent, draw_budget, tri, dia);
+                                 -1, abt, p, self->side, strip_extent, draw_budget, masks);
         }
       }
     }
@@ -887,10 +889,10 @@ kgx_edge_snapshot (GtkWidget   *widget,
       b_cw  = fmod (corner_b + travel, perim);
       b_ccw = fmod (corner_b - travel + perim * 2, perim);
 
-      kgx_edge_draw_segment (snapshot, a_cw,  clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
-      kgx_edge_draw_segment (snapshot, a_ccw, clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
-      kgx_edge_draw_segment (snapshot, b_cw,  clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
-      kgx_edge_draw_segment (snapshot, b_ccw, clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
+      kgx_edge_draw_segment (snapshot, a_cw,  clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, masks);
+      kgx_edge_draw_segment (snapshot, a_ccw, clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, masks);
+      kgx_edge_draw_segment (snapshot, b_cw,  clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, masks);
+      kgx_edge_draw_segment (snapshot, b_ccw, clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, masks);
       break;
     }
     case KGX_PARTICLE_PULSE_OUT: {
@@ -908,8 +910,8 @@ kgx_edge_snapshot (GtkWidget   *widget,
       left_head  = fmod (center - spread + perim, perim);
       right_head = fmod (center + spread, perim);
 
-      kgx_edge_draw_segment (snapshot, left_head,  clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
-      kgx_edge_draw_segment (snapshot, right_head, clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, tri, dia);
+      kgx_edge_draw_segment (snapshot, left_head,  clamped_seg, a, width, height, perim, &root->process_color, +1, pt, p, self->side, strip_extent, draw_budget, masks);
+      kgx_edge_draw_segment (snapshot, right_head, clamped_seg, a, width, height, perim, &root->process_color, -1, pt, p, self->side, strip_extent, draw_budget, masks);
       break;
     }
     case KGX_PARTICLE_ROTATE: {
@@ -939,7 +941,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
       head = fmod (dir * travel + offset + perim, perim);
 
       kgx_edge_draw_segment (snapshot, head, clamped_seg, lap_a,
-                             width, height, perim, &root->process_color, trail, pt, half_p, self->side, strip_extent, draw_budget, tri, dia);
+                             width, height, perim, &root->process_color, trail, pt, half_p, self->side, strip_extent, draw_budget, masks);
       break;
     }
     case KGX_PARTICLE_PING_PONG: {
@@ -975,7 +977,7 @@ kgx_edge_snapshot (GtkWidget   *widget,
       }
 
       kgx_edge_draw_segment (snapshot, pos, clamped_seg, pp_a,
-                             width, height, perim, &root->process_color, trail, pt, half_p, self->side, strip_extent, draw_budget, tri, dia);
+                             width, height, perim, &root->process_color, trail, pt, half_p, self->side, strip_extent, draw_budget, masks);
       break;
     }
     case KGX_PARTICLE_NONE:
@@ -1262,8 +1264,7 @@ kgx_edge_dispose (GObject *object)
   self->process_progress = -1.0;
   g_clear_object (&self->master);
   g_clear_pointer (&self->overscroll_color, g_free);
-  g_clear_pointer (&self->unit_triangle, gsk_path_unref);
-  g_clear_pointer (&self->unit_diamond, gsk_path_unref);
+  kgx_particle_masks_clear (&self->masks);
   kgx_edge_clear_bursts (self);
 
   G_OBJECT_CLASS (kgx_edge_parent_class)->dispose (object);
@@ -1480,25 +1481,8 @@ kgx_edge_init (KgxEdge *self)
     };
   }
 
-  /* Pre-build unit-size paths for triangle and diamond shapes
-   * (no per-frame allocation — just translate+scale at draw time). */
-  {
-    GskPathBuilder *builder = gsk_path_builder_new ();
-    gsk_path_builder_move_to (builder, -0.5f, -0.5f);
-    gsk_path_builder_line_to (builder,  0.5f,  0.0f);
-    gsk_path_builder_line_to (builder, -0.5f,  0.5f);
-    gsk_path_builder_close (builder);
-    self->unit_triangle = gsk_path_builder_free_to_path (builder);
-  }
-  {
-    GskPathBuilder *builder = gsk_path_builder_new ();
-    gsk_path_builder_move_to (builder,  0.0f, -0.5f);
-    gsk_path_builder_line_to (builder,  0.5f,  0.0f);
-    gsk_path_builder_line_to (builder,  0.0f,  0.5f);
-    gsk_path_builder_line_to (builder, -0.5f,  0.0f);
-    gsk_path_builder_close (builder);
-    self->unit_diamond = gsk_path_builder_free_to_path (builder);
-  }
+  /* Shape mask textures are baked lazily on first snapshot (scale-aware) —
+   * see kgx_particle_masks_ensure. */
 
   gtk_widget_set_can_target (GTK_WIDGET (self), FALSE);
   gtk_widget_set_can_focus (GTK_WIDGET (self), FALSE);

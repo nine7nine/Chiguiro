@@ -26,9 +26,11 @@
 #define BASE_OVERSCROLL_SEG      200.0
 #define EDGE_GOVERNOR_WARN_US    250000
 #define EDGE_GOVERNOR_STRESS_US  1000000
-#define EDGE_BLOCK_BUDGET_NORMAL 320
-#define EDGE_BLOCK_BUDGET_WARN   224
-#define EDGE_BLOCK_BUDGET_STRESS 160
+/* Budgets count blocks actually drawn per frame (real GPU draw calls),
+ * shared across all four edge widgets — see kgx_edge_draw_segment. */
+#define EDGE_BLOCK_BUDGET_NORMAL 160
+#define EDGE_BLOCK_BUDGET_WARN   112
+#define EDGE_BLOCK_BUDGET_STRESS 64
 
 #define MAX_BURSTS 8
 #define firework_active(s) ((s)->process_preset == KGX_PARTICLE_FIREWORKS || \
@@ -147,8 +149,7 @@ struct _KgxEdge {
   KgxParticleTunables burst_tune_snap[MAX_BURSTS];
   KgxParticleTunables ambient_tune_snap[MAX_BURSTS];
 
-  GskPath          *unit_triangle;
-  GskPath          *unit_diamond;
+  KgxParticleMasks  masks;
 
   GdkRGBA           overscroll_rgba;
   gboolean          overscroll_rgba_valid;

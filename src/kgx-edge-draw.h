@@ -24,6 +24,15 @@
 
 G_BEGIN_DECLS
 
+/* Render backend (GSK). Masks are baked once per scale factor; emit stamps a
+ * single batchable primitive per block (colour rect for squares, tinted
+ * mask texture otherwise), replacing per-block path fills/clips. */
+void kgx_particle_masks_ensure (KgxParticleMasks *masks, int scale);
+void kgx_particle_masks_clear  (KgxParticleMasks *masks);
+void kgx_particle_emit         (GtkSnapshot               *snapshot,
+                                const KgxParticleInstance *inst,
+                                const KgxParticleMasks    *masks);
+
 void kgx_edge_draw_segment (GtkSnapshot               *snapshot,
                             double                     head_d,
                             double                     seg_len,
@@ -38,8 +47,7 @@ void kgx_edge_draw_segment (GtkSnapshot               *snapshot,
                             GtkPositionType            side,
                             float                      strip_extent,
                             int                       *budget_remaining,
-                            GskPath                   *unit_triangle,
-                            GskPath                   *unit_diamond);
+                            const KgxParticleMasks    *masks);
 
 void kgx_edge_draw_overscroll (GtkSnapshot               *snapshot,
                                double                     progress,
@@ -54,8 +62,7 @@ void kgx_edge_draw_overscroll (GtkSnapshot               *snapshot,
                                GtkPositionType            side,
                                float                      strip_extent,
                                int                       *budget_remaining,
-                               GskPath                   *unit_triangle,
-                               GskPath                   *unit_diamond,
+                               const KgxParticleMasks    *masks,
                                double                     segment_len);
 
 G_END_DECLS

@@ -19,57 +19,157 @@
 #include "kgx-config.h"
 
 #include <math.h>
+#include <cairo.h>
 
 #include "kgx-edge-draw.h"
 
-static void
-append_circle (GtkSnapshot   *snapshot,
-               float          px,
-               float          py,
-               float          size,
-               const GdkRGBA *color)
+/* Mask resolution at scale 1. Generous enough that the common (small) block
+ * sizes stay crisp; larger blocks soften slightly under linear upscaling,
+ * which is fine for a glow. */
+#define KGX_PARTICLE_MASK_BASE 64
+
+static GdkTexture *
+bake_mask (KgxParticleShape shape, int size)
 {
-  GskRoundedRect rrect;
-  gsk_rounded_rect_init_from_rect (&rrect,
-    &GRAPHENE_RECT_INIT (px, py, size, size), size / 2.0f);
-  gtk_snapshot_push_rounded_clip (snapshot, &rrect);
-  gtk_snapshot_append_color (snapshot, color,
-                             &GRAPHENE_RECT_INIT (px, py, size, size));
+  cairo_surface_t *surf;
+  cairo_t         *cr;
+  GdkTexture      *tex;
+  GBytes          *bytes;
+  double           s = size;
+
+  surf = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, size, size);
+  cr = cairo_create (surf);
+  cairo_set_source_rgba (cr, 1.0, 1.0, 1.0, 1.0);   /* white alpha mask */
+
+  switch (shape) {
+  case KGX_PARTICLE_SHAPE_CIRCLE:
+    cairo_arc (cr, s / 2.0, s / 2.0, s / 2.0, 0.0, 2.0 * G_PI);
+    break;
+  case KGX_PARTICLE_SHAPE_DIAMOND:
+    cairo_move_to (cr, s / 2.0, 0.0);
+    cairo_line_to (cr, s,       s / 2.0);
+    cairo_line_to (cr, s / 2.0, s);
+    cairo_line_to (cr, 0.0,     s / 2.0);
+    cairo_close_path (cr);
+    break;
+  case KGX_PARTICLE_SHAPE_TRIANGLE:
+    /* Right-pointing apex; rotated per-instance at stamp time (matches the
+     * former unit-triangle geometry). */
+    cairo_move_to (cr, 0.0, 0.0);
+    cairo_line_to (cr, s,   s / 2.0);
+    cairo_line_to (cr, 0.0, s);
+    cairo_close_path (cr);
+    break;
+  case KGX_PARTICLE_SHAPE_SQUARE:
+  default:
+    cairo_rectangle (cr, 0.0, 0.0, s, s);
+    break;
+  }
+  cairo_fill (cr);
+  cairo_destroy (cr);
+  cairo_surface_flush (surf);
+
+  /* CAIRO_FORMAT_ARGB32 is premultiplied native-endian == B8G8R8A8 on LE. */
+  bytes = g_bytes_new (cairo_image_surface_get_data (surf),
+                       (gsize) cairo_image_surface_get_stride (surf) * size);
+  tex = gdk_memory_texture_new (size, size,
+                                GDK_MEMORY_B8G8R8A8_PREMULTIPLIED,
+                                bytes,
+                                cairo_image_surface_get_stride (surf));
+  g_bytes_unref (bytes);
+  cairo_surface_destroy (surf);
+
+  return tex;
+}
+
+void
+kgx_particle_masks_clear (KgxParticleMasks *masks)
+{
+  g_clear_object (&masks->circle);
+  g_clear_object (&masks->diamond);
+  g_clear_object (&masks->triangle);
+  masks->size = 0;
+}
+
+void
+kgx_particle_masks_ensure (KgxParticleMasks *masks, int scale)
+{
+  int size;
+
+  if (scale < 1)
+    scale = 1;
+  size = KGX_PARTICLE_MASK_BASE * scale;
+
+  if (masks->size == size && masks->circle)
+    return;
+
+  kgx_particle_masks_clear (masks);
+  masks->circle   = bake_mask (KGX_PARTICLE_SHAPE_CIRCLE, size);
+  masks->diamond  = bake_mask (KGX_PARTICLE_SHAPE_DIAMOND, size);
+  masks->triangle = bake_mask (KGX_PARTICLE_SHAPE_TRIANGLE, size);
+  masks->size     = size;
+}
+
+void
+kgx_particle_emit (GtkSnapshot               *snapshot,
+                   const KgxParticleInstance *inst,
+                   const KgxParticleMasks    *masks)
+{
+  GdkTexture       *tex = NULL;
+  graphene_matrix_t tint;
+  graphene_vec4_t   offset;
+  float             half;
+  float             m[16] = { 0.0f };
+
+  if (inst->shape != KGX_PARTICLE_SHAPE_SQUARE && masks) {
+    switch (inst->shape) {
+    case KGX_PARTICLE_SHAPE_CIRCLE:   tex = masks->circle;   break;
+    case KGX_PARTICLE_SHAPE_DIAMOND:  tex = masks->diamond;  break;
+    case KGX_PARTICLE_SHAPE_TRIANGLE: tex = masks->triangle; break;
+    case KGX_PARTICLE_SHAPE_SQUARE:
+    default:                          break;
+    }
+  }
+
+  if (!tex) {
+    /* Square (or masks not yet baked): a plain colour rect is the cheapest,
+     * best-batching primitive and needs no tint. */
+    gtk_snapshot_append_color (snapshot, &inst->color,
+                               &GRAPHENE_RECT_INIT (inst->px, inst->py,
+                                                    inst->size, inst->size));
+    return;
+  }
+
+  /* Tint the white alpha-mask to the block colour and fold in the per-block
+   * alpha via a diagonal colour matrix — the same technique GTK uses to
+   * recolour symbolic icons. Every shape stays a batchable textured quad
+   * instead of a per-block path tessellation or clip. */
+  m[0] = inst->color.red;
+  m[5] = inst->color.green;
+  m[10] = inst->color.blue;
+  m[15] = inst->color.alpha;
+  graphene_matrix_init_from_float (&tint, m);
+  graphene_vec4_init (&offset, 0.0f, 0.0f, 0.0f, 0.0f);
+
+  gtk_snapshot_push_color_matrix (snapshot, &tint, &offset);
+
+  if (inst->shape == KGX_PARTICLE_SHAPE_TRIANGLE && inst->angle != 0.0f) {
+    half = inst->size / 2.0f;
+    gtk_snapshot_save (snapshot);
+    gtk_snapshot_translate (snapshot,
+                            &GRAPHENE_POINT_INIT (inst->px + half, inst->py + half));
+    gtk_snapshot_rotate (snapshot, inst->angle);
+    gtk_snapshot_append_texture (snapshot, tex,
+                                 &GRAPHENE_RECT_INIT (-half, -half,
+                                                      inst->size, inst->size));
+    gtk_snapshot_restore (snapshot);
+  } else {
+    gtk_snapshot_append_texture (snapshot, tex,
+                                 &GRAPHENE_RECT_INIT (inst->px, inst->py,
+                                                      inst->size, inst->size));
+  }
+
   gtk_snapshot_pop (snapshot);
-}
-
-static void
-append_diamond (GtkSnapshot   *snapshot,
-                GskPath       *unit_path,
-                float          px,
-                float          py,
-                float          size,
-                const GdkRGBA *color)
-{
-  float half = size / 2.0f;
-  gtk_snapshot_save (snapshot);
-  gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (px + half, py + half));
-  gtk_snapshot_scale (snapshot, size, size);
-  gtk_snapshot_append_fill (snapshot, unit_path, GSK_FILL_RULE_WINDING, color);
-  gtk_snapshot_restore (snapshot);
-}
-
-static void
-append_triangle (GtkSnapshot   *snapshot,
-                 GskPath       *unit_path,
-                 float          px,
-                 float          py,
-                 float          size,
-                 float          angle,
-                 const GdkRGBA *color)
-{
-  float half = size / 2.0f;
-  gtk_snapshot_save (snapshot);
-  gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (px + half, py + half));
-  gtk_snapshot_rotate (snapshot, angle);
-  gtk_snapshot_scale (snapshot, size, size);
-  gtk_snapshot_append_fill (snapshot, unit_path, GSK_FILL_RULE_WINDING, color);
-  gtk_snapshot_restore (snapshot);
 }
 
 void
@@ -87,8 +187,7 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
                        GtkPositionType            side,
                        float                      strip_extent,
                        int                       *budget_remaining,
-                       GskPath                   *unit_triangle,
-                       GskPath                   *unit_diamond)
+                       const KgxParticleMasks    *masks)
 {
   double base_blk = (double) tune->thickness;
   double blk      = base_blk;
@@ -139,13 +238,11 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
   if (blocks < 1)
     blocks = 1;
 
-  if (budget_remaining) {
-    if (*budget_remaining <= 0)
-      return;
-
-    blocks = MIN (blocks, *budget_remaining);
-    *budget_remaining -= blocks;
-  }
+  /* The budget is shared across all four edge widgets and is decremented per
+   * block actually appended (below), so it caps real GPU draw calls instead of
+   * 4x-counting whole segments — most of whose blocks belong to other sides. */
+  if (budget_remaining && *budget_remaining <= 0)
+    return;
 
   d = fmod (head_d + perim, perim);
   delta = trail_dir * step;
@@ -160,10 +257,9 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
     GtkPositionType block_side;
     float px;
     float py;
-    float bw;
-    float bh;
     float bb;
     float tri_angle = 0.0f;
+    KgxParticleInstance inst;
 
     if (s > 0) {
       d += delta;
@@ -202,29 +298,21 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
       block_side = GTK_POS_TOP;
       px = (float) d;
       py = 0.0f;
-      bw = bb;
-      bh = bb;
       tri_angle = (trail_dir == -1) ? 0.0f : 180.0f;
     } else if (d < width + height) {
       block_side = GTK_POS_RIGHT;
       px = width - bb;
       py = (float) (d - width);
-      bw = bb;
-      bh = bb;
       tri_angle = (trail_dir == -1) ? 90.0f : 270.0f;
     } else if (d < 2 * width + height) {
       block_side = GTK_POS_BOTTOM;
       px = width - (float) (d - width - height) - bb;
       py = height - bb;
-      bw = bb;
-      bh = bb;
       tri_angle = (trail_dir == -1) ? 180.0f : 0.0f;
     } else {
       block_side = GTK_POS_LEFT;
       px = 0.0f;
       py = height - (float) (d - 2 * width - height) - bb;
-      bw = bb;
-      bh = bb;
       tri_angle = (trail_dir == -1) ? 270.0f : 90.0f;
     }
 
@@ -236,21 +324,21 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
     else if (side == GTK_POS_BOTTOM)
       py -= height - strip_extent;
 
-    switch (tune->shape) {
-    case KGX_PARTICLE_SHAPE_CIRCLE:
-      append_circle (snapshot, px, py, bb, &c);
-      break;
-    case KGX_PARTICLE_SHAPE_DIAMOND:
-      append_diamond (snapshot, unit_diamond, px, py, bb, &c);
-      break;
-    case KGX_PARTICLE_SHAPE_TRIANGLE:
-      append_triangle (snapshot, unit_triangle, px, py, bb, tri_angle, &c);
-      break;
-    default:
-      gtk_snapshot_append_color (snapshot, &c,
-                                 &GRAPHENE_RECT_INIT (px, py, bw, bh));
-      break;
+    if (budget_remaining) {
+      if (*budget_remaining <= 0)
+        break;
+      (*budget_remaining)--;
     }
+
+    /* Sim → render seam: this loop is pure layout/colour; emission is the
+     * backend's job. inst is renderer-agnostic data. */
+    inst.px = px;
+    inst.py = py;
+    inst.size = bb;
+    inst.angle = (tune->shape == KGX_PARTICLE_SHAPE_TRIANGLE) ? tri_angle : 0.0f;
+    inst.shape = tune->shape;
+    inst.color = c;
+    kgx_particle_emit (snapshot, &inst, masks);
   }
 }
 
@@ -268,8 +356,7 @@ kgx_edge_draw_overscroll (GtkSnapshot               *snapshot,
                           GtkPositionType            side,
                           float                      strip_extent,
                           int                       *budget_remaining,
-                          GskPath                   *unit_triangle,
-                          GskPath                   *unit_diamond,
+                          const KgxParticleMasks    *masks,
                           double                     segment_len)
 {
   float env = kgx_particle_envelope (progress, tune->env_attack, tune->env_release, tune->env_curve);
@@ -346,10 +433,10 @@ kgx_edge_draw_overscroll (GtkSnapshot               *snapshot,
     kgx_edge_draw_segment (snapshot, h_head, segment_len, a,
                            width, height, perim, color, h_trail, tune, progress, side, strip_extent,
                            budget_remaining,
-                           unit_triangle, unit_diamond);
+                           masks);
     kgx_edge_draw_segment (snapshot, v_head, segment_len, a,
                            width, height, perim, color, v_trail, tune, progress, side, strip_extent,
                            budget_remaining,
-                           unit_triangle, unit_diamond);
+                           masks);
   }
 }

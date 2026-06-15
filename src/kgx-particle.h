@@ -50,6 +50,28 @@ typedef enum {
   KGX_PARTICLE_SHAPE_TRIANGLE,
 } KgxParticleShape;
 
+/* One particle block to draw. Produced by the simulation, consumed by the
+ * render backend — pure data, no toolkit/render coupling, so the engine core
+ * stays renderer-agnostic (GSK today, something else tomorrow). */
+typedef struct {
+  float            px;     /* top-left in widget coords */
+  float            py;
+  float            size;   /* width == height */
+  float            angle;  /* degrees; only meaningful for TRIANGLE */
+  KgxParticleShape shape;
+  GdkRGBA          color;  /* color.alpha carries the per-block alpha */
+} KgxParticleInstance;
+
+/* Cached per-shape alpha-mask textures for the GSK render backend. Baked once
+ * per scale factor and stamped with a colour-matrix tint, which replaces
+ * per-block path fills/clips so the renderer can batch the draws. */
+typedef struct {
+  GdkTexture *circle;
+  GdkTexture *diamond;
+  GdkTexture *triangle;
+  int         size;        /* baked texture edge in px; 0 = not built */
+} KgxParticleMasks;
+
 /* Tunable field indices — keep in sync with KgxParticleTunables layout */
 enum {
   TUNE_SPEED = 0,
