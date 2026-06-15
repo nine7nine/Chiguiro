@@ -336,6 +336,49 @@ kgx_tab_strip_drop (GtkDropTarget *target,
 }
 
 
+/* Drag-to-reorder. The payload is the row's AdwTabPage; the matching drop
+ * target on each row reorders via the tab view. No new widgets/containers —
+ * just controllers on the existing row. */
+static GdkContentProvider *
+kgx_tab_strip_drag_prepare (GtkDragSource *source,
+                            double         x,
+                            double         y,
+                            gpointer       data)
+{
+  KgxTabStripItem *item = data;
+
+  if (!item->page)
+    return NULL;
+
+  return gdk_content_provider_new_typed (ADW_TYPE_TAB_PAGE, item->page);
+}
+
+
+static gboolean
+kgx_tab_strip_reorder_drop (GtkDropTarget *target,
+                            const GValue  *value,
+                            double         x,
+                            double         y,
+                            gpointer       data)
+{
+  KgxTabStripItem *item = data;
+  AdwTabView *view = item->strip ? item->strip->view : NULL;
+  AdwTabPage *dragged;
+
+  if (!view || !item->page || !G_VALUE_HOLDS (value, ADW_TYPE_TAB_PAGE))
+    return FALSE;
+
+  dragged = g_value_get_object (value);
+  if (!dragged || dragged == item->page)
+    return FALSE;
+
+  adw_tab_view_reorder_page (view, dragged,
+                             adw_tab_view_get_page_position (view, item->page));
+
+  return TRUE;
+}
+
+
 static KgxTabStripItem *
 kgx_tab_strip_item_new (KgxTabStrip *self,
                         AdwTabPage  *page)
@@ -345,6 +388,8 @@ kgx_tab_strip_item_new (KgxTabStrip *self,
   GtkWidget *drop_widget;
   GtkDropTarget *file_target;
   GtkDropTarget *string_target;
+  GtkDropTarget *reorder_target;
+  GtkDragSource *drag_source;
 
   item->strip = self;
   item->page = page;
@@ -465,6 +510,24 @@ kgx_tab_strip_item_new (KgxTabStrip *self,
                     G_CALLBACK (kgx_tab_strip_drop),
                     item);
   gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (string_target));
+
+  /* Reorder: a drag source on the row claims the press-drag before the
+   * surrounding window handle can treat it as a window move, and a drop
+   * target accepts another tab being dragged onto this one. */
+  drag_source = gtk_drag_source_new ();
+  gtk_drag_source_set_actions (drag_source, GDK_ACTION_MOVE);
+  g_signal_connect (drag_source,
+                    "prepare",
+                    G_CALLBACK (kgx_tab_strip_drag_prepare),
+                    item);
+  gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (drag_source));
+
+  reorder_target = gtk_drop_target_new (ADW_TYPE_TAB_PAGE, GDK_ACTION_MOVE);
+  g_signal_connect (reorder_target,
+                    "drop",
+                    G_CALLBACK (kgx_tab_strip_reorder_drop),
+                    item);
+  gtk_widget_add_controller (drop_widget, GTK_EVENT_CONTROLLER (reorder_target));
 
   kgx_tab_strip_item_update (item);
 
