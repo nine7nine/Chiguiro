@@ -431,7 +431,8 @@ kgx_tab_strip_reorder_end (GtkGestureDrag *gesture,
 {
   KgxTabStripItem *item = data;
   KgxTabStrip *self = item->strip;
-  double start_x, start_y, box_x, box_y;
+  double start_x, start_y;
+  graphene_point_t box_point;
   KgxTabStripReorder *reorder;
   int from, gap, target;
 
@@ -445,15 +446,16 @@ kgx_tab_strip_reorder_end (GtkGestureDrag *gesture,
                                  start_x + offset_x, start_y + offset_y))
     return;
 
-  if (!gtk_widget_translate_coordinates (item->row, self->box,
-                                         start_x + offset_x, start_y + offset_y,
-                                         &box_x, &box_y))
+  if (!gtk_widget_compute_point (item->row, self->box,
+                                 &GRAPHENE_POINT_INIT (start_x + offset_x,
+                                                       start_y + offset_y),
+                                 &box_point))
     return;
 
   /* The dragged row is still in place while we measure, so a gap past its own
    * position maps to one index lower once it is lifted out. */
   from = adw_tab_view_get_page_position (self->view, item->page);
-  gap = kgx_tab_strip_drop_gap (self, box_x);
+  gap = kgx_tab_strip_drop_gap (self, box_point.x);
   target = gap > from ? gap - 1 : gap;
 
   if (target == from)
