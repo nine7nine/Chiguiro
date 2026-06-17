@@ -68,7 +68,7 @@ typedef struct {
 typedef struct {
   GdkTexture *circle;
   GdkTexture *diamond;
-  GdkTexture *triangle;
+  GdkTexture *triangle[4]; /* one per orientation; index = angle / 90 (0/90/180/270 deg) */
   int         size;        /* baked texture edge in px; 0 = not built */
 } KgxParticleMasks;
 

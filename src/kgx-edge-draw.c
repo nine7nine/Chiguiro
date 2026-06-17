@@ -29,7 +29,7 @@
 #define KGX_PARTICLE_MASK_BASE 64
 
 static GdkTexture *
-bake_mask (KgxParticleShape shape, int size)
+bake_mask (KgxParticleShape shape, int size, double rotate_deg)
 {
   cairo_surface_t *surf;
   cairo_t         *cr;
@@ -40,6 +40,14 @@ bake_mask (KgxParticleShape shape, int size)
   surf = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, size, size);
   cr = cairo_create (surf);
   cairo_set_source_rgba (cr, 1.0, 1.0, 1.0, 1.0);   /* white alpha mask */
+
+  /* Bake the orientation into the mask itself (clockwise about centre, matching
+   * gtk_snapshot_rotate) so the stamp is a plain quad — no per-block transform. */
+  if (rotate_deg != 0.0) {
+    cairo_translate (cr, s / 2.0, s / 2.0);
+    cairo_rotate (cr, rotate_deg * G_PI / 180.0);
+    cairo_translate (cr, -s / 2.0, -s / 2.0);
+  }
 
   switch (shape) {
   case KGX_PARTICLE_SHAPE_CIRCLE:
@@ -87,7 +95,8 @@ kgx_particle_masks_clear (KgxParticleMasks *masks)
 {
   g_clear_object (&masks->circle);
   g_clear_object (&masks->diamond);
-  g_clear_object (&masks->triangle);
+  for (int i = 0; i < 4; i++)
+    g_clear_object (&masks->triangle[i]);
   masks->size = 0;
 }
 
@@ -104,9 +113,12 @@ kgx_particle_masks_ensure (KgxParticleMasks *masks, int scale)
     return;
 
   kgx_particle_masks_clear (masks);
-  masks->circle   = bake_mask (KGX_PARTICLE_SHAPE_CIRCLE, size);
-  masks->diamond  = bake_mask (KGX_PARTICLE_SHAPE_DIAMOND, size);
-  masks->triangle = bake_mask (KGX_PARTICLE_SHAPE_TRIANGLE, size);
+  masks->circle   = bake_mask (KGX_PARTICLE_SHAPE_CIRCLE, size, 0.0);
+  masks->diamond  = bake_mask (KGX_PARTICLE_SHAPE_DIAMOND, size, 0.0);
+  /* The triangle is the only shape that is stamped rotated; bake the four
+   * cardinal orientations up front so emit picks one instead of rotating. */
+  for (int i = 0; i < 4; i++)
+    masks->triangle[i] = bake_mask (KGX_PARTICLE_SHAPE_TRIANGLE, size, i * 90.0);
   masks->size     = size;
 }
 
@@ -118,14 +130,15 @@ kgx_particle_emit (GtkSnapshot               *snapshot,
   GdkTexture       *tex = NULL;
   graphene_matrix_t tint;
   graphene_vec4_t   offset;
-  float             half;
   float             m[16] = { 0.0f };
 
   if (inst->shape != KGX_PARTICLE_SHAPE_SQUARE && masks) {
     switch (inst->shape) {
     case KGX_PARTICLE_SHAPE_CIRCLE:   tex = masks->circle;   break;
     case KGX_PARTICLE_SHAPE_DIAMOND:  tex = masks->diamond;  break;
-    case KGX_PARTICLE_SHAPE_TRIANGLE: tex = masks->triangle; break;
+    case KGX_PARTICLE_SHAPE_TRIANGLE:
+      tex = masks->triangle[((int) lroundf (inst->angle / 90.0f)) & 3];
+      break;
     case KGX_PARTICLE_SHAPE_SQUARE:
     default:                          break;
     }
@@ -152,23 +165,11 @@ kgx_particle_emit (GtkSnapshot               *snapshot,
   graphene_vec4_init (&offset, 0.0f, 0.0f, 0.0f, 0.0f);
 
   gtk_snapshot_push_color_matrix (snapshot, &tint, &offset);
-
-  if (inst->shape == KGX_PARTICLE_SHAPE_TRIANGLE && inst->angle != 0.0f) {
-    half = inst->size / 2.0f;
-    gtk_snapshot_save (snapshot);
-    gtk_snapshot_translate (snapshot,
-                            &GRAPHENE_POINT_INIT (inst->px + half, inst->py + half));
-    gtk_snapshot_rotate (snapshot, inst->angle);
-    gtk_snapshot_append_texture (snapshot, tex,
-                                 &GRAPHENE_RECT_INIT (-half, -half,
-                                                      inst->size, inst->size));
-    gtk_snapshot_restore (snapshot);
-  } else {
-    gtk_snapshot_append_texture (snapshot, tex,
-                                 &GRAPHENE_RECT_INIT (inst->px, inst->py,
-                                                      inst->size, inst->size));
-  }
-
+  /* Orientation is baked into the chosen mask, so every shape is a plain quad
+   * with no per-block save/rotate/restore. */
+  gtk_snapshot_append_texture (snapshot, tex,
+                               &GRAPHENE_RECT_INIT (inst->px, inst->py,
+                                                    inst->size, inst->size));
   gtk_snapshot_pop (snapshot);
 }
 
@@ -282,17 +283,6 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
         block_blk = 1.0;
     }
 
-    a = alpha * (1.0f - 0.7f * t);
-    if (s > 0 && tune->pulse_depth > 0.0) {
-      float intensity = t * (float) tune->pulse_depth;
-      float pulse = 1.0f - intensity
-                    + intensity * sinf ((float) s * 1.2f - phase_offset);
-      a *= pulse;
-    }
-
-    c = *color;
-    c.alpha = a;
-
     bb = (float) block_blk;
     if (d < width) {
       block_side = GTK_POS_TOP;
@@ -318,6 +308,21 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
 
     if (block_side != side)
       continue;
+
+    /* Alpha/pulse/colour are only needed for blocks this widget actually keeps.
+     * Each edge widget walks the whole perimeter but renders only its own side,
+     * so deferring this past the cull skips the per-block sinf for the ~3/4 of
+     * blocks that belong to the other three sides. */
+    a = alpha * (1.0f - 0.7f * t);
+    if (s > 0 && tune->pulse_depth > 0.0) {
+      float intensity = t * (float) tune->pulse_depth;
+      float pulse = 1.0f - intensity
+                    + intensity * sinf ((float) s * 1.2f - phase_offset);
+      a *= pulse;
+    }
+
+    c = *color;
+    c.alpha = a;
 
     if (side == GTK_POS_RIGHT)
       px -= width - strip_extent;
