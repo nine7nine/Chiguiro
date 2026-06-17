@@ -122,6 +122,103 @@ kgx_particle_masks_ensure (KgxParticleMasks *masks, int scale)
   masks->size     = size;
 }
 
+/* ── poxicle comparison sink ─────────────────────────────────────────────
+ * When active, kgx_particle_emit captures the renderer-agnostic instance and
+ * skips GSK drawing, so the standalone poxicle backend can render the *exact*
+ * same per-frame instances (all presets/overscroll/ambient/process) for a true
+ * A/B of the renderers. Double-buffered: the engine fills `write` during the
+ * window snapshot; new_frame() promotes it to `ready` once per frame; the
+ * poxicle backend takes `ready`. Single-threaded (GTK main loop) — no locking. */
+#define KGX_POX_SINK_MAX 8192
+static KgxParticleInstance  kgx_pox_a[KGX_POX_SINK_MAX];
+static KgxParticleInstance  kgx_pox_b[KGX_POX_SINK_MAX];
+static KgxParticleInstance *kgx_pox_write = kgx_pox_a;
+static KgxParticleInstance *kgx_pox_ready = kgx_pox_b;
+static int                  kgx_pox_write_n = 0;
+static int                  kgx_pox_ready_n = 0;
+static gboolean             kgx_pox_sink_active = FALSE;
+static float                kgx_pox_off_x = 0.0f;   /* canvas origin within window */
+static float                kgx_pox_off_y = 0.0f;
+static KgxParticleSinkWake  kgx_pox_wake = NULL;    /* wakes a parked overlay */
+static gpointer             kgx_pox_wake_user = NULL;
+
+void
+kgx_particle_sink_set_active (gboolean active)
+{
+  kgx_pox_sink_active = active;
+  if (!active) {
+    kgx_pox_write_n = 0;
+    kgx_pox_ready_n = 0;
+  }
+}
+
+void
+kgx_particle_sink_set_origin (float x, float y)
+{
+  kgx_pox_off_x = x;
+  kgx_pox_off_y = y;
+}
+
+void
+kgx_particle_sink_set_wake (KgxParticleSinkWake wake, gpointer user)
+{
+  kgx_pox_wake = wake;
+  kgx_pox_wake_user = user;
+}
+
+gboolean
+kgx_particle_sink_is_active (void)
+{
+  return kgx_pox_sink_active;
+}
+
+void
+kgx_particle_sink_new_frame (void)
+{
+  KgxParticleInstance *tmp = kgx_pox_ready;
+
+  kgx_pox_ready = kgx_pox_write;
+  kgx_pox_ready_n = kgx_pox_write_n;
+  kgx_pox_write = tmp;
+  kgx_pox_write_n = 0;
+
+  /* A non-empty frame means there is something to show; if the overlay parked
+   * itself while idle, this is the signal to restart its render loop. */
+  if (kgx_pox_ready_n > 0 && kgx_pox_wake)
+    kgx_pox_wake (kgx_pox_wake_user);
+}
+
+void
+kgx_particle_sink_clear (void)
+{
+  kgx_pox_ready_n = 0;
+  kgx_pox_write_n = 0;
+}
+
+int
+kgx_particle_sink_take (KgxParticleInstance *out, int cap)
+{
+  int n = kgx_pox_ready_n < cap ? kgx_pox_ready_n : cap;
+
+  for (int i = 0; i < n; i++)
+    out[i] = kgx_pox_ready[i];
+  return n;
+}
+
+static gboolean
+kgx_particle_sink_capture (const KgxParticleInstance *inst)
+{
+  if (!kgx_pox_sink_active)
+    return FALSE;
+  if (kgx_pox_write_n < KGX_POX_SINK_MAX) {
+    KgxParticleInstance c = *inst;
+    c.px += kgx_pox_off_x;   /* canvas-space → window-space */
+    c.py += kgx_pox_off_y;
+    kgx_pox_write[kgx_pox_write_n++] = c;
+  }
+  return TRUE;
+}
+
 void
 kgx_particle_emit (GtkSnapshot               *snapshot,
                    const KgxParticleInstance *inst,
@@ -131,6 +228,10 @@ kgx_particle_emit (GtkSnapshot               *snapshot,
   graphene_matrix_t tint;
   graphene_vec4_t   offset;
   float             m[16] = { 0.0f };
+
+  /* Comparison mode: hand the instance to poxicle instead of drawing via GSK. */
+  if (kgx_particle_sink_capture (inst))
+    return;
 
   if (inst->shape != KGX_PARTICLE_SHAPE_SQUARE && masks) {
     switch (inst->shape) {
@@ -324,10 +425,15 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
     c = *color;
     c.alpha = a;
 
-    if (side == GTK_POS_RIGHT)
-      px -= width - strip_extent;
-    else if (side == GTK_POS_BOTTOM)
-      py -= height - strip_extent;
+    /* The strip shift maps canvas-space into each side widget's local space for
+     * GSK. The poxicle sink renders one full-window overlay, so it wants raw
+     * canvas-space — skip the shift when capturing. */
+    if (!kgx_pox_sink_active) {
+      if (side == GTK_POS_RIGHT)
+        px -= width - strip_extent;
+      else if (side == GTK_POS_BOTTOM)
+        py -= height - strip_extent;
+    }
 
     if (budget_remaining) {
       if (*budget_remaining <= 0)

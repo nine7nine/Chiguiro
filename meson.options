@@ -6,3 +6,10 @@ option(
 )
 
 option('tests', type: 'boolean', value: true, description: 'Enable tests')
+
+option(
+  'poxicle',
+  type: 'boolean',
+  value: true,
+  description: 'Build the experimental poxicle particle overlay (subsurface backend)',
+)

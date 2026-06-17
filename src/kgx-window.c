@@ -39,6 +39,7 @@
 #include "kgx-utils.h"
 
 #include "kgx-edge.h"
+#include "kgx-poxicle.h"
 #include "kgx-process.h"
 #include "kgx-tab-strip.h"
 #include "kgx-train.h"
@@ -378,6 +379,27 @@ kgx_window_unrealize (GtkWidget *widget)
   g_binding_group_set_source (priv->surface_binds, NULL);
 
   GTK_WIDGET_CLASS (kgx_window_parent_class)->unrealize (widget);
+}
+
+
+static void
+kgx_window_map (GtkWidget *widget)
+{
+  GTK_WIDGET_CLASS (kgx_window_parent_class)->map (widget);
+
+  /* Experimental poxicle overlay (no-op unless built with -Dpoxicle and run with
+   * KGX_POXICLE set). The parent surface is mapped here, so the subsurface
+   * becomes visible. */
+  kgx_poxicle_attach (GTK_WINDOW (widget));
+}
+
+
+static void
+kgx_window_unmap (GtkWidget *widget)
+{
+  kgx_poxicle_detach (GTK_WINDOW (widget));
+
+  GTK_WIDGET_CLASS (kgx_window_parent_class)->unmap (widget);
 }
 
 
@@ -1497,6 +1519,8 @@ kgx_window_class_init (KgxWindowClass *klass)
   widget_class->css_changed = kgx_window_css_changed;
   widget_class->realize = kgx_window_realize;
   widget_class->unrealize = kgx_window_unrealize;
+  widget_class->map = kgx_window_map;
+  widget_class->unmap = kgx_window_unmap;
   window_class->close_request = kgx_window_close_request;
 
   pspecs[PROP_SETTINGS] =

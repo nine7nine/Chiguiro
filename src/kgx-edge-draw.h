@@ -33,6 +33,20 @@ void kgx_particle_emit         (GtkSnapshot               *snapshot,
                                 const KgxParticleInstance *inst,
                                 const KgxParticleMasks    *masks);
 
+/* Poxicle comparison sink: capture the emitted instance stream instead of
+ * drawing via GSK, so the standalone poxicle renderer can draw the same frames.
+ * See kgx-edge-draw.c. */
+/* Called when a non-empty frame is promoted, so a parked overlay can restart. */
+typedef void (*KgxParticleSinkWake) (gpointer user);
+
+void kgx_particle_sink_set_active (gboolean active);
+gboolean kgx_particle_sink_is_active (void);
+void kgx_particle_sink_set_origin (float x, float y);
+void kgx_particle_sink_set_wake   (KgxParticleSinkWake wake, gpointer user);
+void kgx_particle_sink_new_frame  (void);
+void kgx_particle_sink_clear      (void);
+int  kgx_particle_sink_take       (KgxParticleInstance *out, int cap);
+
 void kgx_edge_draw_segment (GtkSnapshot               *snapshot,
                             double                     head_d,
                             double                     seg_len,

@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="@BIN_NAME@">
   <schema id="@KGX_APPLICATION_ID_RAW@" path="@KGX_APPLICATION_PATH_RAW@">
+    <key name="poxicle-overlay" type="b">
+      <default>true</default>
+      <summary>Render edge particles with the poxicle GLES backend</summary>
+      <description>Experimental: draw the edge particle effects via the standalone
+        poxicle subsurface renderer instead of GSK. Only effective in builds
+        configured with -Dpoxicle. The KGX_POXICLE environment variable, if set,
+        overrides this (KGX_POXICLE=0 forces off).</description>
+    </key>
     <key name="font-scale" type="d">
       <range min="0.5" max="4.0"/>
       <default>1.0</default>

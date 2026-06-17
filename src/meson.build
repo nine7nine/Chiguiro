@@ -44,6 +44,8 @@ kgx_sources = files(
   'kgx-palette.h',
   'kgx-particle.c',
   'kgx-particle.h',
+  'kgx-poxicle.c',
+  'kgx-poxicle.h',
   'kgx-paste-dialog.c',
   'kgx-paste-dialog.h',
   'kgx-playbox.h',
@@ -101,6 +103,8 @@ kgx_deps = [
   kgx_config_dep,
   cc.find_library('m', required: false),
 ]
+
+kgx_deps += poxicle_deps
 
 kgx_generated_sources = [
   vcs_tag(

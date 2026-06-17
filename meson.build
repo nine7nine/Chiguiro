@@ -170,6 +170,16 @@ gtop_dep = dependency('libgtop-2.0')
 pcre_dep = dependency('libpcre2-8', version: '>= 10.32')
 schemas_dep = dependency('gsettings-desktop-schemas')
 
+# Experimental: the standalone poxicle particle library, pulled in as a local
+# subproject (no install needed). Runs alongside KgxEdge for A/B comparison and
+# is inert unless KGX_POXICLE is set at runtime.
+poxicle_deps = []
+if get_option('poxicle')
+  poxicle_proj = subproject('poxicle', default_options: ['demos=false'])
+  poxicle_deps = [poxicle_proj.get_variable('poxicle_wl_dep')]
+  conf.set('HAVE_POXICLE', 1)
+endif
+
 subdir('data')
 subdir('src')
 subdir('po')

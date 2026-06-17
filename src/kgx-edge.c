@@ -528,6 +528,13 @@ kgx_edge_redraw_tick_cb (GtkWidget     *widget,
   if (timeline_changed || kgx_edge_has_visible_content (self))
     self->redraw_pending = TRUE;
 
+  /* The poxicle overlay renders from the sink's last promoted frame on its own
+   * Wayland frame loop; promotion only happens while content is visible (see
+   * kgx_edge_snapshot). Once the animation winds down, clear the sink or poxicle
+   * keeps redrawing the final frame forever — frozen until the next animation. */
+  if (kgx_particle_sink_is_active () && !kgx_edge_has_visible_content (self))
+    kgx_particle_sink_clear ();
+
   if (!self->particle_throttle_enabled) {
     if (kgx_edge_has_visible_content (self) || self->redraw_pending) {
       kgx_edge_cancel_timeline_wakeup (self);
@@ -609,6 +616,9 @@ kgx_edge_ensure_redraw_tick (KgxEdge *self)
   }
 }
 
+/* Frame counter for the poxicle comparison sink (see kgx-edge-draw.c). */
+static gint64 kgx_pox_last_frame = -1;
+
 static inline void
 kgx_edge_stop_redraw_tick (KgxEdge *self)
 {
@@ -616,6 +626,10 @@ kgx_edge_stop_redraw_tick (KgxEdge *self)
     gtk_widget_remove_tick_callback (GTK_WIDGET (self), self->redraw_tick_id);
     self->redraw_tick_id = 0;
   }
+
+  /* Animation stopped — clear the comparison sink so poxicle idles too. */
+  kgx_particle_sink_clear ();
+  kgx_pox_last_frame = -1;
 }
 
 void
@@ -702,6 +716,30 @@ kgx_edge_snapshot (GtkWidget   *widget,
   /* Fast path: nothing animating — skip all rendering work. */
   if (!kgx_edge_has_visible_content (root))
     return;
+
+  /* Comparison sink: promote the previous frame's captured instances once per
+   * frame. The first of the four side widgets to run this frame does the swap,
+   * and records the canvas origin within the window so the captured canvas-space
+   * coordinates land where GSK would have drawn them. Skipped entirely (zero
+   * overhead) unless the poxicle overlay is active. */
+  if (kgx_particle_sink_is_active ()) {
+    GdkFrameClock *fc = gtk_widget_get_frame_clock (widget);
+    gint64 fcount = fc ? gdk_frame_clock_get_frame_counter (fc) : 0;
+
+    if (fcount != kgx_pox_last_frame) {
+      GtkWidget *canvas = gtk_widget_get_parent (widget);
+      GtkRoot *root_w = gtk_widget_get_root (widget);
+      graphene_point_t origin;
+
+      if (canvas && root_w &&
+          gtk_widget_compute_point (canvas, GTK_WIDGET (root_w),
+                                    &GRAPHENE_POINT_INIT (0.0f, 0.0f), &origin))
+        kgx_particle_sink_set_origin (origin.x, origin.y);
+
+      kgx_particle_sink_new_frame ();
+      kgx_pox_last_frame = fcount;
+    }
+  }
 
   snapshot_start_us = g_get_monotonic_time ();
   kgx_edge_get_canvas_size (widget, &width, &height);
