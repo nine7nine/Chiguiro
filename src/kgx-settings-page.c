@@ -1163,12 +1163,16 @@ app_override_spin_input_cb (GtkSpinButton *spin,
 {
   const char *text = gtk_editable_get_text (GTK_EDITABLE (spin));
 
+  /* Empty or the "--" sentinel both mean "no override" → 0. */
   if (!text || text[0] == '\0' || g_str_equal (text, "--")) {
     *new_value = 0.0;
     return TRUE;
   }
 
-  return GTK_INPUT_ERROR;
+  /* Anything else is an ordinary number: let GtkSpinButton parse it. Returning
+   * GTK_INPUT_ERROR here made gtk_spin_button_update() (run on focus-out) reset
+   * the value to 0, wiping whatever the user had just set. */
+  return FALSE;
 }
 
 static void
