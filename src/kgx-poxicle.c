@@ -11,6 +11,9 @@
 
 #ifdef HAVE_POXICLE
 
+#include <limits.h>
+#include <stddef.h>
+
 #include <gdk/wayland/gdkwayland.h>
 #include <wayland-client.h>
 
@@ -18,6 +21,23 @@
 #include <poxicle-wl.h>
 
 #include "kgx-edge-draw.h"   /* KgxParticleInstance + the comparison sink */
+
+/* KgxParticleInstance and PoxInstance are the same record — the renderer-agnostic
+ * "one block to draw" — laid out identically on purpose. These asserts pin that
+ * contract so the sink can fill poxicle's buffer in place (no staging copy, no
+ * per-field conversion); if either struct or shape enum drifts, this stops
+ * compiling instead of silently scrambling the stream. */
+G_STATIC_ASSERT (sizeof (KgxParticleInstance) == sizeof (PoxInstance));
+G_STATIC_ASSERT (offsetof (KgxParticleInstance, px)    == offsetof (PoxInstance, x));
+G_STATIC_ASSERT (offsetof (KgxParticleInstance, py)    == offsetof (PoxInstance, y));
+G_STATIC_ASSERT (offsetof (KgxParticleInstance, size)  == offsetof (PoxInstance, size));
+G_STATIC_ASSERT (offsetof (KgxParticleInstance, angle) == offsetof (PoxInstance, angle));
+G_STATIC_ASSERT (offsetof (KgxParticleInstance, shape) == offsetof (PoxInstance, shape));
+G_STATIC_ASSERT (offsetof (KgxParticleInstance, color) == offsetof (PoxInstance, color));
+G_STATIC_ASSERT ((int) KGX_PARTICLE_SHAPE_SQUARE   == (int) POX_SHAPE_SQUARE);
+G_STATIC_ASSERT ((int) KGX_PARTICLE_SHAPE_CIRCLE   == (int) POX_SHAPE_CIRCLE);
+G_STATIC_ASSERT ((int) KGX_PARTICLE_SHAPE_DIAMOND  == (int) POX_SHAPE_DIAMOND);
+G_STATIC_ASSERT ((int) KGX_PARTICLE_SHAPE_TRIANGLE == (int) POX_SHAPE_TRIANGLE);
 
 /* Per-window overlay state, stashed on the GtkWindow via g_object_set_data_full. */
 typedef struct {
@@ -51,28 +71,17 @@ overlay_geometry (KgxPoxicle *self, int *x, int *y, int *w, int *h)
 }
 
 /* Render source: hand poxicle the exact instances kgx-edge captured this frame
- * (its real presets / overscroll / ambient / process), converted to PoxInstance.
- * This is the comparison — same simulation, drawn by poxicle-gl instead of GSK. */
+ * (its real presets / overscroll / ambient / process). Same simulation, drawn by
+ * poxicle-gl instead of GSK. Because the two instance records are byte-identical
+ * (asserted above), the sink writes straight into poxicle's buffer — the old
+ * per-field copy through a scratch array was pure overhead. */
 static size_t
 poxicle_source (PoxInstance *out, size_t cap, void *user)
 {
-  static KgxParticleInstance scratch[8192];
-  int max = (int) MIN (cap, (size_t) G_N_ELEMENTS (scratch));
-  int n = kgx_particle_sink_take (scratch, max);
+  int max = cap > (size_t) INT_MAX ? INT_MAX : (int) cap;
 
   (void) user;
-  for (int i = 0; i < n; i++) {
-    out[i].x       = scratch[i].px;
-    out[i].y       = scratch[i].py;
-    out[i].size    = scratch[i].size;
-    out[i].angle   = scratch[i].angle;
-    out[i].shape   = (PoxShape) scratch[i].shape;
-    out[i].color.r = scratch[i].color.red;
-    out[i].color.g = scratch[i].color.green;
-    out[i].color.b = scratch[i].color.blue;
-    out[i].color.a = scratch[i].color.alpha;
-  }
-  return (size_t) n;
+  return (size_t) kgx_particle_sink_take ((KgxParticleInstance *) out, max);
 }
 
 /* Restart the overlay's render loop when kgx-edge produces a new frame after the
