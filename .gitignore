@@ -7,3 +7,9 @@
 build
 coverage-report
 coverage.json
+
+# Local dev / tooling artifacts
+.claude
+.codex
+core.*
+frames.log
