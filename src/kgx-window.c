@@ -40,6 +40,7 @@
 
 #include "kgx-edge.h"
 #include "kgx-poxicle.h"
+#include "kgx-poxicle-kwin.h"
 #include "kgx-process.h"
 #include "kgx-tab-strip.h"
 #include "kgx-train.h"
@@ -385,12 +386,21 @@ kgx_window_unrealize (GtkWidget *widget)
 static void
 kgx_window_map (GtkWidget *widget)
 {
+  GtkWindow *window = GTK_WINDOW (widget);
+  KgxPoxicleBackend backend;
+
   GTK_WIDGET_CLASS (kgx_window_parent_class)->map (widget);
 
-  /* Experimental poxicle overlay (no-op unless built with -Dpoxicle and run with
-   * KGX_POXICLE set). The parent surface is mapped here, so the subsurface
-   * becomes visible. */
-  kgx_poxicle_attach (GTK_WINDOW (widget));
+  /* Experimental poxicle overlay (no-op unless built with -Dpoxicle). The parent
+   * surface is mapped here, so a subsurface becomes visible. The compositor
+   * backend streams the simulated particles to the poxicle-kwin effect; if that
+   * effect isn't reachable (not installed/loaded), fall back to the in-app
+   * subsurface so particles still render. GSK needs no overlay. */
+  backend = kgx_poxicle_backend ();
+  if (backend == KGX_POXICLE_BACKEND_COMPOSITOR && !kgx_poxicle_kwin_attach (window))
+    backend = KGX_POXICLE_BACKEND_SUBSURFACE;   /* effect unreachable -> fallback */
+  if (backend == KGX_POXICLE_BACKEND_SUBSURFACE)
+    kgx_poxicle_attach (window);
 }
 
 
@@ -398,6 +408,7 @@ static void
 kgx_window_unmap (GtkWidget *widget)
 {
   kgx_poxicle_detach (GTK_WINDOW (widget));
+  kgx_poxicle_kwin_detach (GTK_WINDOW (widget));
 
   GTK_WIDGET_CLASS (kgx_window_parent_class)->unmap (widget);
 }

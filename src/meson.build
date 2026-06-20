@@ -46,6 +46,8 @@ kgx_sources = files(
   'kgx-particle.h',
   'kgx-poxicle.c',
   'kgx-poxicle.h',
+  'kgx-poxicle-kwin.c',
+  'kgx-poxicle-kwin.h',
   'kgx-paste-dialog.c',
   'kgx-paste-dialog.h',
   'kgx-playbox.h',

@@ -17,6 +17,19 @@
 
 G_BEGIN_DECLS
 
+/* Which renderer draws the edge particles. The three are mutually exclusive (the
+ * two poxicle backends both consume the global edge-draw sink). */
+typedef enum {
+  KGX_POXICLE_BACKEND_GSK = 0,    /* in-process GSK (no poxicle)            */
+  KGX_POXICLE_BACKEND_SUBSURFACE, /* in-app poxicle-wl subsurface overlay   */
+  KGX_POXICLE_BACKEND_COMPOSITOR, /* stream to the poxicle-kwin compositor  */
+} KgxPoxicleBackend;
+
+/* Resolve the active backend from the KGX_POXICLE env override and the
+ * poxicle-overlay / poxicle-renderer GSettings. Always returns GSK when poxicle
+ * is disabled (setting off, KGX_POXICLE=0) or the build lacks HAVE_POXICLE. */
+KgxPoxicleBackend kgx_poxicle_backend (void);
+
 void kgx_poxicle_attach (GtkWindow *window);
 void kgx_poxicle_detach (GtkWindow *window);
 

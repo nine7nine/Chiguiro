@@ -433,6 +433,19 @@ kgx_edge_draw_segment (GtkSnapshot               *snapshot,
         px -= width - strip_extent;
       else if (side == GTK_POS_BOTTOM)
         py -= height - strip_extent;
+    } else {
+      /* Each edge's parameterisation runs a block past its far corner (top:
+       * px -> width+bb; left/bottom: px/py -> -bb), so a block straddling a turn
+       * pokes outside the window. The four GSK side widgets clip each block to
+       * their strip, hiding it; this single full-window overlay has no such clip
+       * (the subsurface buffer clips, but the compositor draws in global coords
+       * and shows the overshoot). Clamp each block fully inside [0,w-bb]x[0,h-bb]
+       * so it hugs the corner — the same fix the poxicle engine carries. */
+      float max_x = width - bb, max_y = height - bb;
+      if (max_x < 0.0f) max_x = 0.0f;
+      if (max_y < 0.0f) max_y = 0.0f;
+      if (px < 0.0f) px = 0.0f; else if (px > max_x) px = max_x;
+      if (py < 0.0f) py = 0.0f; else if (py > max_y) py = max_y;
     }
 
     if (budget_remaining) {

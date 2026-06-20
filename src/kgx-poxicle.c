@@ -9,6 +9,46 @@
 
 #include "kgx-poxicle.h"
 
+/* Backend selection. Compiled in every build (even without HAVE_POXICLE, where it
+ * can only ever be GSK) so kgx-window.c has one place to ask which overlay, if
+ * any, to attach. KGX_POXICLE overrides the settings for quick A/B:
+ *   0           -> GSK            (force off)
+ *   subsurface  -> in-app overlay
+ *   compositor  -> poxicle-kwin   (kwin / 2 are accepted aliases)
+ *   1           -> the setting's poxicle-renderer backend (just forces on) */
+KgxPoxicleBackend
+kgx_poxicle_backend (void)
+{
+#ifndef HAVE_POXICLE
+  return KGX_POXICLE_BACKEND_GSK;
+#else
+  const char *env = g_getenv ("KGX_POXICLE");
+  g_autoptr (GSettings) settings = NULL;
+  g_autofree char *renderer = NULL;
+
+  if (env) {
+    if (g_str_equal (env, "0"))
+      return KGX_POXICLE_BACKEND_GSK;
+    if (g_str_equal (env, "subsurface"))
+      return KGX_POXICLE_BACKEND_SUBSURFACE;
+    if (g_str_equal (env, "compositor") || g_str_equal (env, "kwin") ||
+        g_str_equal (env, "2"))
+      return KGX_POXICLE_BACKEND_COMPOSITOR;
+    /* Any other value (e.g. "1") just forces poxicle on; the renderer setting
+     * below picks which backend. */
+  }
+
+  settings = g_settings_new (KGX_APPLICATION_ID);
+  if (!env && !g_settings_get_boolean (settings, "poxicle-overlay"))
+    return KGX_POXICLE_BACKEND_GSK;
+
+  renderer = g_settings_get_string (settings, "poxicle-renderer");
+  if (g_strcmp0 (renderer, "compositor") == 0)
+    return KGX_POXICLE_BACKEND_COMPOSITOR;
+  return KGX_POXICLE_BACKEND_SUBSURFACE;
+#endif
+}
+
 #ifdef HAVE_POXICLE
 
 #include <limits.h>
@@ -209,22 +249,9 @@ kgx_poxicle_attach (GtkWindow *window)
   KgxPoxicle *self;
   int x, y, w, h, scale;
 
-  /* On by default via the poxicle-overlay GSetting; KGX_POXICLE overrides it
-   * (KGX_POXICLE=0 forces off) for quick A/B without changing the setting. */
-  {
-    const char *env = g_getenv ("KGX_POXICLE");
-    gboolean enabled;
-
-    if (env) {
-      enabled = !g_str_equal (env, "0");
-    } else {
-      g_autoptr (GSettings) settings = g_settings_new (KGX_APPLICATION_ID);
-      enabled = g_settings_get_boolean (settings, "poxicle-overlay");
-    }
-    if (!enabled)
-      return;
-  }
-
+  /* The in-app subsurface overlay. kgx_window_map decides when to use it (when
+   * the subsurface backend is selected, or as the compositor backend's fallback
+   * when the poxicle-kwin effect is unreachable). */
   if (g_object_get_data (G_OBJECT (window), "kgx-poxicle"))
     return;
 
