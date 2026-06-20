@@ -6,6 +6,7 @@ A GTK4 terminal emulator with event-driven glass backgrounds and a single-dimens
 
 - **App Glass** — per-process translucent backgrounds with smooth animated color transitions triggered by process detection
 - **Edge Particles** — single-dimension particle system rendering along window edges with 7 animation presets, strip-based rendering, per-block envelope shaping, and per-app overrides
+- **Compositor Rendering** — can offload particle drawing to the [poxicle-kwin](https://github.com/nine7nine/Poxicle) compositor effect (Chigüiro simulates and configures, KWin draws), with automatic fallback to an in-app overlay
 - **Overscroll Presets** — Scroll 1 (corner burst snakes) and Scroll 2 (full-bar edge fill) with independent tunables
 - **Per-App Configuration** — comma-separated process names with overrides for preset, direction, shape, gap, speed, thickness, tail, envelope timing, release modes, glass color, and particle color
 - **Custom Tab Strip** — Chigüiro-specific tab strip with process-chain fallback titles like `>bash` and `>bash>top`
@@ -38,6 +39,23 @@ Global redraw controls let you cap particle pacing in Hz or disable throttling e
 | T.Rel | 0 – 50 | Thickness envelope release |
 | T.Rls | U / R / S / G / A | Thickness release: Uniform, Retract, Spread, Grow, All |
 | T.Crv | ( / / / ) | Thickness envelope curve |
+
+### Rendering Backends
+
+The simulation is decoupled from how particles are drawn. Builds configured with
+`-Dpoxicle` choose a backend via the `poxicle-renderer` setting (or the
+`KGX_POXICLE` environment variable):
+
+- **Compositor** (default) — Chigüiro streams the simulated particles to the
+  [poxicle-kwin](https://github.com/nine7nine/Poxicle) compositor effect through a
+  shared-memory channel and KWin draws them; Chigüiro still owns all
+  configuration, simulation, and triggers. If the effect isn't installed or
+  loaded, it falls back automatically to the subsurface backend.
+- **Subsurface** — an in-app, click-through Wayland subsurface drawn over the
+  window with poxicle's own GLES renderer.
+
+With `poxicle-overlay` disabled (or in builds without `-Dpoxicle`), particles
+render through GTK's GSK renderer instead.
 
 ### App Glass Per-Process Overrides
 
