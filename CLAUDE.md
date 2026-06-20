@@ -74,7 +74,3 @@ KgxApplication (AdwApplication)
 ## Dependencies
 
 GLib >= 2.80, GTK >= 4.19, libadwaita >= 1.8, VTE >= 0.77.0 (vte-2.91-gtk4), Pango >= 1.51.2, libgtop, PCRE2 >= 10.32. Subproject wraps available for gtk, adwaita, vte, glib, pango.
-
-## Project Policy
-
-This project bans AI-generated contributions (code, docs, issues, artwork). Claude Code may be used locally for development assistance but generated code must not be submitted upstream.
